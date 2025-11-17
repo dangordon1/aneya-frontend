@@ -1,0 +1,19 @@
+# Python backend files (not needed for frontend-only)
+api/
+servers/
+*.py
+*.pyc
+__pycache__/
+.venv/
+venv/
+requirements.txt
+pyproject.toml
+uv.lock
+
+# Development files
+.env
+.vscode/
+*.log
+
+# Keep frontend
+# (everything else will be included)

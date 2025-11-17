@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Clara Health Color Palette */
+  --clara-purple: #351431;
+  --clara-pink: #F0D1DA;
+  --clara-white: #FFFFFF;
+  --clara-purple-hover: #4A1E45;
+  --clara-text-secondary: #5C3E53;
+  --clara-text-disabled: #8B7A87;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  background-color: var(--clara-white);
+  color: var(--clara-purple);
+}
+
+/* Clara Health Typography - Headings use serif */
+h1, h2, h3, h4 {
+  font-family: Georgia, serif;
+  color: var(--clara-purple);
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 38px;
+}
+
+h2 {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+h3 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+h4 {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+p {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+/* Clara Health custom utility classes */
+.clara-shadow-card {
+  box-shadow: 0px 2px 12px rgba(53, 20, 49, 0.08);
+}
+
+.clara-shadow-button {
+  box-shadow: 0px 2px 8px rgba(53, 20, 49, 0.2);
+}
+
+/* Smooth transitions */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.8);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.5s ease-out;
+}
