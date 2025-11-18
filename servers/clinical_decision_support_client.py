@@ -319,29 +319,32 @@ class ClinicalDecisionSupportClient:
             if not search_terms:
                 search_terms = [clinical_scenario]
 
-            # Search NICE Guidelines with key terms
-            for term in search_terms[:2]:  # Try up to 2 terms
-                result = await self.call_tool("search_nice_guidelines", {
-                    "keyword": term,
-                    "max_results": 3
-                })
-                guidelines_data = json.loads(result.content[0].text)
-                guidelines.extend(guidelines_data.get('results', []))
+            # PARALLELIZED: Search NICE Guidelines, CKS, and BNF in parallel
+            # This replaces 3 sequential loops with parallel execution
+            async def search_nice_guideline(term):
+                try:
+                    result = await self.call_tool("search_nice_guidelines", {
+                        "keyword": term,
+                        "max_results": 3
+                    })
+                    guidelines_data = json.loads(result.content[0].text)
+                    return ('nice', guidelines_data.get('results', []))
+                except Exception as e:
+                    return ('nice', [])
 
-            # Also search CKS (Clinical Knowledge Summaries)
-            for term in search_terms[:2]:  # Try up to 2 terms
+            async def search_cks_topic(term):
                 try:
                     result = await self.call_tool("search_cks_topics", {
                         "topic": term
                     })
                     cks_data = json.loads(result.content[0].text)
                     if cks_data.get('success') and cks_data.get('results'):
-                        cks_topics.extend(cks_data['results'])
+                        return ('cks', cks_data['results'])
+                    return ('cks', [])
                 except:
-                    pass  # CKS might be geo-restricted or topic not found
+                    return ('cks', [])  # CKS might be geo-restricted or topic not found
 
-            # Search BNF Treatment Summaries
-            for term in search_terms[:2]:  # Try up to 2 terms
+            async def search_bnf_summary(term):
                 try:
                     result = await self.call_tool("search_bnf_treatment_summaries", {
                         "condition": term,
@@ -349,9 +352,32 @@ class ClinicalDecisionSupportClient:
                     })
                     bnf_data = json.loads(result.content[0].text)
                     if bnf_data.get('success') and bnf_data.get('results'):
-                        bnf_summaries.extend(bnf_data['results'])
+                        return ('bnf', bnf_data['results'])
+                    return ('bnf', [])
                 except:
-                    pass  # BNF might not have treatment summaries for this condition
+                    return ('bnf', [])  # BNF might not have treatment summaries for this condition
+
+            # Build all search tasks (up to 6 total: 2 terms × 3 search types)
+            search_tasks = []
+            for term in search_terms[:2]:
+                search_tasks.append(search_nice_guideline(term))
+                search_tasks.append(search_cks_topic(term))
+                search_tasks.append(search_bnf_summary(term))
+
+            # Execute all searches in parallel
+            search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+            # Process results
+            for result in search_results:
+                if isinstance(result, Exception):
+                    continue  # Skip failed searches
+                search_type, data = result
+                if search_type == 'nice':
+                    guidelines.extend(data)
+                elif search_type == 'cks':
+                    cks_topics.extend(data)
+                elif search_type == 'bnf':
+                    bnf_summaries.extend(data)
 
             # Remove duplicates from guidelines
             seen_refs = set()
@@ -422,91 +448,122 @@ class ClinicalDecisionSupportClient:
 
         diagnoses = []  # List of {diagnosis, treatments: [{treatment_name, medications: []}]}
 
-        # Collect full guideline content
+        # PARALLELIZED: Collect guideline, CKS, and BNF content details in parallel
         guideline_contents = []
+        cks_contents = []
+        bnf_summary_contents = []
+
+        # Helper functions for fetching details
+        async def fetch_guideline_detail(guideline):
+            try:
+                result = await self.call_tool("get_guideline_details", {
+                    "identifier": guideline['reference']
+                })
+                guideline_detail = json.loads(result.content[0].text)
+
+                if guideline_detail.get('success'):
+                    return ('guideline', {
+                        'title': guideline['title'],
+                        'reference': guideline['reference'],
+                        'url': guideline['url'],
+                        'overview': guideline_detail.get('overview', ''),
+                        'sections': guideline_detail.get('sections', []),
+                        'published_date': guideline_detail.get('published_date', '')
+                    }, guideline['reference'], True, None)
+                else:
+                    error_msg = guideline_detail.get('error', 'Unknown error')
+                    return ('guideline', None, guideline['reference'], False, error_msg)
+            except Exception as e:
+                return ('guideline', None, guideline.get('reference', 'guideline'), False, str(e))
+
+        async def fetch_cks_detail(topic):
+            try:
+                result = await self.call_tool("get_cks_topic", {
+                    "topic": topic['title'].lower().replace(' ', '-')
+                })
+                cks_content = json.loads(result.content[0].text)
+
+                if cks_content.get('success'):
+                    return ('cks', {
+                        'title': topic['title'],
+                        'url': topic['url'],
+                        'summary': topic.get('summary', ''),
+                        'management': cks_content.get('management', ''),
+                        'prescribing': cks_content.get('prescribing', ''),
+                        'full_text': cks_content.get('full_text', '')
+                    }, topic['title'], True, None)
+                else:
+                    return ('cks', None, topic['title'], False, 'Failed')
+            except Exception as e:
+                return ('cks', None, topic.get('title', 'topic'), False, str(e))
+
+        async def fetch_bnf_summary_detail(bnf):
+            try:
+                result = await self.call_tool("get_bnf_treatment_summary", {
+                    "url": bnf['url']
+                })
+                bnf_content = json.loads(result.content[0].text)
+
+                if bnf_content.get('success'):
+                    return ('bnf', {
+                        'title': bnf['title'],
+                        'url': bnf['url'],
+                        'summary': bnf_content.get('summary', ''),
+                        'sections': bnf_content.get('sections', [])
+                    }, bnf['title'], True, None)
+                else:
+                    return ('bnf', None, bnf['title'], False, 'Failed')
+            except Exception as e:
+                return ('bnf', None, bnf.get('title', 'BNF summary'), False, str(e))
+
+        # Build all detail fetch tasks
+        detail_tasks = []
+
         if guidelines:
             if verbose:
-                print(f"   Retrieving full guideline content for {len(guidelines[:3])} guideline(s)...")
+                print(f"   Retrieving full guideline content for {len(guidelines[:3])} guideline(s) (parallel)...")
+            for guideline in guidelines[:3]:
+                detail_tasks.append(fetch_guideline_detail(guideline))
 
-            for guideline in guidelines[:3]:  # Get details for top 3 guidelines
-                try:
-                    result = await self.call_tool("get_guideline_details", {
-                        "identifier": guideline['reference']
-                    })
-                    guideline_detail = json.loads(result.content[0].text)
-
-                    if guideline_detail.get('success'):
-                        guideline_contents.append({
-                            'title': guideline['title'],
-                            'reference': guideline['reference'],
-                            'url': guideline['url'],
-                            'overview': guideline_detail.get('overview', ''),
-                            'sections': guideline_detail.get('sections', []),
-                            'published_date': guideline_detail.get('published_date', '')
-                        })
-                        if verbose:
-                            print(f"      ✓ Retrieved: {guideline['reference']}")
-                    else:
-                        if verbose:
-                            error_msg = guideline_detail.get('error', 'Unknown error')
-                            print(f"      ✗ Failed to retrieve {guideline['reference']}: {error_msg}")
-                except Exception as e:
-                    if verbose:
-                        print(f"      ✗ Failed to retrieve {guideline.get('reference', 'guideline')}: {str(e)}")
-
-        # Collect CKS content
-        cks_contents = []
         if cks_topics:
             if verbose:
-                print(f"   Retrieving full CKS content for {len(cks_topics[:3])} topic(s)...")
+                print(f"   Retrieving full CKS content for {len(cks_topics[:3])} topic(s) (parallel)...")
+            for topic in cks_topics[:3]:
+                detail_tasks.append(fetch_cks_detail(topic))
 
-            for topic in cks_topics[:3]:  # Get details for top 3 CKS topics
-                try:
-                    result = await self.call_tool("get_cks_topic", {
-                        "topic": topic['title'].lower().replace(' ', '-')
-                    })
-                    cks_content = json.loads(result.content[0].text)
-
-                    if cks_content.get('success'):
-                        cks_contents.append({
-                            'title': topic['title'],
-                            'url': topic['url'],
-                            'summary': topic.get('summary', ''),
-                            'management': cks_content.get('management', ''),
-                            'prescribing': cks_content.get('prescribing', ''),
-                            'full_text': cks_content.get('full_text', '')
-                        })
-                        if verbose:
-                            print(f"      ✓ Retrieved: {topic['title']}")
-                except Exception as e:
-                    if verbose:
-                        print(f"      ✗ Failed to retrieve {topic.get('title', 'topic')}")
-
-        # Collect BNF Treatment Summary content
-        bnf_summary_contents = []
         if bnf_summaries:
             if verbose:
-                print(f"   Retrieving full BNF treatment summar{'y' if len(bnf_summaries[:3]) == 1 else 'ies'} for {len(bnf_summaries[:3])} resource(s)...")
+                print(f"   Retrieving full BNF treatment summar{'y' if len(bnf_summaries[:3]) == 1 else 'ies'} for {len(bnf_summaries[:3])} resource(s) (parallel)...")
+            for bnf in bnf_summaries[:3]:
+                detail_tasks.append(fetch_bnf_summary_detail(bnf))
 
-            for bnf in bnf_summaries[:3]:  # Get details for top 3 BNF summaries
-                try:
-                    result = await self.call_tool("get_bnf_treatment_summary", {
-                        "url": bnf['url']
-                    })
-                    bnf_content = json.loads(result.content[0].text)
+        # Execute all detail fetches in parallel
+        if detail_tasks:
+            detail_results = await asyncio.gather(*detail_tasks, return_exceptions=True)
 
-                    if bnf_content.get('success'):
-                        bnf_summary_contents.append({
-                            'title': bnf['title'],
-                            'url': bnf['url'],
-                            'summary': bnf_content.get('summary', ''),
-                            'sections': bnf_content.get('sections', [])
-                        })
+            # Process results
+            for result in detail_results:
+                if isinstance(result, Exception):
+                    continue
+
+                content_type, content_data, identifier, success, error = result
+
+                if success and content_data:
+                    if content_type == 'guideline':
+                        guideline_contents.append(content_data)
                         if verbose:
-                            print(f"      ✓ Retrieved: {bnf['title']}")
-                except Exception as e:
+                            print(f"      ✓ Retrieved: {identifier}")
+                    elif content_type == 'cks':
+                        cks_contents.append(content_data)
+                        if verbose:
+                            print(f"      ✓ Retrieved: {identifier}")
+                    elif content_type == 'bnf':
+                        bnf_summary_contents.append(content_data)
+                        if verbose:
+                            print(f"      ✓ Retrieved: {identifier}")
+                else:
                     if verbose:
-                        print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}")
+                        print(f"      ✗ Failed to retrieve {identifier}: {error}")
 
         # Use Claude to analyze and extract structured information
         total_guideline_resources = len(guideline_contents) + len(cks_contents)
@@ -540,45 +597,74 @@ class ClinicalDecisionSupportClient:
                 verbose=verbose
             )
 
-        # Step 3b: Get BNF details for all medications mentioned in treatments
+        # PARALLELIZED: Step 3b: Get BNF details for all medications mentioned in treatments
         if diagnoses:
             if verbose:
-                print(f"\n💊 Step 3b: Retrieving BNF medication details for treatment options...")
+                print(f"\n💊 Step 3b: Retrieving BNF medication details for treatment options (parallel)...")
 
+            # Helper function to fetch drug info
+            async def fetch_drug_info(med_name, diagnosis_name, treatment_name):
+                try:
+                    # Search for the drug in BNF
+                    search_result = await self.call_tool("search_bnf_drug", {
+                        "drug_name": med_name
+                    })
+                    search_data = json.loads(search_result.content[0].text)
+
+                    if search_data.get('success') and search_data.get('results'):
+                        drug_url = search_data['results'][0]['url']
+
+                        # Get detailed drug information
+                        info_result = await self.call_tool("get_bnf_drug_info", {
+                            "drug_url": drug_url
+                        })
+                        drug_info = json.loads(info_result.content[0].text)
+
+                        if drug_info.get('success'):
+                            return {
+                                'diagnosis': diagnosis_name,
+                                'treatment': treatment_name,
+                                'drug_info': drug_info,
+                                'success': True
+                            }
+                    return {'success': False, 'med_name': med_name}
+                except:
+                    return {'success': False, 'med_name': med_name}
+
+            # Collect all medication lookup tasks
+            med_tasks = []
             for diagnosis in diagnoses:
                 for treatment in diagnosis['treatments']:
                     medication_names = treatment.get('medication_names', [])
+                    if medication_names:
+                        for med_name in medication_names[:3]:  # Limit to 3 meds per treatment
+                            med_tasks.append(fetch_drug_info(
+                                med_name,
+                                diagnosis['diagnosis'],
+                                treatment['treatment_name']
+                            ))
 
-                    if not medication_names:
+            # Execute all medication lookups in parallel
+            if med_tasks:
+                med_results = await asyncio.gather(*med_tasks, return_exceptions=True)
+
+                # Process results and assign to correct treatments
+                for result in med_results:
+                    if isinstance(result, Exception):
                         continue
-
-                    if verbose:
-                        print(f"   {diagnosis['diagnosis']} - {treatment['treatment_name']}:")
-
-                    for med_name in medication_names[:3]:  # Limit to 3 meds per treatment
-                        try:
-                            # Search for the drug in BNF
-                            search_result = await self.call_tool("search_bnf_drug", {
-                                "drug_name": med_name
-                            })
-                            search_data = json.loads(search_result.content[0].text)
-
-                            if search_data.get('success') and search_data.get('results'):
-                                drug_url = search_data['results'][0]['url']
-
-                                # Get detailed drug information
-                                info_result = await self.call_tool("get_bnf_drug_info", {
-                                    "drug_url": drug_url
-                                })
-                                drug_info = json.loads(info_result.content[0].text)
-
-                                if drug_info.get('success'):
-                                    treatment['medications_detailed'].append(drug_info)
-                                    if verbose:
-                                        print(f"      ✓ {drug_info['drug_name']}")
-                        except:
-                            if verbose:
-                                print(f"      ✗ {med_name} - BNF lookup failed")
+                    if result.get('success'):
+                        # Find the correct treatment and append drug info
+                        for diagnosis in diagnoses:
+                            if diagnosis['diagnosis'] == result['diagnosis']:
+                                for treatment in diagnosis['treatments']:
+                                    if treatment['treatment_name'] == result['treatment']:
+                                        treatment['medications_detailed'].append(result['drug_info'])
+                                        if verbose:
+                                            print(f"      ✓ {result['drug_info']['drug_name']}")
+                                        break
+                                break
+                    elif verbose and 'med_name' in result:
+                        print(f"      ✗ {result['med_name']} - BNF lookup failed")
         else:
             if verbose:
                 print(f"   No diagnoses with treatment options identified")
@@ -960,7 +1046,7 @@ Instructions:
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -1185,7 +1271,7 @@ If BNF summary lacks dosing details, the medication will be enriched later from 
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -1396,7 +1482,7 @@ Return ONLY a JSON object with these fields:
 Focus on: {condition}. Be concise. If not found, use most common adult dose."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-3-5-haiku-20241022",
                     max_tokens=200,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -1484,7 +1570,7 @@ Return ONLY a JSON object with BRIEF (1-2 sentence) summaries:
 Be extremely concise. Focus on key dose adjustments and safety warnings only."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-3-5-haiku-20241022",
                     max_tokens=300,
                     messages=[{"role": "user", "content": prompt}]
                 )
