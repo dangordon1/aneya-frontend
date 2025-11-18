@@ -160,6 +160,18 @@ async def health_check():
     }
 
 
+@app.get("/api/health", response_model=HealthResponse)
+async def api_health_check():
+    """API health check endpoint (frontend compatibility)"""
+    if client is None:
+        raise HTTPException(status_code=503, detail="Client not initialized")
+
+    return {
+        "status": "healthy",
+        "message": "All systems operational"
+    }
+
+
 @app.post("/api/analyze")
 async def analyze_consultation(request: AnalysisRequest):
     """
