@@ -14,6 +14,12 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   const handleAnalyze = async (consultation: string, patientId: string) => {
+    // Validate consultation is not empty or whitespace-only
+    if (!consultation.trim()) {
+      alert('Please enter a clinical consultation before submitting.\n\nThe consultation text cannot be empty.');
+      return;
+    }
+
     setAnalysisResult(null); // Clear previous results
 
     try {
@@ -39,7 +45,7 @@ export default function App() {
       } catch (healthError) {
         console.error('Backend unavailable:', healthError);
         alert(
-          'Unable to connect to the Clara backend server.\n\n' +
+          'Unable to connect to the Aneya backend server.\n\n' +
           'Please ensure the API server is running.\n' +
           'Local development: python api.py\n' +
           'Production: Check Vercel deployment logs'
