@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Clara API - FastAPI Backend
+Aneya API - FastAPI Backend
 Wraps the Clinical Decision Support Client for the React frontend
 """
 
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     global client
 
     # Startup
-    print("🚀 Starting Clara API...")
+    print("🚀 Starting Aneya API...")
 
     # Check for Anthropic API key - REQUIRED!
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
         error_msg = """
         ❌ FATAL ERROR: ANTHROPIC_API_KEY not found!
 
-        Clara requires an Anthropic API key to function.
+        Aneya requires an Anthropic API key to function.
 
         To fix this:
         1. Create a .env file in the project root if it doesn't exist
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Clara Clinical Decision Support API",
+    title="Aneya Clinical Decision Support API",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -144,7 +144,7 @@ async def root():
     """Root endpoint"""
     return {
         "status": "ok",
-        "message": "Clara Clinical Decision Support API is running"
+        "message": "Aneya Clinical Decision Support API is running"
     }
 
 
