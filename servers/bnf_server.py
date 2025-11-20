@@ -12,7 +12,26 @@ from bs4 import BeautifulSoup
 from typing import Optional, List, Dict, Any
 from fastmcp import FastMCP
 import time
+import os
 from urllib.parse import urljoin, quote
+
+# Try to import cache, but gracefully handle if Firebase isn't available
+try:
+    from bnf_cache import get_cache
+    CACHE_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️  Cache module unavailable (will run without caching): {str(e)}")
+    CACHE_AVAILABLE = False
+    # Create a dummy cache that does nothing
+    class DummyCache:
+        def __init__(self):
+            self.enabled = False
+        def get(self, *args, **kwargs):
+            return None
+        def set(self, *args, **kwargs):
+            pass
+    def get_cache():
+        return DummyCache()
 
 # Initialize FastMCP server with proper name and instructions
 mcp = FastMCP(
@@ -38,8 +57,23 @@ HEADERS = {
 session = requests.Session()
 session.headers.update(HEADERS)
 
+# Configure proxy if provided via environment variable
+# Format: http://proxy-host:port or http://user:pass@proxy-host:port
+PROXY_URL = os.getenv('BNF_PROXY_URL')
+if PROXY_URL:
+    print(f"🔄 BNF server using proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
+    session.proxies = {
+        'http': PROXY_URL,
+        'https': PROXY_URL,
+    }
+else:
+    print("📡 BNF server using direct connection (no proxy)")
 
-def make_request(url: str, timeout: int = 10) -> Optional[requests.Response]:
+# Initialize cache
+cache = get_cache()
+
+
+def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Response], Dict[str, Any]]:
     """
     Make a GET request with proper error handling and rate limiting.
 
@@ -48,17 +82,85 @@ def make_request(url: str, timeout: int = 10) -> Optional[requests.Response]:
         timeout: Request timeout in seconds
 
     Returns:
-        Response object or None if failed
+        Tuple of (Response object or None if failed, debug_info dictionary)
     """
+    debug_info = {
+        "url": url,
+        "proxy_enabled": bool(PROXY_URL),
+        "proxy_url": PROXY_URL.split('@')[-1] if PROXY_URL and '@' in PROXY_URL else PROXY_URL if PROXY_URL else None,
+        "timeout": timeout
+    }
+
     try:
+        # Log request details
+        proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
+        print(f"🌐 [{proxy_status}] Requesting: {url}")
+        if session.proxies:
+            proxy_host = session.proxies.get('https', 'unknown')
+            # Mask password in logs
+            if '@' in proxy_host:
+                proxy_display = proxy_host.split('@')[-1]
+            else:
+                proxy_display = proxy_host
+            print(f"   Using proxy: {proxy_display}")
+
         # Add a small delay to be respectful to the server
         time.sleep(0.5)
         response = session.get(url, timeout=timeout)
+
+        # Log response details
+        print(f"✅ Response received: {response.status_code} (size: {len(response.content)} bytes)")
+
+        # Add success info to debug
+        debug_info["status_code"] = response.status_code
+        debug_info["content_length"] = len(response.content)
+        debug_info["content_type"] = response.headers.get('Content-Type', 'unknown')
+        debug_info["success"] = True
+
         response.raise_for_status()
-        return response
+        return response, debug_info
+
+    except requests.Timeout as e:
+        print(f"⏱️  Timeout connecting to {url}")
+        print(f"   Timeout duration: {timeout}s")
+        print(f"   Error: {str(e)}")
+        debug_info["error_type"] = "Timeout"
+        debug_info["error_message"] = str(e)
+        debug_info["success"] = False
+        return None, debug_info
+
+    except requests.ConnectionError as e:
+        print(f"🔌 Connection error for {url}")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error details: {str(e)}")
+        if session.proxies:
+            print(f"   Proxy configured: Yes")
+        debug_info["error_type"] = "ConnectionError"
+        debug_info["error_message"] = str(e)
+        debug_info["success"] = False
+        return None, debug_info
+
+    except requests.HTTPError as e:
+        status_code = e.response.status_code if e.response else "unknown"
+        print(f"📛 HTTP error {status_code} for {url}")
+        print(f"   Error: {str(e)}")
+        if e.response:
+            print(f"   Response headers: {dict(e.response.headers)}")
+            debug_info["response_headers"] = dict(e.response.headers)
+        debug_info["error_type"] = "HTTPError"
+        debug_info["status_code"] = status_code
+        debug_info["error_message"] = str(e)
+        debug_info["success"] = False
+        return None, debug_info
+
     except requests.RequestException as e:
-        print(f"Request error for {url}: {str(e)}")
-        return None
+        print(f"⚠️  Request error for {url}")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error details: {str(e)}")
+        debug_info["error_type"] = type(e).__name__
+        debug_info["error_message"] = str(e)
+        debug_info["success"] = False
+        return None, debug_info
 
 
 @mcp.tool(
@@ -103,18 +205,23 @@ def search_bnf_drug(drug_name: str) -> Dict[str, Any]:
             "error": None
         }
     """
+    # Check cache first
+    cached_result = cache.get('search_drug', drug_name)
+    if cached_result:
+        return cached_result
+
     try:
         # Try direct drug URL first (most common case)
         drug_slug = drug_name.lower().replace(' ', '-')
         direct_url = f"{BASE_URL}/drugs/{drug_slug}/"
 
-        response = make_request(direct_url)
+        response, debug_info = make_request(direct_url)
         if response and response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             title = soup.find('h1')
             if title and '404' not in title.get_text() and 'not found' not in title.get_text().lower():
                 # Found a direct match
-                return {
+                result = {
                     'query': drug_name,
                     'results': [{
                         'name': title.get_text(strip=True),
@@ -123,20 +230,25 @@ def search_bnf_drug(drug_name: str) -> Dict[str, Any]:
                     }],
                     'count': 1,
                     'success': True,
-                    'error': None
+                    'error': None,
+                    'debug_info': debug_info
                 }
+                # Cache the result
+                cache.set('search_drug', drug_name, result)
+                return result
 
         # If direct match didn't work, try search
         search_url = f"{BASE_URL}/search/?q={quote(drug_name)}"
 
-        response = make_request(search_url)
+        response, search_debug_info = make_request(search_url)
         if not response:
             return {
                 'query': drug_name,
                 'results': [],
                 'count': 0,
                 'success': False,
-                'error': 'Failed to connect to BNF website'
+                'error': 'Failed to connect to BNF website',
+                'debug_info': search_debug_info
             }
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -187,22 +299,30 @@ def search_bnf_drug(drug_name: str) -> Dict[str, Any]:
                         'type': 'Drug'
                     })
 
-        return {
+        result = {
             'query': drug_name,
             'results': results[:10],  # Limit to top 10 results
             'count': len(results[:10]),
             'success': True,
-            'error': None
+            'error': None,
+            'debug_info': search_debug_info
         }
 
+        # Cache successful results
+        if result['success']:
+            cache.set('search_drug', drug_name, result)
+
+        return result
+
     except Exception as e:
-        return {
+        result = {
             'query': drug_name,
             'results': [],
             'count': 0,
             'success': False,
             'error': f'Search error: {str(e)}'
         }
+        return result
 
 
 @mcp.tool(
@@ -251,7 +371,7 @@ def get_bnf_drug_info(drug_url: str) -> Dict[str, Any]:
         }
     """
     try:
-        response = make_request(drug_url)
+        response, debug_info = make_request(drug_url)
         if not response:
             return {
                 'drug_name': 'Unknown',
@@ -366,11 +486,11 @@ def search_bnf_by_condition(condition: str) -> Dict[str, Any]:
         # Search using the condition as a query term
         search_url = f"{BASE_URL}/treatment-summaries/?q={quote(condition)}"
 
-        response = make_request(search_url)
+        response, debug_info = make_request(search_url)
         if not response:
             # Fallback to regular search if treatment summaries don't work
             search_url = f"{BASE_URL}/search/?q={quote(condition)}"
-            response = make_request(search_url)
+            response, debug_info = make_request(search_url)
 
         if not response:
             return {
@@ -492,10 +612,10 @@ def get_bnf_drug_interactions(drug_name: str) -> Dict[str, Any]:
         # Try to find interactions page (often a subpage or section)
         interactions_url = drug_url.rstrip('/') + '/interactions/'
 
-        response = make_request(interactions_url)
+        response, debug_info = make_request(interactions_url)
         if not response:
             # Fallback: get interactions from main drug page
-            response = make_request(drug_url)
+            response, debug_info = make_request(drug_url)
 
         if not response:
             return {
@@ -593,7 +713,7 @@ def search_bnf_treatment_summaries(condition: str, max_results: int = 10) -> Dic
         # Search the treatment summaries index
         search_url = f"{BASE_URL}/treatment-summaries/"
 
-        response = make_request(search_url)
+        response, debug_info = make_request(search_url)
         if not response:
             return {
                 'success': False,
@@ -700,7 +820,7 @@ def get_bnf_treatment_summary(url: str) -> Dict[str, Any]:
             - error (str|None): Error message if retrieval failed
     """
     try:
-        response = make_request(url)
+        response, debug_info = make_request(url)
         if not response:
             return {
                 'success': False,
