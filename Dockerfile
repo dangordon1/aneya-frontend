@@ -32,14 +32,10 @@ COPY servers/ ./servers/
 RUN useradd -m -u 1000 aneya && chown -R aneya:aneya /app
 USER aneya
 
-# Expose port (Cloud Run expects PORT env var)
+# Expose port (Cloud Run and Railway provide PORT env var)
 ENV PORT=8080
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8080/health', timeout=5.0)" || exit 1
-
 # Run the application with uvicorn
-# Cloud Run provides PORT env var, default to 8080
+# Platform provides PORT env var, default to 8080
 CMD uvicorn api:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info
