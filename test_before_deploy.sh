@@ -24,8 +24,8 @@ echo "---------------------------------------"
 python test_streamlined.py > /tmp/deploy_test.log 2>&1 &
 TEST_PID=$!
 
-# Wait for test with timeout
-TIMEOUT=60
+# Wait for test with timeout (extended for full clinical workflow)
+TIMEOUT=300  # 5 minutes - enough for MCP server startup + NICE search + BNF lookups + Claude API calls
 ELAPSED=0
 while kill -0 $TEST_PID 2>/dev/null; do
     if [ $ELAPSED -ge $TIMEOUT ]; then
@@ -35,7 +35,10 @@ while kill -0 $TEST_PID 2>/dev/null; do
     fi
     sleep 2
     ELAPSED=$((ELAPSED + 2))
-    printf "."
+    # Show progress every 10 seconds
+    if [ $((ELAPSED % 10)) -eq 0 ]; then
+        printf "."
+    fi
 done
 
 wait $TEST_PID
