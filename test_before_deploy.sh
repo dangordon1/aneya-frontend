@@ -21,7 +21,7 @@ echo ""
 echo "Test 1: Streamlined clinical decision support workflow"
 echo "---------------------------------------"
 
-python3 test_streamlined.py > /tmp/deploy_test.log 2>&1 &
+python test_streamlined.py > /tmp/deploy_test.log 2>&1 &
 TEST_PID=$!
 
 # Wait for test with timeout
@@ -47,7 +47,7 @@ if [ $TEST_EXIT -eq 0 ]; then
     # Check if result file was created
     if [ -f "/tmp/streamlined_test_result.json" ]; then
         # Check if diagnoses were found
-        DIAGNOSES=$(python3 -c "import json; data=json.load(open('/tmp/streamlined_test_result.json')); print(len(data.get('diagnoses', [])))" 2>/dev/null || echo "0")
+        DIAGNOSES=$(python -c "import json; data=json.load(open('/tmp/streamlined_test_result.json')); print(len(data.get('diagnoses', [])))" 2>/dev/null || echo "0")
 
         if [ "$DIAGNOSES" -gt 0 ]; then
             echo "✅ Test passed: Found $DIAGNOSES diagnosis(es)"
