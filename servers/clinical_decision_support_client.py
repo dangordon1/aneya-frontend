@@ -329,6 +329,8 @@ class ClinicalDecisionSupportClient:
                 guidelines.extend(guidelines_data.get('results', []))
 
             # Also search CKS (Clinical Knowledge Summaries)
+            # Add delay to avoid rate limiting across NICE subdomains
+            await asyncio.sleep(1.0)
             for term in search_terms[:2]:  # Try up to 2 terms
                 try:
                     result = await self.call_tool("search_cks_topics", {
@@ -341,6 +343,8 @@ class ClinicalDecisionSupportClient:
                     pass  # CKS might be geo-restricted or topic not found
 
             # Search BNF Treatment Summaries
+            # Add delay to avoid rate limiting across NICE subdomains
+            await asyncio.sleep(1.0)
             for term in search_terms[:2]:  # Try up to 2 terms
                 try:
                     result = await self.call_tool("search_bnf_treatment_summaries", {
@@ -350,7 +354,17 @@ class ClinicalDecisionSupportClient:
                     bnf_data = json.loads(result.content[0].text)
                     if bnf_data.get('success') and bnf_data.get('results'):
                         bnf_summaries.extend(bnf_data['results'])
-                except:
+                    elif not bnf_data.get('success'):
+                        if verbose:
+                            print(f"   ⚠️  BNF search failed for '{term}': {bnf_data.get('error', 'Unknown error')}")
+                            # Log full response for debugging Cloud Run proxy issues
+                            print(f"      📋 Full BNF response: {json.dumps(bnf_data, indent=6)}")
+                except Exception as e:
+                    if verbose:
+                        print(f"   ⚠️  BNF search exception for '{term}': {str(e)}")
+                        print(f"      Exception type: {type(e).__name__}")
+                        import traceback
+                        print(f"      Traceback: {traceback.format_exc()}")
                     pass  # BNF might not have treatment summaries for this condition
 
             # Remove duplicates from guidelines
@@ -504,9 +518,12 @@ class ClinicalDecisionSupportClient:
                         })
                         if verbose:
                             print(f"      ✓ Retrieved: {bnf['title']}")
+                    elif not bnf_content.get('success'):
+                        if verbose:
+                            print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}: {bnf_content.get('error', 'Unknown error')}")
                 except Exception as e:
                     if verbose:
-                        print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}")
+                        print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}: {str(e)}")
 
         # Use Claude to analyze and extract structured information
         total_guideline_resources = len(guideline_contents) + len(cks_contents)
@@ -576,9 +593,18 @@ class ClinicalDecisionSupportClient:
                                     treatment['medications_detailed'].append(drug_info)
                                     if verbose:
                                         print(f"      ✓ {drug_info['drug_name']}")
-                        except:
+                                elif not drug_info.get('success'):
+                                    if verbose:
+                                        print(f"      ✗ {med_name} - get_bnf_drug_info failed: {drug_info.get('error', 'Unknown error')}")
+                            elif not search_data.get('success'):
+                                if verbose:
+                                    print(f"      ✗ {med_name} - search_bnf_drug failed: {search_data.get('error', 'Unknown error')}")
+                            else:
+                                if verbose:
+                                    print(f"      ✗ {med_name} - No BNF results found")
+                        except Exception as e:
                             if verbose:
-                                print(f"      ✗ {med_name} - BNF lookup failed")
+                                print(f"      ✗ {med_name} - BNF lookup exception: {str(e)}")
         else:
             if verbose:
                 print(f"   No diagnoses with treatment options identified")

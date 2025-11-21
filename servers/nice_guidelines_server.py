@@ -9,6 +9,7 @@ to retrieve published guidance documents and their details.
 
 import asyncio
 from typing import Any, Optional, List, Dict
+from urllib.parse import quote
 import httpx
 from bs4 import BeautifulSoup
 import re
@@ -69,9 +70,12 @@ async def search_nice_guidelines(keyword: str, max_results: int = 20) -> dict:
     """
     max_results = min(max_results, 100)
 
-    # Construct search URL with proper query parameter
+    # Sanitize keyword: remove newlines and extra whitespace
+    keyword_clean = " ".join(keyword.split())
+
+    # Construct search URL with proper URL encoding
     page_size = min(max_results, 50)  # NICE allows max 50 per page
-    search_url = f"{GUIDANCE_URL}/published?q={keyword}&ps={page_size}"
+    search_url = f"{GUIDANCE_URL}/published?q={quote(keyword_clean)}&ps={page_size}"
 
     html = await fetch_page(search_url)
     if not html:

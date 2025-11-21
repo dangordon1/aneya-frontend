@@ -1,4 +1,4 @@
-# Clara - Full Stack Application
+#  aneya - Full Stack Application
 
 A modern clinical decision support system with React frontend and FastAPI backend, integrating your Figma design with the existing clinical decision support infrastructure.
 
@@ -87,7 +87,7 @@ Open your browser and navigate to:
 
 **http://localhost:5173**
 
-You should see the Clara Clinical Decision Support interface!
+You should see the  aneya Clinical Decision Support interface!
 
 ## Usage Flow
 
@@ -144,7 +144,7 @@ The design system matches your Figma specifications:
 - **Colors**: Primary Purple (#351431), Soft Pink (#F0D1DA)
 - **Typography**: Georgia (serif) for headings, Inter (sans-serif) for body
 - **Components**: Cards, buttons, expandable sections, medication boxes
-- **Shadows**: Subtle shadows matching Clara Health brand
+- **Shadows**: Subtle shadows matching  aneya Health brand
 
 ## Troubleshooting
 
