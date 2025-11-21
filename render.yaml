@@ -1,0 +1,13 @@
+# Render.com deployment configuration for Clara/Aneya backend
+services:
+  - type: web
+    name: aneya-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon # US West - different IP range than GCP London
+    plan: free # Free tier available
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false # Set manually in Render dashboard
+    autoDeploy: true
