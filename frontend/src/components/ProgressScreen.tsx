@@ -55,19 +55,9 @@ export function ProgressScreen({ onComplete }: ProgressScreenProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Show realistic progress animation while backend processes
-    // Step through each phase to give user feedback
+    // Show all steps immediately without animation delays
     if (currentStep < STEPS.length) {
-      // Timing for each step (geolocation is fast, AI analysis takes longer)
-      const delay = currentStep === 0 ? 1500 :  // Geolocation (fast)
-                    currentStep === 2 ? 3000 :  // Connecting to servers
-                    currentStep === 4 ? 4000 :  // AI analysis (longer)
-                    2500;                        // Other steps
-      const timer = setTimeout(() => {
-        setCurrentStep(currentStep + 1);
-      }, delay);
-
-      return () => clearTimeout(timer);
+      setCurrentStep(currentStep + 1);
     }
     // Note: We don't auto-complete here - the parent component (App.tsx)
     // will call onComplete when the actual API call finishes

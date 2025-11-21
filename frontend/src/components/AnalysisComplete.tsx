@@ -7,13 +7,9 @@ interface AnalysisCompleteProps {
 }
 
 export function AnalysisComplete({ onShowReport }: AnalysisCompleteProps) {
-  // Auto-show report after a brief delay to let user see success
+  // Auto-show report immediately
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onShowReport();
-    }, 2000); // 2 second delay to show success message
-
-    return () => clearTimeout(timer);
+    onShowReport();
   }, [onShowReport]);
 
   return (

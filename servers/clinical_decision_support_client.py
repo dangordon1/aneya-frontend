@@ -461,7 +461,8 @@ class ClinicalDecisionSupportClient:
 
             server_params = StdioServerParameters(
                 command="fastmcp",
-                args=["run", server_path, "--transport", "stdio", "--no-banner"]
+                args=["run", server_path, "--transport", "stdio", "--no-banner"],
+                env=os.environ.copy()  # Pass environment variables to subprocess
             )
 
             stdio_transport = await self.exit_stack.enter_async_context(
