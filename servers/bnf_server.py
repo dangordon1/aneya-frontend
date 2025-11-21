@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 from fastmcp import FastMCP
 import time
 import os
+import sys
 from urllib.parse import urljoin, quote
 
 # Try to import cache, but gracefully handle if Firebase isn't available
@@ -20,7 +21,7 @@ try:
     from bnf_cache import get_cache
     CACHE_AVAILABLE = True
 except Exception as e:
-    print(f"⚠️  Cache module unavailable (will run without caching): {str(e)}")
+    print(f"⚠️  Cache module unavailable (will run without caching): {str(e)}", file=sys.stderr)
     CACHE_AVAILABLE = False
     # Create a dummy cache that does nothing
     class DummyCache:
@@ -62,15 +63,15 @@ SCRAPEOPS_API_KEY = os.getenv('SCRAPEOPS_API_KEY')
 SCRAPEOPS_PROXY_URL = 'https://proxy.scrapeops.io/v1/'
 
 if SCRAPEOPS_API_KEY:
-    print(f"🔄 BNF server using ScrapeOps proxy (API key: {SCRAPEOPS_API_KEY[:10]}...)")
-    print(f"   Features: residential IPs + JavaScript rendering")
+    print(f"🔄 BNF server using ScrapeOps proxy (API key: {SCRAPEOPS_API_KEY[:10]}...)", file=sys.stderr)
+    print(f"   Features: residential IPs + JavaScript rendering", file=sys.stderr)
 else:
-    print("📡 BNF server using direct connection (no proxy)")
+    print("📡 BNF server using direct connection (no proxy)", file=sys.stderr)
 
 # Legacy proxy support (kept for backwards compatibility with ScraperAPI if needed)
 PROXY_URL = os.getenv('BNF_PROXY_URL')
 if PROXY_URL and not SCRAPEOPS_API_KEY:
-    print(f"🔄 BNF server using legacy proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
+    print(f"🔄 BNF server using legacy proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}", file=sys.stderr)
     session.proxies = {
         'http': PROXY_URL,
         'https': PROXY_URL,
@@ -103,8 +104,8 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
     try:
         # Use ScrapeOps if API key is available
         if SCRAPEOPS_API_KEY:
-            print(f"🌐 [SCRAPEOPS] Requesting: {url}")
-            print(f"   Features: residential + render_js")
+            print(f"🌐 [SCRAPEOPS] Requesting: {url}", file=sys.stderr)
+            print(f"   Features: residential + render_js", file=sys.stderr)
 
             # Add delay to be respectful
             time.sleep(0.5)
@@ -123,7 +124,7 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
         else:
             # Use direct connection or legacy proxy
             proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
-            print(f"🌐 [{proxy_status}] Requesting: {url}")
+            print(f"🌐 [{proxy_status}] Requesting: {url}", file=sys.stderr)
             if session.proxies:
                 proxy_host = session.proxies.get('https', 'unknown')
                 # Mask password in logs
@@ -131,14 +132,14 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
                     proxy_display = proxy_host.split('@')[-1]
                 else:
                     proxy_display = proxy_host
-                print(f"   Using proxy: {proxy_display}")
+                print(f"   Using proxy: {proxy_display}", file=sys.stderr)
 
             # Add a small delay to be respectful to the server
             time.sleep(0.5)
             response = session.get(url, timeout=timeout)
 
         # Log response details
-        print(f"✅ Response received: {response.status_code} (size: {len(response.content)} bytes)")
+        print(f"✅ Response received: {response.status_code} (size: {len(response.content)} bytes)", file=sys.stderr)
 
         # Add success info to debug
         debug_info["status_code"] = response.status_code
@@ -150,20 +151,20 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
         return response, debug_info
 
     except requests.Timeout as e:
-        print(f"⏱️  Timeout connecting to {url}")
-        print(f"   Timeout duration: {timeout}s")
-        print(f"   Error: {str(e)}")
+        print(f"⏱️  Timeout connecting to {url}", file=sys.stderr)
+        print(f"   Timeout duration: {timeout}s", file=sys.stderr)
+        print(f"   Error: {str(e)}", file=sys.stderr)
         debug_info["error_type"] = "Timeout"
         debug_info["error_message"] = str(e)
         debug_info["success"] = False
         return None, debug_info
 
     except requests.ConnectionError as e:
-        print(f"🔌 Connection error for {url}")
-        print(f"   Error type: {type(e).__name__}")
-        print(f"   Error details: {str(e)}")
+        print(f"🔌 Connection error for {url}", file=sys.stderr)
+        print(f"   Error type: {type(e).__name__}", file=sys.stderr)
+        print(f"   Error details: {str(e)}", file=sys.stderr)
         if session.proxies:
-            print(f"   Proxy configured: Yes")
+            print(f"   Proxy configured: Yes", file=sys.stderr)
         debug_info["error_type"] = "ConnectionError"
         debug_info["error_message"] = str(e)
         debug_info["success"] = False
@@ -171,10 +172,10 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
 
     except requests.HTTPError as e:
         status_code = e.response.status_code if e.response else "unknown"
-        print(f"📛 HTTP error {status_code} for {url}")
-        print(f"   Error: {str(e)}")
+        print(f"📛 HTTP error {status_code} for {url}", file=sys.stderr)
+        print(f"   Error: {str(e)}", file=sys.stderr)
         if e.response:
-            print(f"   Response headers: {dict(e.response.headers)}")
+            print(f"   Response headers: {dict(e.response.headers)}", file=sys.stderr)
             debug_info["response_headers"] = dict(e.response.headers)
         debug_info["error_type"] = "HTTPError"
         debug_info["status_code"] = status_code
@@ -183,9 +184,9 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
         return None, debug_info
 
     except requests.RequestException as e:
-        print(f"⚠️  Request error for {url}")
-        print(f"   Error type: {type(e).__name__}")
-        print(f"   Error details: {str(e)}")
+        print(f"⚠️  Request error for {url}", file=sys.stderr)
+        print(f"   Error type: {type(e).__name__}", file=sys.stderr)
+        print(f"   Error details: {str(e)}", file=sys.stderr)
         debug_info["error_type"] = type(e).__name__
         debug_info["error_message"] = str(e)
         debug_info["success"] = False
