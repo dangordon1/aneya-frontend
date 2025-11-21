@@ -19,19 +19,312 @@ from contextlib import AsyncExitStack
 from anthropic import Anthropic
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass
+from enum import Enum
 import os
+import httpx
+
+
+# ============================================================================
+# Configuration-Driven Regional Search System
+# ============================================================================
+
+class ResourceType(Enum):
+    """Types of medical resources that can be searched."""
+    GUIDELINE = "guideline"      # Clinical guidelines (NICE, FOGSI)
+    CKS = "cks"                  # Clinical Knowledge Summaries (UK)
+    TREATMENT = "treatment"       # Treatment summaries (BNF)
+    LITERATURE = "literature"     # Research articles (PubMed)
+
+
+@dataclass
+class SearchConfig:
+    """Configuration for a single search operation."""
+    resource_type: ResourceType
+    tool_name: str
+    tool_params: Dict[str, Any]
+    result_key: str              # Key in results dict (e.g., 'guidelines', 'cks_topics')
+    deduplicate: bool = False    # Whether to deduplicate results
+    required: bool = True         # Whether this search is required for the region
+
+
+@dataclass
+class RegionConfig:
+    """Complete configuration for a geographic region."""
+    region_name: str
+    country_codes: List[str]
+    required_servers: List[str]  # MCP servers needed for this region
+    searches: List[SearchConfig]
+    min_results_threshold: int = 2  # Minimum results before falling back to PubMed
+    pubmed_fallback: bool = True    # Whether to use PubMed as fallback
+
+
+# Regional search configurations
+REGION_CONFIGS = {
+    "UK": RegionConfig(
+        region_name="United Kingdom",
+        country_codes=["GB", "UK"],
+        required_servers=["patient_info", "nice", "bnf", "pubmed"],
+        searches=[
+            SearchConfig(
+                resource_type=ResourceType.GUIDELINE,
+                tool_name="search_nice_guidelines",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 10},
+                result_key="guidelines",
+                deduplicate=False,
+                required=True
+            ),
+            SearchConfig(
+                resource_type=ResourceType.CKS,
+                tool_name="search_cks_topics",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 5},
+                result_key="cks_topics",
+                deduplicate=False,
+                required=False
+            ),
+            SearchConfig(
+                resource_type=ResourceType.TREATMENT,
+                tool_name="search_bnf_treatment_summary",
+                tool_params={"condition": "{clinical_scenario}"},
+                result_key="bnf_summaries",
+                deduplicate=True,
+                required=False
+            )
+        ],
+        min_results_threshold=2,
+        pubmed_fallback=True
+    ),
+
+    "INDIA": RegionConfig(
+        region_name="India",
+        country_codes=["IN"],
+        required_servers=["patient_info", "fogsi", "pubmed"],
+        searches=[
+            SearchConfig(
+                resource_type=ResourceType.GUIDELINE,
+                tool_name="search_fogsi_guidelines",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 10},
+                result_key="guidelines",
+                deduplicate=False,
+                required=True
+            )
+        ],
+        min_results_threshold=1,
+        pubmed_fallback=True  # Always search PubMed for India
+    ),
+
+    "INTERNATIONAL": RegionConfig(
+        region_name="International",
+        country_codes=["default"],
+        required_servers=["patient_info", "pubmed"],
+        searches=[],  # No regional guidelines, PubMed only
+        min_results_threshold=0,
+        pubmed_fallback=True
+    )
+}
+
+
+# Map country codes to regions
+COUNTRY_TO_REGION = {}
+for region_key, config in REGION_CONFIGS.items():
+    for country_code in config.country_codes:
+        COUNTRY_TO_REGION[country_code] = region_key
 
 
 # Server paths
 SERVERS_DIR = Path(__file__).parent
 MCP_SERVERS = {
-    "geolocation": str(SERVERS_DIR / "geolocation_server.py"),
     "patient_info": str(SERVERS_DIR / "patient_info_server.py"),
     "nice": str(SERVERS_DIR / "nice_guidelines_server.py"),
     "bnf": str(SERVERS_DIR / "bnf_server.py"),
+    "fogsi": str(SERVERS_DIR / "fogsi_server.py"),  # FOGSI Guidelines (India)
     "pubmed": str(SERVERS_DIR / "pubmed_server.py")
 }
+
+# Region-specific server mapping (generated from REGION_CONFIGS)
+REGION_SERVERS = {}
+for region_key, config in REGION_CONFIGS.items():
+    for country_code in config.country_codes:
+        REGION_SERVERS[country_code] = config.required_servers
+
+
+class RegionalSearchService:
+    """
+    Service for executing region-specific clinical guideline searches.
+
+    Uses configuration-driven approach to route searches based on geographic region,
+    handling parallel execution, deduplication, and PubMed fallback logic.
+    """
+
+    def __init__(self, client: 'ClinicalDecisionSupportClient'):
+        """
+        Initialize the regional search service.
+
+        Args:
+            client: The ClinicalDecisionSupportClient instance to use for tool calls
+        """
+        self.client = client
+
+    async def search_by_region(
+        self,
+        country_code: str,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> Tuple[List[dict], List[dict], List[dict], List[dict]]:
+        """
+        Execute searches for a specific region based on configuration.
+
+        Args:
+            country_code: ISO country code (e.g., 'GB', 'IN', 'US')
+            clinical_scenario: Clinical query or patient description
+            verbose: Whether to print progress messages
+
+        Returns:
+            Tuple of (guidelines, cks_topics, bnf_summaries, pubmed_articles)
+        """
+        # Get region configuration
+        region_key = COUNTRY_TO_REGION.get(country_code, "INTERNATIONAL")
+        config = REGION_CONFIGS[region_key]
+
+        if verbose:
+            print(f"\n{'='*80}")
+            print(f"🌍 Regional Search: {config.region_name} ({country_code})")
+            print(f"{'='*80}")
+
+        # Initialize result containers
+        results = {
+            'guidelines': [],
+            'cks_topics': [],
+            'bnf_summaries': [],
+            'pubmed_articles': []
+        }
+
+        # Execute configured searches in parallel
+        search_tasks = []
+        for search_config in config.searches:
+            # Substitute clinical_scenario into tool params
+            params = {
+                key: value.format(clinical_scenario=clinical_scenario) if isinstance(value, str) else value
+                for key, value in search_config.tool_params.items()
+            }
+
+            search_tasks.append(
+                self._execute_search(search_config, params, verbose)
+            )
+
+        # Wait for all searches to complete
+        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # Process results
+        for search_config, search_result in zip(config.searches, search_results):
+            if isinstance(search_result, Exception):
+                if verbose:
+                    print(f"⚠️  Search failed for {search_config.tool_name}: {search_result}")
+                continue
+
+            if search_result:
+                # Store in appropriate result key
+                result_list = results[search_config.result_key]
+
+                if search_config.deduplicate:
+                    # Deduplicate by title
+                    existing_titles = {item.get('title', '').lower() for item in result_list}
+                    new_items = [
+                        item for item in search_result
+                        if item.get('title', '').lower() not in existing_titles
+                    ]
+                    result_list.extend(new_items)
+                else:
+                    result_list.extend(search_result)
+
+        # Check if we need PubMed fallback
+        guideline_count = len(results['guidelines'])
+        needs_pubmed_fallback = (
+            config.pubmed_fallback and
+            guideline_count < config.min_results_threshold
+        )
+
+        if needs_pubmed_fallback:
+            if verbose:
+                print(f"\n📚 PubMed Fallback: Only {guideline_count} guideline(s) found")
+
+            pubmed_result = await self._search_pubmed(clinical_scenario, verbose)
+            if pubmed_result:
+                results['pubmed_articles'].extend(pubmed_result)
+
+        # For India, always search PubMed in addition to FOGSI
+        if region_key == "INDIA" and not needs_pubmed_fallback:
+            if verbose:
+                print(f"\n📚 Searching PubMed (India region)")
+
+            pubmed_result = await self._search_pubmed(clinical_scenario, verbose)
+            if pubmed_result:
+                results['pubmed_articles'].extend(pubmed_result)
+
+        return (
+            results['guidelines'],
+            results['cks_topics'],
+            results['bnf_summaries'],
+            results['pubmed_articles']
+        )
+
+    async def _execute_search(
+        self,
+        search_config: SearchConfig,
+        params: Dict[str, Any],
+        verbose: bool
+    ) -> List[dict]:
+        """Execute a single configured search operation."""
+        try:
+            if verbose:
+                print(f"  🔍 {search_config.resource_type.value}: {search_config.tool_name}")
+
+            result = await self.client.call_tool(search_config.tool_name, params)
+
+            if isinstance(result, dict):
+                # Handle different response formats
+                if 'summaries' in result:
+                    return result['summaries']
+                elif 'guidelines' in result:
+                    return result['guidelines']
+                elif 'topics' in result:
+                    return result['topics']
+                elif 'success' in result and result['success']:
+                    # Generic success response
+                    return []
+
+            return []
+
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠️  Error: {str(e)}")
+            return []
+
+    async def _search_pubmed(
+        self,
+        clinical_scenario: str,
+        verbose: bool
+    ) -> List[dict]:
+        """Search PubMed for additional evidence."""
+        try:
+            result = await self.client.call_tool(
+                "search_pubmed",
+                {"query": clinical_scenario, "max_results": 5}
+            )
+
+            if isinstance(result, dict) and result.get('success'):
+                articles = result.get('articles', [])
+                if verbose and articles:
+                    print(f"    ✓ Found {len(articles)} PubMed article(s)")
+                return articles
+
+            return []
+
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠️  PubMed search error: {str(e)}")
+            return []
 
 
 class ClinicalDecisionSupportClient:
@@ -57,31 +350,105 @@ class ClinicalDecisionSupportClient:
         api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.anthropic = Anthropic(api_key=api_key) if api_key else None
 
-    async def connect_to_servers(self, server_paths: Optional[Dict[str, str]] = None, verbose: bool = True):
+        # Initialize regional search service
+        self.regional_search = RegionalSearchService(self)
+
+    async def get_location_from_ip(self, user_ip: Optional[str] = None) -> dict:
         """
-        Connect to multiple MCP servers in parallel.
+        Get location information from IP address using direct HTTP call (no MCP).
+
+        This is called BEFORE connecting to MCP servers to determine which
+        region-specific servers to load.
 
         Args:
+            user_ip: Optional IP address. If None, will auto-detect.
+
+        Returns:
+            Dictionary with:
+            - country: Country name
+            - country_code: ISO country code (e.g., 'GB', 'IN', 'US')
+            - ip: IP address used for lookup
+        """
+        try:
+            # Use ip-api.com for geolocation (free, no API key required)
+            if user_ip:
+                url = f"http://ip-api.com/json/{user_ip}?fields=status,message,country,countryCode"
+            else:
+                # Auto-detect by not specifying IP
+                url = "http://ip-api.com/json/?fields=status,message,country,countryCode"
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get('status') == 'fail':
+                    print(f"⚠️  Geolocation failed: {data.get('message', 'Unknown error')}")
+                    return {
+                        'country': 'Unknown',
+                        'country_code': 'XX',
+                        'ip': user_ip or 'unknown'
+                    }
+
+                return {
+                    'country': data.get('country', 'Unknown'),
+                    'country_code': data.get('countryCode', 'XX'),
+                    'ip': user_ip or 'auto-detected'
+                }
+        except Exception as e:
+            print(f"⚠️  Geolocation error: {str(e)}")
+            return {
+                'country': 'Unknown',
+                'country_code': 'XX',
+                'ip': user_ip or 'unknown'
+            }
+
+    async def connect_to_servers(self, country_code: Optional[str] = None, server_paths: Optional[Dict[str, str]] = None, verbose: bool = True):
+        """
+        Connect to region-specific MCP servers in parallel.
+
+        Args:
+            country_code: ISO country code (e.g., 'GB', 'IN', 'US'). If provided,
+                         only connects to servers relevant for that region.
             server_paths: Optional dict of server_name -> server_path. Uses defaults if None.
             verbose: Whether to print connection status
         """
-        servers = server_paths or MCP_SERVERS
+        # Filter servers based on country code
+        if country_code and not server_paths:
+            # Get region-specific server list
+            server_names = REGION_SERVERS.get(country_code.upper(), REGION_SERVERS["default"])
+
+            if verbose:
+                print(f"🌍 Region: {country_code.upper()} - Loading region-specific servers")
+
+            # Build filtered server dict
+            servers = {
+                name: MCP_SERVERS[name]
+                for name in server_names
+                if name in MCP_SERVERS and Path(MCP_SERVERS[name]).exists()
+            }
+        else:
+            servers = server_paths or MCP_SERVERS
 
         if verbose:
-            print(f"🔄 Connecting to {len(servers)} servers in parallel...")
+            print(f"🔄 Connecting to {len(servers)} server(s) in parallel...")
+            if country_code:
+                print(f"   Region-specific servers for {country_code}: {', '.join(servers.keys())}")
 
         # Validate all servers exist
         for server_name, server_path in servers.items():
             if not Path(server_path).exists():
-                raise FileNotFoundError(f"Server not found: {server_path}")
+                print(f"   ⚠️  Skipping {server_name} - file not found: {server_path}")
+                continue
 
         # Connect to all servers in parallel using asyncio.gather
         connection_tasks = [
             self._connect_single_server(server_name, server_path, verbose)
             for server_name, server_path in servers.items()
+            if Path(server_path).exists()
         ]
 
-        await asyncio.gather(*connection_tasks)
+        await asyncio.gather(*connection_tasks, return_exceptions=True)
 
         # Build tool registry by listing tools from all servers in parallel
         await self._discover_tools(verbose)
@@ -175,44 +542,19 @@ class ClinicalDecisionSupportClient:
             } for tool in tools.tools])
         return all_tools
 
-    async def clinical_decision_support(
+    async def _get_patient_info_and_season(
         self,
-        clinical_scenario: str,
-        patient_id: Optional[str] = None,
-        patient_age: Optional[str] = None,
-        allergies: Optional[str] = None,
-        location_override: Optional[str] = None,
+        patient_id: Optional[str],
+        patient_age: Optional[str],
+        allergies: Optional[str],
         verbose: bool = True
-    ) -> Dict[str, Any]:
+    ) -> tuple[Optional[dict], Optional[dict], Optional[str], Optional[str]]:
         """
-        Orchestrate clinical decision support workflow.
-
-        Workflow:
-        0. Retrieve patient information and seasonal context
-        1. Determine location (auto-detect or override)
-        2. Search NICE guidelines and CKS for condition
-        3. Extract possible diagnoses and treatment options from guidelines
-        3b. Look up medications in BNF for each treatment option
-        4. Check drug-drug interactions with current medications
-        5. Generate comprehensive recommendations with patient context
-
-        Args:
-            clinical_scenario: Patient case description
-            patient_id: Optional patient ID to retrieve full patient information
-            patient_age: Optional patient age (overrides patient_id age)
-            allergies: Optional known allergies (overrides patient_id allergies)
-            location_override: Optional country code override (e.g., "GB")
-            verbose: Whether to print workflow steps
+        Retrieve patient information and seasonal context.
 
         Returns:
-            Dictionary with patient info, location, guidelines, diagnoses (with treatments and medications), and summary
+            Tuple of (patient_info, seasonal_context, patient_age, allergies)
         """
-        if verbose:
-            print("\n" + "="*70)
-            print("🏥 CLINICAL DECISION SUPPORT WORKFLOW")
-            print("="*70)
-
-        # Step 0: Retrieve patient information and seasonal context
         patient_info = None
         seasonal_context = None
 
@@ -261,393 +603,457 @@ class ClinicalDecisionSupportClient:
             except:
                 pass
 
-        # Step 1: Determine location
+        return patient_info, seasonal_context, patient_age, allergies
+
+    async def _determine_location(
+        self,
+        location_override: Optional[str],
+        verbose: bool = True
+    ) -> dict:
+        """
+        Determine user location (using direct geolocation or override).
+
+        Returns:
+            Location info dictionary with country_code, country, and ip
+        """
         if verbose:
             print("\n📍 Step 1: Determining location...")
 
         if location_override:
             location_info = {
                 'country_code': location_override.upper(),
-                'country': 'Detected from IP' if location_override else 'User specified'
+                'country': 'User specified',
+                'ip': 'override'
             }
             if verbose:
-                print(f"   Location: {location_override} (detected from IP address)")
+                print(f"   Location: {location_override} (user override)")
         else:
-            result = await self.call_tool("get_user_country", {})
-            location_info = json.loads(result.content[0].text)  # Parse the returned dict
+            # This should be passed in from the API layer after calling get_location_from_ip
+            # Fallback to direct geolocation if not provided
+            location_info = await self.get_location_from_ip()
             if verbose:
                 print(f"   Auto-detected: {location_info['country']} ({location_info['country_code']})")
 
-        # Step 2: Search NICE guidelines, CKS, and BNF treatment summaries (UK only)
+        return location_info
+
+    async def _search_uk_resources(
+        self,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> tuple[List[dict], List[dict], List[dict]]:
+        """
+        Search UK-specific resources (NICE guidelines, CKS, BNF).
+
+        Returns:
+            Tuple of (guidelines, cks_topics, bnf_summaries)
+        """
+        if verbose:
+            print(f"\n📚 Step 2: Searching NICE and BNF resources...")
+
         guidelines = []
         cks_topics = []
         bnf_summaries = []
-        pubmed_articles = []
 
-        if location_info['country_code'] in ['GB', 'UK']:
-            if verbose:
-                print(f"\n📚 Step 2: Searching NICE and BNF resources...")
+        # Extract key medical terms from scenario for better search
+        scenario_lower = clinical_scenario.lower()
+        search_terms = []
 
-            # Extract key medical terms from scenario for better search
-            # Look for common condition keywords
-            scenario_lower = clinical_scenario.lower()
-            search_terms = []
+        # Common conditions to extract
+        conditions = ['croup', 'bronchiolitis', 'asthma', 'pneumonia', 'sepsis',
+                     'fever', 'cough', 'uti', 'infection', 'pain']
+        for condition in conditions:
+            if condition in scenario_lower:
+                search_terms.append(condition)
 
-            # Common conditions to extract
-            conditions = ['croup', 'bronchiolitis', 'asthma', 'pneumonia', 'sepsis',
-                         'fever', 'cough', 'uti', 'infection', 'pain']
-            for condition in conditions:
-                if condition in scenario_lower:
-                    search_terms.append(condition)
+        # Add broader search terms for BNF treatment summaries AT THE BEGINNING
+        broader_terms = []
+        if any(term in scenario_lower for term in ['pneumonia', 'respiratory', 'cap ', ' cap,', 'cap)', 'cap-']):
+            if 'respiratory' not in search_terms:
+                broader_terms.append('respiratory')
+            if 'pneumonia' not in search_terms:
+                broader_terms.append('pneumonia')
+        if 'sepsis' in scenario_lower or 'septic' in scenario_lower:
+            if 'sepsis' not in search_terms:
+                broader_terms.append('sepsis')
 
-            # Add broader search terms for BNF treatment summaries AT THE BEGINNING
-            # Map specific conditions to broader categories for better BNF matching
-            broader_terms = []
-            if any(term in scenario_lower for term in ['pneumonia', 'respiratory', 'cap ', ' cap,', 'cap)', 'cap-']):
-                if 'respiratory' not in search_terms:
-                    broader_terms.append('respiratory')
-                if 'pneumonia' not in search_terms:
-                    broader_terms.append('pneumonia')
-            if 'sepsis' in scenario_lower or 'septic' in scenario_lower:
-                if 'sepsis' not in search_terms:
-                    broader_terms.append('sepsis')
+        # Prepend broader terms so they're searched first
+        search_terms = broader_terms + search_terms
 
-            # Prepend broader terms so they're searched first
-            search_terms = broader_terms + search_terms
+        # If no specific condition found, use full scenario
+        if not search_terms:
+            search_terms = [clinical_scenario]
 
-            # If no specific condition found, use full scenario
-            if not search_terms:
-                search_terms = [clinical_scenario]
-
-            # Search NICE Guidelines with key terms
-            for term in search_terms[:2]:  # Try up to 2 terms
+        # PARALLELIZED: Search NICE Guidelines, CKS, and BNF in parallel
+        async def search_nice_guideline(term):
+            try:
                 result = await self.call_tool("search_nice_guidelines", {
                     "keyword": term,
                     "max_results": 3
                 })
                 guidelines_data = json.loads(result.content[0].text)
-                guidelines.extend(guidelines_data.get('results', []))
+                return ('nice', guidelines_data.get('results', []))
+            except Exception as e:
+                return ('nice', [])
 
-            # Also search CKS (Clinical Knowledge Summaries)
-            # Add delay to avoid rate limiting across NICE subdomains
-            await asyncio.sleep(1.0)
-            for term in search_terms[:2]:  # Try up to 2 terms
-                try:
-                    result = await self.call_tool("search_cks_topics", {
-                        "topic": term
-                    })
-                    cks_data = json.loads(result.content[0].text)
-                    if cks_data.get('success') and cks_data.get('results'):
-                        cks_topics.extend(cks_data['results'])
-                except:
-                    pass  # CKS might be geo-restricted or topic not found
-
-            # Search BNF Treatment Summaries
-            # Add delay to avoid rate limiting across NICE subdomains
-            await asyncio.sleep(1.0)
-            for term in search_terms[:2]:  # Try up to 2 terms
-                try:
-                    result = await self.call_tool("search_bnf_treatment_summaries", {
-                        "condition": term,
-                        "max_results": 3
-                    })
-                    bnf_data = json.loads(result.content[0].text)
-                    if bnf_data.get('success') and bnf_data.get('results'):
-                        bnf_summaries.extend(bnf_data['results'])
-                    elif not bnf_data.get('success'):
-                        if verbose:
-                            print(f"   ⚠️  BNF search failed for '{term}': {bnf_data.get('error', 'Unknown error')}")
-                            # Log full response for debugging Cloud Run proxy issues
-                            print(f"      📋 Full BNF response: {json.dumps(bnf_data, indent=6)}")
-                except Exception as e:
-                    if verbose:
-                        print(f"   ⚠️  BNF search exception for '{term}': {str(e)}")
-                        print(f"      Exception type: {type(e).__name__}")
-                        import traceback
-                        print(f"      Traceback: {traceback.format_exc()}")
-                    pass  # BNF might not have treatment summaries for this condition
-
-            # Remove duplicates from guidelines
-            seen_refs = set()
-            unique_guidelines = []
-            for g in guidelines:
-                ref = g.get('reference', g.get('url'))
-                if ref not in seen_refs:
-                    seen_refs.add(ref)
-                    unique_guidelines.append(g)
-            guidelines = unique_guidelines[:5]  # Limit to 5 total
-
-            # Remove duplicates from BNF summaries
-            seen_bnf_urls = set()
-            unique_bnf = []
-            for b in bnf_summaries:
-                if b['url'] not in seen_bnf_urls:
-                    seen_bnf_urls.add(b['url'])
-                    unique_bnf.append(b)
-            bnf_summaries = unique_bnf[:3]  # Limit to 3 total
-
-            if verbose:
-                print(f"   Found {len(guidelines)} guideline(s), {len(cks_topics)} CKS topic(s), and {len(bnf_summaries)} BNF treatment summar{'y' if len(bnf_summaries) == 1 else 'ies'}")
-                for g in guidelines[:3]:
-                    print(f"      • Guideline {g['reference']}: {g['title'][:50]}...")
-                for topic in cks_topics[:3]:
-                    print(f"      • CKS: {topic['title'][:50]}...")
-                for bnf in bnf_summaries[:3]:
-                    print(f"      • BNF: {bnf['title'][:50]}...")
-
-            # Step 2b: If no/few resources found (guidelines + CKS), search PubMed for evidence
-            total_nice_resources = len(guidelines) + len(cks_topics)
-            if total_nice_resources < 2:
-                if verbose:
-                    print(f"\n📰 Step 2b: Limited guidelines found, searching PubMed for evidence...")
-
-                result = await self.call_tool("search_pubmed", {
-                    "query": clinical_scenario,
-                    "max_results": 5
+        async def search_cks_topic(term):
+            try:
+                result = await self.call_tool("search_cks_topics", {
+                    "topic": term
                 })
-                pubmed_data = json.loads(result.content[0].text)
-                pubmed_articles = pubmed_data.get('results', [])
+                cks_data = json.loads(result.content[0].text)
+                if cks_data.get('success') and cks_data.get('results'):
+                    return ('cks', cks_data['results'])
+                return ('cks', [])
+            except:
+                return ('cks', [])
 
-                if verbose:
-                    print(f"   Found {pubmed_data.get('count', 0)} PubMed articles")
-                    for article in pubmed_articles[:3]:
-                        print(f"      • PMID {article['pmid']}: {article['title'][:60]}...")
-        else:
-            # For non-UK locations, go straight to PubMed
-            if verbose:
-                print(f"\n📚 Step 2: NICE guidelines not available for {location_info['country_code']}")
-                print(f"\n📰 Step 2b: Searching PubMed for evidence...")
+        async def search_bnf_summary(term):
+            try:
+                result = await self.call_tool("search_bnf_treatment_summaries", {
+                    "condition": term,
+                    "max_results": 3
+                })
+                bnf_data = json.loads(result.content[0].text)
+                if bnf_data.get('success') and bnf_data.get('results'):
+                    return ('bnf', bnf_data['results'])
+                return ('bnf', [])
+            except:
+                return ('bnf', [])
 
-            result = await self.call_tool("search_pubmed", {
-                "query": clinical_scenario,
-                "max_results": 5
-            })
-            pubmed_data = json.loads(result.content[0].text)
-            pubmed_articles = pubmed_data.get('results', [])
+        # Build all search tasks
+        search_tasks = []
+        for term in search_terms[:2]:
+            search_tasks.append(search_nice_guideline(term))
+            search_tasks.append(search_cks_topic(term))
+            search_tasks.append(search_bnf_summary(term))
 
-            if verbose:
-                print(f"   Found {pubmed_data.get('count', 0)} PubMed articles")
-                for article in pubmed_articles[:3]:
-                    print(f"      • PMID {article['pmid']}: {article['title'][:60]}...")
+        # Execute all searches in parallel
+        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-        # Step 3: Use Claude to analyze clinical scenario and extract diagnoses/treatments from guidelines
+        # Process results
+        for result in search_results:
+            if isinstance(result, Exception):
+                continue
+            search_type, data = result
+            if search_type == 'nice':
+                guidelines.extend(data)
+            elif search_type == 'cks':
+                cks_topics.extend(data)
+            elif search_type == 'bnf':
+                bnf_summaries.extend(data)
+
+        # Remove duplicates from guidelines
+        seen_refs = set()
+        unique_guidelines = []
+        for g in guidelines:
+            ref = g.get('reference', g.get('url'))
+            if ref not in seen_refs:
+                seen_refs.add(ref)
+                unique_guidelines.append(g)
+        guidelines = unique_guidelines[:5]
+
+        # Remove duplicates from BNF summaries
+        seen_bnf_urls = set()
+        unique_bnf = []
+        for b in bnf_summaries:
+            if b['url'] not in seen_bnf_urls:
+                seen_bnf_urls.add(b['url'])
+                unique_bnf.append(b)
+        bnf_summaries = unique_bnf[:3]
+
         if verbose:
-            print(f"\n🔍 Step 3: Using AI agent to analyze clinical scenario and extract diagnoses/treatments...")
+            print(f"   Found {len(guidelines)} guideline(s), {len(cks_topics)} CKS topic(s), and {len(bnf_summaries)} BNF treatment summar{'y' if len(bnf_summaries) == 1 else 'ies'}")
+            for g in guidelines[:3]:
+                if 'reference' in g:
+                    print(f"      • Guideline {g['reference']}: {g['title'][:50]}...")
+                else:
+                    print(f"      • {g['title'][:60]}...")
+            for topic in cks_topics[:3]:
+                print(f"      • CKS: {topic['title'][:50]}...")
+            for bnf in bnf_summaries[:3]:
+                print(f"      • BNF: {bnf['title'][:50]}...")
 
-        diagnoses = []  # List of {diagnosis, treatments: [{treatment_name, medications: []}]}
+        return guidelines, cks_topics, bnf_summaries
 
-        # Collect full guideline content
+    async def _search_india_resources(
+        self,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> List[dict]:
+        """
+        Search India-specific resources (FOGSI guidelines).
+
+        Returns:
+            List of FOGSI guidelines
+        """
+        if verbose:
+            print(f"\n📚 Step 2: Searching FOGSI guidelines for India...")
+
+        # Extract key medical terms from scenario
+        scenario_lower = clinical_scenario.lower()
+        search_terms = []
+
+        # Common OB/GYN and general medical conditions
+        conditions = ['pregnancy', 'preeclampsia', 'gestational', 'labor', 'delivery', 'cesarean',
+                     'postpartum', 'antenatal', 'prenatal', 'diabetes', 'hypertension', 'fever',
+                     'infection', 'bleeding', 'pain']
+        for condition in conditions:
+            if condition in scenario_lower:
+                search_terms.append(condition)
+
+        # If no specific condition found, use full scenario
+        if not search_terms:
+            search_terms = [clinical_scenario]
+
+        # Search FOGSI guidelines
+        fogsi_guidelines = []
+        for term in search_terms[:2]:
+            try:
+                result = await self.call_tool("search_fogsi_guidelines", {
+                    "keyword": term,
+                    "max_results": 3
+                })
+                fogsi_data = json.loads(result.content[0].text)
+                if fogsi_data.get('success'):
+                    fogsi_guidelines.extend(fogsi_data.get('results', []))
+            except Exception as e:
+                if verbose:
+                    print(f"   ⚠️  FOGSI search failed for '{term}': {str(e)}")
+
+        if verbose:
+            print(f"   Found {len(fogsi_guidelines)} FOGSI guideline(s)")
+            if fogsi_guidelines:
+                for guideline in fogsi_guidelines[:3]:
+                    print(f"      • {guideline['title'][:60]}...")
+
+        return fogsi_guidelines
+
+    async def _search_international_resources(
+        self,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> List[dict]:
+        """
+        Search international resources (PubMed).
+
+        Returns:
+            List of PubMed articles
+        """
+        if verbose:
+            print(f"\n📰 Step 2b: Searching PubMed for evidence...")
+
+        result = await self.call_tool("search_pubmed", {
+            "query": clinical_scenario,
+            "max_results": 5
+        })
+        pubmed_data = json.loads(result.content[0].text)
+        pubmed_articles = pubmed_data.get('results', [])
+
+        if verbose:
+            print(f"   Found {pubmed_data.get('count', 0)} PubMed articles")
+            for article in pubmed_articles[:3]:
+                print(f"      • PMID {article['pmid']}: {article['title'][:60]}...")
+
+        return pubmed_articles
+
+    async def _search_guidelines_by_region(
+        self,
+        location_info: dict,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> tuple[List[dict], List[dict], List[dict], List[dict]]:
+        """
+        Route guideline search based on region using configuration-driven service.
+
+        Returns:
+            Tuple of (guidelines, cks_topics, bnf_summaries, pubmed_articles)
+        """
+        return await self.regional_search.search_by_region(
+            location_info['country_code'],
+            clinical_scenario,
+            verbose
+        )
+
+    async def _fetch_guideline_details(
+        self,
+        guidelines: List[dict],
+        cks_topics: List[dict],
+        bnf_summaries: List[dict],
+        verbose: bool = True
+    ) -> tuple[List[dict], List[dict], List[dict]]:
+        """
+        Fetch detailed content for guidelines, CKS topics, and BNF summaries in parallel.
+
+        Returns:
+            Tuple of (guideline_contents, cks_contents, bnf_summary_contents)
+        """
         guideline_contents = []
+        cks_contents = []
+        bnf_summary_contents = []
+
+        # Helper functions for fetching details
+        async def fetch_guideline_detail(guideline):
+            try:
+                result = await self.call_tool("get_guideline_details", {
+                    "identifier": guideline['reference']
+                })
+                guideline_detail = json.loads(result.content[0].text)
+
+                if guideline_detail.get('success'):
+                    return ('guideline', {
+                        'title': guideline['title'],
+                        'reference': guideline['reference'],
+                        'url': guideline['url'],
+                        'overview': guideline_detail.get('overview', ''),
+                        'sections': guideline_detail.get('sections', []),
+                        'published_date': guideline_detail.get('published_date', '')
+                    }, guideline['reference'], True, None)
+                else:
+                    error_msg = guideline_detail.get('error', 'Unknown error')
+                    return ('guideline', None, guideline['reference'], False, error_msg)
+            except Exception as e:
+                return ('guideline', None, guideline.get('reference', 'guideline'), False, str(e))
+
+        async def fetch_fogsi_guideline_detail(guideline):
+            """Fetch FOGSI guideline content using URL instead of reference"""
+            try:
+                result = await self.call_tool("get_fogsi_guideline_content", {
+                    "guideline_url": guideline['url']
+                })
+                guideline_detail = json.loads(result.content[0].text)
+
+                if guideline_detail.get('success'):
+                    return ('guideline', {
+                        'title': guideline['title'],
+                        'url': guideline['url'],
+                        'overview': guideline.get('description', ''),
+                        'sections': guideline_detail.get('sections', []),
+                        'content': guideline_detail.get('content', ''),
+                        'category': guideline.get('category', 'General')
+                    }, guideline['title'], True, None)
+                else:
+                    error_msg = guideline_detail.get('error', 'Unknown error')
+                    return ('guideline', None, guideline['title'], False, error_msg)
+            except Exception as e:
+                return ('guideline', None, guideline.get('title', 'guideline'), False, str(e))
+
+        async def fetch_cks_detail(topic):
+            try:
+                result = await self.call_tool("get_cks_topic", {
+                    "topic": topic['title'].lower().replace(' ', '-')
+                })
+                cks_content = json.loads(result.content[0].text)
+
+                if cks_content.get('success'):
+                    return ('cks', {
+                        'title': topic['title'],
+                        'url': topic['url'],
+                        'summary': topic.get('summary', ''),
+                        'management': cks_content.get('management', ''),
+                        'prescribing': cks_content.get('prescribing', ''),
+                        'full_text': cks_content.get('full_text', '')
+                    }, topic['title'], True, None)
+                else:
+                    return ('cks', None, topic['title'], False, 'Failed')
+            except Exception as e:
+                return ('cks', None, topic.get('title', 'topic'), False, str(e))
+
+        async def fetch_bnf_summary_detail(bnf):
+            try:
+                result = await self.call_tool("get_bnf_treatment_summary", {
+                    "url": bnf['url']
+                })
+                bnf_content = json.loads(result.content[0].text)
+
+                if bnf_content.get('success'):
+                    return ('bnf', {
+                        'title': bnf['title'],
+                        'url': bnf['url'],
+                        'summary': bnf_content.get('summary', ''),
+                        'sections': bnf_content.get('sections', [])
+                    }, bnf['title'], True, None)
+                else:
+                    return ('bnf', None, bnf['title'], False, 'Failed')
+            except Exception as e:
+                return ('bnf', None, bnf.get('title', 'BNF summary'), False, str(e))
+
+        # Build all detail fetch tasks
+        detail_tasks = []
+
         if guidelines:
             if verbose:
-                print(f"   Retrieving full guideline content for {len(guidelines[:3])} guideline(s)...")
+                print(f"   Retrieving full guideline content for {len(guidelines[:3])} guideline(s) (parallel)...")
+            for guideline in guidelines[:3]:
+                # Check if this is a FOGSI guideline (no 'reference' field) or NICE guideline
+                if 'reference' in guideline:
+                    detail_tasks.append(fetch_guideline_detail(guideline))
+                else:
+                    detail_tasks.append(fetch_fogsi_guideline_detail(guideline))
 
-            for guideline in guidelines[:3]:  # Get details for top 3 guidelines
-                try:
-                    result = await self.call_tool("get_guideline_details", {
-                        "identifier": guideline['reference']
-                    })
-                    guideline_detail = json.loads(result.content[0].text)
-
-                    if guideline_detail.get('success'):
-                        guideline_contents.append({
-                            'title': guideline['title'],
-                            'reference': guideline['reference'],
-                            'url': guideline['url'],
-                            'overview': guideline_detail.get('overview', ''),
-                            'sections': guideline_detail.get('sections', []),
-                            'published_date': guideline_detail.get('published_date', '')
-                        })
-                        if verbose:
-                            print(f"      ✓ Retrieved: {guideline['reference']}")
-                    else:
-                        if verbose:
-                            error_msg = guideline_detail.get('error', 'Unknown error')
-                            print(f"      ✗ Failed to retrieve {guideline['reference']}: {error_msg}")
-                except Exception as e:
-                    if verbose:
-                        print(f"      ✗ Failed to retrieve {guideline.get('reference', 'guideline')}: {str(e)}")
-
-        # Collect CKS content
-        cks_contents = []
         if cks_topics:
             if verbose:
-                print(f"   Retrieving full CKS content for {len(cks_topics[:3])} topic(s)...")
+                print(f"   Retrieving full CKS content for {len(cks_topics[:3])} topic(s) (parallel)...")
+            for topic in cks_topics[:3]:
+                detail_tasks.append(fetch_cks_detail(topic))
 
-            for topic in cks_topics[:3]:  # Get details for top 3 CKS topics
-                try:
-                    result = await self.call_tool("get_cks_topic", {
-                        "topic": topic['title'].lower().replace(' ', '-')
-                    })
-                    cks_content = json.loads(result.content[0].text)
-
-                    if cks_content.get('success'):
-                        cks_contents.append({
-                            'title': topic['title'],
-                            'url': topic['url'],
-                            'summary': topic.get('summary', ''),
-                            'management': cks_content.get('management', ''),
-                            'prescribing': cks_content.get('prescribing', ''),
-                            'full_text': cks_content.get('full_text', '')
-                        })
-                        if verbose:
-                            print(f"      ✓ Retrieved: {topic['title']}")
-                except Exception as e:
-                    if verbose:
-                        print(f"      ✗ Failed to retrieve {topic.get('title', 'topic')}")
-
-        # Collect BNF Treatment Summary content
-        bnf_summary_contents = []
         if bnf_summaries:
             if verbose:
-                print(f"   Retrieving full BNF treatment summar{'y' if len(bnf_summaries[:3]) == 1 else 'ies'} for {len(bnf_summaries[:3])} resource(s)...")
+                print(f"   Retrieving full BNF treatment summar{'y' if len(bnf_summaries[:3]) == 1 else 'ies'} for {len(bnf_summaries[:3])} resource(s) (parallel)...")
+            for bnf in bnf_summaries[:3]:
+                detail_tasks.append(fetch_bnf_summary_detail(bnf))
 
-            for bnf in bnf_summaries[:3]:  # Get details for top 3 BNF summaries
-                try:
-                    result = await self.call_tool("get_bnf_treatment_summary", {
-                        "url": bnf['url']
-                    })
-                    bnf_content = json.loads(result.content[0].text)
+        # Execute all detail fetches in parallel
+        if detail_tasks:
+            detail_results = await asyncio.gather(*detail_tasks, return_exceptions=True)
 
-                    if bnf_content.get('success'):
-                        bnf_summary_contents.append({
-                            'title': bnf['title'],
-                            'url': bnf['url'],
-                            'summary': bnf_content.get('summary', ''),
-                            'sections': bnf_content.get('sections', [])
-                        })
+            # Process results
+            for result in detail_results:
+                if isinstance(result, Exception):
+                    continue
+
+                content_type, content_data, identifier, success, error = result
+
+                if success and content_data:
+                    if content_type == 'guideline':
+                        guideline_contents.append(content_data)
                         if verbose:
-                            print(f"      ✓ Retrieved: {bnf['title']}")
-                    elif not bnf_content.get('success'):
+                            print(f"      ✓ Retrieved: {identifier}")
+                    elif content_type == 'cks':
+                        cks_contents.append(content_data)
                         if verbose:
-                            print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}: {bnf_content.get('error', 'Unknown error')}")
-                except Exception as e:
+                            print(f"      ✓ Retrieved: {identifier}")
+                    elif content_type == 'bnf':
+                        bnf_summary_contents.append(content_data)
+                        if verbose:
+                            print(f"      ✓ Retrieved: {identifier}")
+                else:
                     if verbose:
-                        print(f"      ✗ Failed to retrieve {bnf.get('title', 'BNF summary')}: {str(e)}")
+                        print(f"      ✗ Failed to retrieve {identifier}: {error}")
 
-        # Use Claude to analyze and extract structured information
-        total_guideline_resources = len(guideline_contents) + len(cks_contents)
-        if total_guideline_resources > 0 and self.anthropic:
-            if verbose:
-                print(f"\n   🤖 Analyzing {total_guideline_resources} guideline(s) with Claude...")
+        return guideline_contents, cks_contents, bnf_summary_contents
 
-            diagnoses = await self._analyze_guidelines_with_claude(
-                clinical_scenario=clinical_scenario,
-                patient_info=patient_info,
-                guideline_contents=guideline_contents,
-                cks_contents=cks_contents,
-                location_info=location_info,
-                verbose=verbose
-            )
-        elif not self.anthropic:
-            if verbose:
-                print(f"   ⚠️  Anthropic API key not configured - skipping AI analysis")
+    async def _generate_summary(
+        self,
+        patient_info: Optional[dict],
+        patient_age: Optional[str],
+        allergies: Optional[str],
+        seasonal_context: Optional[dict],
+        location_info: dict,
+        guidelines: List[dict],
+        cks_topics: List[dict],
+        bnf_summaries: List[dict],
+        pubmed_articles: List[dict],
+        diagnoses: List[dict],
+        bnf_prescribing_guidance: List[dict],
+        drug_interactions: List[dict],
+        verbose: bool = True
+    ) -> str:
+        """
+        Generate comprehensive summary report.
 
-        # Analyze BNF treatment summaries separately for prescribing guidance
-        bnf_prescribing_guidance = []
-        if bnf_summary_contents and self.anthropic:
-            if verbose:
-                print(f"\n   💊 Analyzing {len(bnf_summary_contents)} BNF treatment summar{'y' if len(bnf_summary_contents) == 1 else 'ies'} for prescribing guidance...")
-
-            bnf_prescribing_guidance = await self._analyze_bnf_summaries_with_claude(
-                clinical_scenario=clinical_scenario,
-                patient_info=patient_info,
-                diagnoses=diagnoses,
-                bnf_summary_contents=bnf_summary_contents,
-                verbose=verbose
-            )
-
-        # Step 3b: Get BNF details for all medications mentioned in treatments
-        if diagnoses:
-            if verbose:
-                print(f"\n💊 Step 3b: Retrieving BNF medication details for treatment options...")
-
-            for diagnosis in diagnoses:
-                for treatment in diagnosis['treatments']:
-                    medication_names = treatment.get('medication_names', [])
-
-                    if not medication_names:
-                        continue
-
-                    if verbose:
-                        print(f"   {diagnosis['diagnosis']} - {treatment['treatment_name']}:")
-
-                    for med_name in medication_names[:3]:  # Limit to 3 meds per treatment
-                        try:
-                            # Search for the drug in BNF
-                            search_result = await self.call_tool("search_bnf_drug", {
-                                "drug_name": med_name
-                            })
-                            search_data = json.loads(search_result.content[0].text)
-
-                            if search_data.get('success') and search_data.get('results'):
-                                drug_url = search_data['results'][0]['url']
-
-                                # Get detailed drug information
-                                info_result = await self.call_tool("get_bnf_drug_info", {
-                                    "drug_url": drug_url
-                                })
-                                drug_info = json.loads(info_result.content[0].text)
-
-                                if drug_info.get('success'):
-                                    treatment['medications_detailed'].append(drug_info)
-                                    if verbose:
-                                        print(f"      ✓ {drug_info['drug_name']}")
-                                elif not drug_info.get('success'):
-                                    if verbose:
-                                        print(f"      ✗ {med_name} - get_bnf_drug_info failed: {drug_info.get('error', 'Unknown error')}")
-                            elif not search_data.get('success'):
-                                if verbose:
-                                    print(f"      ✗ {med_name} - search_bnf_drug failed: {search_data.get('error', 'Unknown error')}")
-                            else:
-                                if verbose:
-                                    print(f"      ✗ {med_name} - No BNF results found")
-                        except Exception as e:
-                            if verbose:
-                                print(f"      ✗ {med_name} - BNF lookup exception: {str(e)}")
-        else:
-            if verbose:
-                print(f"   No diagnoses with treatment options identified")
-
-        # Step 4: Check for drug-drug interactions with current medications
-        drug_interactions = []
-        all_medications = []
-
-        # Collect all medications from all diagnoses/treatments
-        for diagnosis in diagnoses:
-            for treatment in diagnosis['treatments']:
-                all_medications.extend(treatment.get('medications_detailed', []))
-
-        if patient_info and patient_info.get('current_medications') and all_medications:
-            if verbose:
-                print(f"\n💊 Step 3b: Checking drug-drug interactions...")
-
-            for current_med in patient_info['current_medications']:
-                # Extract medication name (remove dosage)
-                med_name = current_med.split()[0].lower()
-
-                for new_drug in all_medications:
-                    try:
-                        interaction_result = await self.call_tool("get_bnf_drug_interactions", {
-                            "drug_name": new_drug['drug_name']
-                        })
-                        interaction_data = json.loads(interaction_result.content[0].text)
-
-                        if interaction_data.get('success') and interaction_data.get('interactions'):
-                            # Check if current medication appears in interactions
-                            for interaction in interaction_data['interactions']:
-                                if med_name in interaction.get('interacting_drug', '').lower():
-                                    drug_interactions.append({
-                                        'new_drug': new_drug['drug_name'],
-                                        'current_med': current_med,
-                                        'description': interaction.get('description', 'Interaction detected')
-                                    })
-                                    if verbose:
-                                        print(f"   ⚠️  Interaction: {new_drug['drug_name']} ↔ {current_med}")
-                    except:
-                        pass
-
-        # Step 5: Generate summary
+        Returns:
+            Summary string
+        """
         if verbose:
             print(f"\n📝 Step 5: Generating recommendations...")
 
@@ -681,9 +1087,16 @@ class ClinicalDecisionSupportClient:
         summary_parts.append(f"\n📍 Location: {location_info.get('country', 'Unknown')} ({location_info.get('country_code', 'XX')})")
 
         if guidelines:
-            summary_parts.append(f"\n📚 Found {len(guidelines)} relevant NICE guideline(s):")
+            # Check if these are NICE or FOGSI guidelines
+            guideline_type = "NICE" if guidelines and 'reference' in guidelines[0] else "FOGSI"
+            summary_parts.append(f"\n📚 Found {len(guidelines)} relevant {guideline_type} guideline(s):")
             for g in guidelines[:3]:
-                summary_parts.append(f"   • {g['reference']}: {g['title']}")
+                if 'reference' in g:
+                    # NICE guideline
+                    summary_parts.append(f"   • {g['reference']}: {g['title']}")
+                else:
+                    # FOGSI guideline
+                    summary_parts.append(f"   • {g['title']}")
                 summary_parts.append(f"     {g['url']}")
 
         if cks_topics:
@@ -829,6 +1242,228 @@ class ClinicalDecisionSupportClient:
         if patient_info and patient_info.get('weight_kg'):
             summary_parts.append(f"💊 DOSING: Calculate doses based on patient weight ({patient_info['weight_kg']}kg) and age ({patient_info.get('age')})")
 
+        return '\n'.join(summary_parts)
+
+    async def clinical_decision_support(
+        self,
+        clinical_scenario: str,
+        patient_id: Optional[str] = None,
+        patient_age: Optional[str] = None,
+        allergies: Optional[str] = None,
+        location_override: Optional[str] = None,
+        verbose: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Orchestrate clinical decision support workflow.
+
+        Workflow:
+        0. Retrieve patient information and seasonal context
+        1. Determine location (auto-detect or override)
+        2. Search guidelines by region (NICE/FOGSI/PubMed)
+        3. Extract possible diagnoses and treatment options from guidelines
+        3b. Look up medications in BNF for each treatment option
+        4. Check drug-drug interactions with current medications
+        5. Generate comprehensive recommendations with patient context
+
+        Args:
+            clinical_scenario: Patient case description
+            patient_id: Optional patient ID to retrieve full patient information
+            patient_age: Optional patient age (overrides patient_id age)
+            allergies: Optional known allergies (overrides patient_id allergies)
+            location_override: Optional country code override (e.g., "GB")
+            verbose: Whether to print workflow steps
+
+        Returns:
+            Dictionary with patient info, location, guidelines, diagnoses (with treatments and medications), and summary
+        """
+        if verbose:
+            print("\n" + "="*70)
+            print("🏥 CLINICAL DECISION SUPPORT WORKFLOW")
+            print("="*70)
+
+        # Step 0: Retrieve patient information and seasonal context
+        patient_info, seasonal_context, patient_age, allergies = await self._get_patient_info_and_season(
+            patient_id, patient_age, allergies, verbose
+        )
+
+        # Step 1: Determine location
+        location_info = await self._determine_location(location_override, verbose)
+
+        # Step 2: Search guidelines by region
+        guidelines, cks_topics, bnf_summaries, pubmed_articles = await self._search_guidelines_by_region(
+            location_info, clinical_scenario, verbose
+        )
+
+        # Step 3: Fetch guideline details and analyze with Claude
+        if verbose:
+            print(f"\n🔍 Step 3: Using AI agent to analyze clinical scenario and extract diagnoses/treatments...")
+
+        diagnoses = []
+        bnf_prescribing_guidance = []
+
+        # Fetch detailed content in parallel
+        guideline_contents, cks_contents, bnf_summary_contents = await self._fetch_guideline_details(
+            guidelines, cks_topics, bnf_summaries, verbose
+        )
+
+        # Use Claude to analyze guidelines
+        total_guideline_resources = len(guideline_contents) + len(cks_contents)
+        if total_guideline_resources > 0 and self.anthropic:
+            if verbose:
+                print(f"\n   🤖 Analyzing {total_guideline_resources} guideline(s) with Claude...")
+
+            diagnoses = await self._analyze_guidelines_with_claude(
+                clinical_scenario=clinical_scenario,
+                patient_info=patient_info,
+                guideline_contents=guideline_contents,
+                cks_contents=cks_contents,
+                location_info=location_info,
+                verbose=verbose
+            )
+        elif not self.anthropic:
+            if verbose:
+                print(f"   ⚠️  Anthropic API key not configured - skipping AI analysis")
+
+        # Analyze BNF treatment summaries separately for prescribing guidance
+        if bnf_summary_contents and self.anthropic:
+            if verbose:
+                print(f"\n   💊 Analyzing {len(bnf_summary_contents)} BNF treatment summar{'y' if len(bnf_summary_contents) == 1 else 'ies'} for prescribing guidance...")
+
+            bnf_prescribing_guidance = await self._analyze_bnf_summaries_with_claude(
+                clinical_scenario=clinical_scenario,
+                patient_info=patient_info,
+                diagnoses=diagnoses,
+                bnf_summary_contents=bnf_summary_contents,
+                verbose=verbose
+            )
+
+        # Step 3b: Get BNF details for all medications mentioned in treatments (parallelized)
+        if diagnoses:
+            if verbose:
+                print(f"\n💊 Step 3b: Retrieving BNF medication details for treatment options (parallel)...")
+
+            # Helper function to fetch drug info
+            async def fetch_drug_info(med_name, diagnosis_name, treatment_name):
+                try:
+                    # Search for the drug in BNF
+                    search_result = await self.call_tool("search_bnf_drug", {
+                        "drug_name": med_name
+                    })
+                    search_data = json.loads(search_result.content[0].text)
+
+                    if search_data.get('success') and search_data.get('results'):
+                        drug_url = search_data['results'][0]['url']
+
+                        # Get detailed drug information
+                        info_result = await self.call_tool("get_bnf_drug_info", {
+                            "drug_url": drug_url
+                        })
+                        drug_info = json.loads(info_result.content[0].text)
+
+                        if drug_info.get('success'):
+                            return {
+                                'diagnosis': diagnosis_name,
+                                'treatment': treatment_name,
+                                'drug_info': drug_info,
+                                'success': True
+                            }
+                    return {'success': False, 'med_name': med_name}
+                except:
+                    return {'success': False, 'med_name': med_name}
+
+            # Collect all medication lookup tasks
+            med_tasks = []
+            for diagnosis in diagnoses:
+                for treatment in diagnosis['treatments']:
+                    medication_names = treatment.get('medication_names', [])
+                    if medication_names:
+                        for med_name in medication_names[:3]:  # Limit to 3 meds per treatment
+                            med_tasks.append(fetch_drug_info(
+                                med_name,
+                                diagnosis['diagnosis'],
+                                treatment['treatment_name']
+                            ))
+
+            # Execute all medication lookups in parallel
+            if med_tasks:
+                med_results = await asyncio.gather(*med_tasks, return_exceptions=True)
+
+                # Process results and assign to correct treatments
+                for result in med_results:
+                    if isinstance(result, Exception):
+                        continue
+                    if result.get('success'):
+                        # Find the correct treatment and append drug info
+                        for diagnosis in diagnoses:
+                            if diagnosis['diagnosis'] == result['diagnosis']:
+                                for treatment in diagnosis['treatments']:
+                                    if treatment['treatment_name'] == result['treatment']:
+                                        treatment['medications_detailed'].append(result['drug_info'])
+                                        if verbose:
+                                            print(f"      ✓ {result['drug_info']['drug_name']}")
+                                        break
+                                break
+                    elif verbose and 'med_name' in result:
+                        print(f"      ✗ {result['med_name']} - BNF lookup failed")
+        else:
+            if verbose:
+                print(f"   No diagnoses with treatment options identified")
+
+        # Step 4: Check for drug-drug interactions with current medications
+        drug_interactions = []
+        all_medications = []
+
+        # Collect all medications from all diagnoses/treatments
+        for diagnosis in diagnoses:
+            for treatment in diagnosis['treatments']:
+                all_medications.extend(treatment.get('medications_detailed', []))
+
+        if patient_info and patient_info.get('current_medications') and all_medications:
+            if verbose:
+                print(f"\n💊 Step 4: Checking drug-drug interactions...")
+
+            for current_med in patient_info['current_medications']:
+                # Extract medication name (remove dosage)
+                med_name = current_med.split()[0].lower()
+
+                for new_drug in all_medications:
+                    try:
+                        interaction_result = await self.call_tool("get_bnf_drug_interactions", {
+                            "drug_name": new_drug['drug_name']
+                        })
+                        interaction_data = json.loads(interaction_result.content[0].text)
+
+                        if interaction_data.get('success') and interaction_data.get('interactions'):
+                            # Check if current medication appears in interactions
+                            for interaction in interaction_data['interactions']:
+                                if med_name in interaction.get('interacting_drug', '').lower():
+                                    drug_interactions.append({
+                                        'new_drug': new_drug['drug_name'],
+                                        'current_med': current_med,
+                                        'description': interaction.get('description', 'Interaction detected')
+                                    })
+                                    if verbose:
+                                        print(f"   ⚠️  Interaction: {new_drug['drug_name']} ↔ {current_med}")
+                    except:
+                        pass
+
+        # Step 5: Generate summary
+        summary = await self._generate_summary(
+            patient_info=patient_info,
+            patient_age=patient_age,
+            allergies=allergies,
+            seasonal_context=seasonal_context,
+            location_info=location_info,
+            guidelines=guidelines,
+            cks_topics=cks_topics,
+            bnf_summaries=bnf_summaries,
+            pubmed_articles=pubmed_articles,
+            diagnoses=diagnoses,
+            bnf_prescribing_guidance=bnf_prescribing_guidance,
+            drug_interactions=drug_interactions,
+            verbose=verbose
+        )
+
         result = {
             'patient_info': patient_info,
             'seasonal_context': seasonal_context,
@@ -839,11 +1474,11 @@ class ClinicalDecisionSupportClient:
             'guidelines_found': guidelines,
             'cks_topics': cks_topics,
             'bnf_summaries': bnf_summaries,
-            'bnf_prescribing_guidance': bnf_prescribing_guidance,  # Prescribing recommendations from BNF
+            'bnf_prescribing_guidance': bnf_prescribing_guidance,
             'pubmed_articles': pubmed_articles,
-            'diagnoses': diagnoses,  # Structured diagnoses from guidelines
+            'diagnoses': diagnoses,
             'drug_interactions': drug_interactions,
-            'summary': '\n'.join(summary_parts)
+            'summary': summary
         }
 
         if verbose:
@@ -906,9 +1541,12 @@ Patient Information:
         guidelines_context = ""
         guideline_num = 1
 
-        # Add NICE guidelines
+        # Add guidelines (NICE or FOGSI)
         for guideline in guideline_contents:
-            guidelines_context += f"""
+            # Check if this is a NICE guideline (has 'reference') or FOGSI guideline
+            if 'reference' in guideline:
+                # NICE guideline
+                guidelines_context += f"""
 --- Guideline {guideline_num}: {guideline['reference']} - {guideline['title']} ---
 URL: {guideline['url']}
 Published: {guideline['published_date']}
@@ -916,9 +1554,27 @@ Overview: {guideline['overview'][:1000]}
 
 Sections:
 """
-            for section in guideline['sections'][:5]:  # Limit to first 5 sections
-                # sections are strings (section titles), not dictionaries
-                guidelines_context += f"  • {section}\n"
+                for section in guideline['sections'][:5]:  # Limit to first 5 sections
+                    # sections are strings (section titles), not dictionaries
+                    guidelines_context += f"  • {section}\n"
+            else:
+                # FOGSI guideline
+                guidelines_context += f"""
+--- Guideline {guideline_num}: {guideline['title']} ---
+URL: {guideline['url']}
+Category: {guideline.get('category', 'General')}
+Overview: {guideline['overview'][:1000]}
+
+Content Summary:
+{guideline.get('content', '')[:2000]}
+
+Sections:
+"""
+                for section in guideline['sections'][:5]:  # Limit to first 5 sections
+                    if isinstance(section, dict):
+                        guidelines_context += f"  • {section.get('heading', 'Section')}\n"
+                    else:
+                        guidelines_context += f"  • {section}\n"
 
             guidelines_context += "\n"
             guideline_num += 1
@@ -986,7 +1642,7 @@ Instructions:
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -1211,7 +1867,7 @@ If BNF summary lacks dosing details, the medication will be enriched later from 
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -1422,7 +2078,7 @@ Return ONLY a JSON object with these fields:
 Focus on: {condition}. Be concise. If not found, use most common adult dose."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-3-5-haiku-20241022",
                     max_tokens=200,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -1510,7 +2166,7 @@ Return ONLY a JSON object with BRIEF (1-2 sentence) summaries:
 Be extremely concise. Focus on key dose adjustments and safety warnings only."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-3-5-haiku-20241022",
                     max_tokens=300,
                     messages=[{"role": "user", "content": prompt}]
                 )

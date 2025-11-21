@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-Clara API - FastAPI Backend
+Aneya API - FastAPI Backend
 Wraps the Clinical Decision Support Client for the React frontend
 """
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -15,8 +15,6 @@ import os
 import sys
 import json
 import httpx
-import tempfile
-from faster_whisper import WhisperModel
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,16 +25,15 @@ from clinical_decision_support_client import ClinicalDecisionSupportClient
 
 # Global client instance (reused across requests)
 client: Optional[ClinicalDecisionSupportClient] = None
-whisper_model: Optional[WhisperModel] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
-    global client, whisper_model
+    global client
 
     # Startup
-    print("🚀 Starting  aneya API...")
+    print("🚀 Starting Aneya API...")
 
     # Check for Anthropic API key - REQUIRED!
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
@@ -44,7 +41,7 @@ async def lifespan(app: FastAPI):
         error_msg = """
         ❌ FATAL ERROR: ANTHROPIC_API_KEY not found!
 
-         aneya requires an Anthropic API key to function.
+        Aneya requires an Anthropic API key to function.
 
         To fix this:
         1. Create a .env file in the project root if it doesn't exist
@@ -59,12 +56,10 @@ async def lifespan(app: FastAPI):
 
     print(f"✅ Anthropic API key loaded (ends with ...{anthropic_key[-4:]})")
 
+    # Initialize client but DON'T connect to servers yet
+    # Servers will be connected per-request based on user's region (detected from IP)
     client = ClinicalDecisionSupportClient(anthropic_api_key=anthropic_key)
-    await client.connect_to_servers(verbose=False)
-    print("✅ Connected to all MCP servers")
-
-    # Initialize Whisper model (lazy-loaded on first transcription request)
-    print("🎤 Whisper model will load on first transcription")
+    print("✅ Client initialized (servers will be loaded based on user region)")
 
     yield
 
@@ -75,7 +70,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Clara Clinical Decision Support API",
+    title="Aneya Clinical Decision Support API",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -88,7 +83,8 @@ app.add_middleware(
         "http://localhost:5173",  # Local development
         "http://localhost:3000",
         "https://*.vercel.app",  # Vercel deployments
-        "https://aneya-qy2d3acnx-daniel-gordons-projects-ec39af4d.vercel.app",  # Production
+        "https://aneya.vercel.app",  # Production frontend
+        "https://aneya-qy2d3acnx-daniel-gordons-projects-ec39af4d.vercel.app",  # Old production
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -149,13 +145,25 @@ async def root():
     """Root endpoint"""
     return {
         "status": "ok",
-        "message": "Clara Clinical Decision Support API is running"
+        "message": "Aneya Clinical Decision Support API is running"
     }
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
+    if client is None:
+        raise HTTPException(status_code=503, detail="Client not initialized")
+
+    return {
+        "status": "healthy",
+        "message": "All systems operational"
+    }
+
+
+@app.get("/api/health", response_model=HealthResponse)
+async def api_health_check():
+    """API health check endpoint (frontend compatibility)"""
     if client is None:
         raise HTTPException(status_code=503, detail="Client not initialized")
 
@@ -191,20 +199,30 @@ async def analyze_consultation(request: AnalysisRequest):
         print(f"Consultation: {request.consultation[:100]}...")
         print(f"{'='*70}\n")
 
-        # Determine location from user IP if provided, otherwise let backend auto-detect
+        # Step 1: Get geolocation FIRST (direct HTTP call, no MCP)
         location_to_use = request.location_override  # Manual override takes precedence
+        detected_country = None
 
         if not location_to_use and request.user_ip:
-            # Direct API call to ip-api.com (no MCP overhead)
-            geo_data = await get_country_from_ip(request.user_ip)
-            if geo_data:
+            # Use client's direct geolocation method (no MCP)
+            geo_data = await client.get_location_from_ip(request.user_ip)
+            if geo_data and geo_data.get('country_code') != 'XX':
                 location_to_use = geo_data.get('country_code')
-                print(f"🌍 Detected location from IP {request.user_ip}: {geo_data.get('country')} ({location_to_use})")
+                detected_country = geo_data.get('country')
+                print(f"🌍 Detected location from IP {request.user_ip}: {detected_country} ({location_to_use})")
             else:
                 print(f"⚠️  Geolocation failed. Backend will auto-detect.")
                 location_to_use = None
 
-        # Run the clinical decision support workflow with VERBOSE logging
+        # Step 2: Connect to region-specific MCP servers
+        # Only connect if not already connected (check if we have sessions)
+        if not client.sessions:
+            print(f"🔄 Connecting to region-specific MCP servers for {location_to_use or 'default'}...")
+            await client.connect_to_servers(country_code=location_to_use, verbose=True)
+        else:
+            print(f"✅ Using existing MCP server connections")
+
+        # Step 3: Run the clinical decision support workflow
         result = await client.clinical_decision_support(
             clinical_scenario=request.consultation,
             patient_id=request.patient_id,
@@ -259,67 +277,6 @@ async def get_examples():
             }
         ]
     }
-
-
-@app.post("/api/transcribe")
-async def transcribe_audio(audio: UploadFile = File(...)):
-    """
-    Transcribe audio file to text using Faster Whisper (medium model)
-
-    Args:
-        audio: Audio file (webm, mp3, wav, etc.)
-
-    Returns:
-        Transcribed text from the audio
-    """
-    global whisper_model
-
-    try:
-        # Lazy-load Whisper model on first request
-        if whisper_model is None:
-            print("🎤 Loading Whisper medium model (first time - may take 10-20 seconds)...")
-            whisper_model = WhisperModel(
-                "medium",
-                device="cpu",  # Use "cuda" if GPU available
-                compute_type="int8"  # Faster on CPU, use "float16" for GPU
-            )
-            print("✅ Whisper model loaded")
-
-        # Save uploaded file to temporary location
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
-            content = await audio.read()
-            temp_audio.write(content)
-            temp_audio_path = temp_audio.name
-
-        try:
-            # Transcribe audio
-            print(f"🎤 Transcribing audio ({len(content)} bytes)...")
-            segments, info = whisper_model.transcribe(
-                temp_audio_path,
-                beam_size=5,
-                language="en",  # Can be auto-detected by removing this
-                vad_filter=True,  # Voice activity detection to remove silence
-            )
-
-            # Combine all segments into full text
-            transcription = " ".join([segment.text for segment in segments])
-
-            print(f"✅ Transcription complete: {len(transcription)} characters")
-
-            return {
-                "success": True,
-                "text": transcription.strip(),
-                "language": info.language,
-                "duration": info.duration
-            }
-
-        finally:
-            # Clean up temporary file
-            os.unlink(temp_audio_path)
-
-    except Exception as e:
-        print(f"❌ Transcription error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 
 if __name__ == "__main__":

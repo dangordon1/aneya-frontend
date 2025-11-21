@@ -14,6 +14,12 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   const handleAnalyze = async (consultation: string, patientId: string) => {
+    // Validate consultation is not empty or whitespace-only
+    if (!consultation.trim()) {
+      alert('Please enter a clinical consultation before submitting.\n\nThe consultation text cannot be empty.');
+      return;
+    }
+
     setAnalysisResult(null); // Clear previous results
 
     try {
@@ -21,7 +27,7 @@ export default function App() {
       console.log('Checking backend availability...');
       console.log('API URL:', API_URL);
       try {
-        const healthResponse = await fetch(`${API_URL}/health`, {
+        const healthResponse = await fetch(`${API_URL}/api/health`, {
           method: 'GET',
           signal: AbortSignal.timeout(5000) // 5 second timeout
         });
@@ -39,7 +45,7 @@ export default function App() {
       } catch (healthError) {
         console.error('Backend unavailable:', healthError);
         alert(
-          'Unable to connect to the  aneya backend server.\n\n' +
+          'Unable to connect to the Aneya backend server.\n\n' +
           'Please ensure the API server is running.\n' +
           'Local development: python api.py\n' +
           'Production: Check Vercel deployment logs'

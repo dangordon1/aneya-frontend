@@ -205,9 +205,42 @@ heidi/
 
 ## Development
 
-### Running Tests
+### Testing
 
-Each server can be tested independently:
+The project includes a comprehensive test suite for the FastAPI backend API.
+
+#### Quick Start
+
+```bash
+# Run all unit tests (fast, ~5 seconds)
+uv run pytest tests/ -v -m unit
+
+# Run all tests including integration tests
+uv run pytest tests/ -v
+
+# Run with coverage report
+uv run pytest tests/ --cov=. --cov-report=term-missing
+```
+
+#### Test Coverage
+
+The test suite covers:
+- **GET /** - Root endpoint
+- **GET /health** - Health check endpoint
+- **POST /api/analyze** - Main consultation analysis (critical)
+- **GET /api/examples** - Example clinical scenarios
+
+Tests include:
+- Unit tests with mocked dependencies (fast)
+- Integration tests with real MCP servers (realistic)
+- Error handling for all failure scenarios (400, 500, 503)
+- Frontend response structure validation
+
+See **[tests/README.md](tests/README.md)** for complete testing documentation.
+
+#### Legacy Server Tests
+
+Individual MCP servers can also be tested:
 
 ```bash
 # Test NICE server
