@@ -19,9 +19,117 @@ from contextlib import AsyncExitStack
 from anthropic import Anthropic
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass
+from enum import Enum
 import os
 import httpx
+
+
+# ============================================================================
+# Configuration-Driven Regional Search System
+# ============================================================================
+
+class ResourceType(Enum):
+    """Types of medical resources that can be searched."""
+    GUIDELINE = "guideline"      # Clinical guidelines (NICE, FOGSI)
+    CKS = "cks"                  # Clinical Knowledge Summaries (UK)
+    TREATMENT = "treatment"       # Treatment summaries (BNF)
+    LITERATURE = "literature"     # Research articles (PubMed)
+
+
+@dataclass
+class SearchConfig:
+    """Configuration for a single search operation."""
+    resource_type: ResourceType
+    tool_name: str
+    tool_params: Dict[str, Any]
+    result_key: str              # Key in results dict (e.g., 'guidelines', 'cks_topics')
+    deduplicate: bool = False    # Whether to deduplicate results
+    required: bool = True         # Whether this search is required for the region
+
+
+@dataclass
+class RegionConfig:
+    """Complete configuration for a geographic region."""
+    region_name: str
+    country_codes: List[str]
+    required_servers: List[str]  # MCP servers needed for this region
+    searches: List[SearchConfig]
+    min_results_threshold: int = 2  # Minimum results before falling back to PubMed
+    pubmed_fallback: bool = True    # Whether to use PubMed as fallback
+
+
+# Regional search configurations
+REGION_CONFIGS = {
+    "UK": RegionConfig(
+        region_name="United Kingdom",
+        country_codes=["GB", "UK"],
+        required_servers=["patient_info", "nice", "bnf", "pubmed"],
+        searches=[
+            SearchConfig(
+                resource_type=ResourceType.GUIDELINE,
+                tool_name="search_nice_guidelines",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 10},
+                result_key="guidelines",
+                deduplicate=False,
+                required=True
+            ),
+            SearchConfig(
+                resource_type=ResourceType.CKS,
+                tool_name="search_cks_topics",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 5},
+                result_key="cks_topics",
+                deduplicate=False,
+                required=False
+            ),
+            SearchConfig(
+                resource_type=ResourceType.TREATMENT,
+                tool_name="search_bnf_treatment_summary",
+                tool_params={"condition": "{clinical_scenario}"},
+                result_key="bnf_summaries",
+                deduplicate=True,
+                required=False
+            )
+        ],
+        min_results_threshold=2,
+        pubmed_fallback=True
+    ),
+
+    "INDIA": RegionConfig(
+        region_name="India",
+        country_codes=["IN"],
+        required_servers=["patient_info", "fogsi", "pubmed"],
+        searches=[
+            SearchConfig(
+                resource_type=ResourceType.GUIDELINE,
+                tool_name="search_fogsi_guidelines",
+                tool_params={"keyword": "{clinical_scenario}", "max_results": 10},
+                result_key="guidelines",
+                deduplicate=False,
+                required=True
+            )
+        ],
+        min_results_threshold=1,
+        pubmed_fallback=True  # Always search PubMed for India
+    ),
+
+    "INTERNATIONAL": RegionConfig(
+        region_name="International",
+        country_codes=["default"],
+        required_servers=["patient_info", "pubmed"],
+        searches=[],  # No regional guidelines, PubMed only
+        min_results_threshold=0,
+        pubmed_fallback=True
+    )
+}
+
+
+# Map country codes to regions
+COUNTRY_TO_REGION = {}
+for region_key, config in REGION_CONFIGS.items():
+    for country_code in config.country_codes:
+        COUNTRY_TO_REGION[country_code] = region_key
 
 
 # Server paths
@@ -34,13 +142,189 @@ MCP_SERVERS = {
     "pubmed": str(SERVERS_DIR / "pubmed_server.py")
 }
 
-# Region-specific server mapping
-REGION_SERVERS = {
-    "GB": ["patient_info", "nice", "bnf", "pubmed"],  # UK
-    "UK": ["patient_info", "nice", "bnf", "pubmed"],  # UK (alternate code)
-    "IN": ["patient_info", "fogsi", "pubmed"],  # India
-    "default": ["patient_info", "pubmed"]  # International fallback
-}
+# Region-specific server mapping (generated from REGION_CONFIGS)
+REGION_SERVERS = {}
+for region_key, config in REGION_CONFIGS.items():
+    for country_code in config.country_codes:
+        REGION_SERVERS[country_code] = config.required_servers
+
+
+class RegionalSearchService:
+    """
+    Service for executing region-specific clinical guideline searches.
+
+    Uses configuration-driven approach to route searches based on geographic region,
+    handling parallel execution, deduplication, and PubMed fallback logic.
+    """
+
+    def __init__(self, client: 'ClinicalDecisionSupportClient'):
+        """
+        Initialize the regional search service.
+
+        Args:
+            client: The ClinicalDecisionSupportClient instance to use for tool calls
+        """
+        self.client = client
+
+    async def search_by_region(
+        self,
+        country_code: str,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> Tuple[List[dict], List[dict], List[dict], List[dict]]:
+        """
+        Execute searches for a specific region based on configuration.
+
+        Args:
+            country_code: ISO country code (e.g., 'GB', 'IN', 'US')
+            clinical_scenario: Clinical query or patient description
+            verbose: Whether to print progress messages
+
+        Returns:
+            Tuple of (guidelines, cks_topics, bnf_summaries, pubmed_articles)
+        """
+        # Get region configuration
+        region_key = COUNTRY_TO_REGION.get(country_code, "INTERNATIONAL")
+        config = REGION_CONFIGS[region_key]
+
+        if verbose:
+            print(f"\n{'='*80}")
+            print(f"🌍 Regional Search: {config.region_name} ({country_code})")
+            print(f"{'='*80}")
+
+        # Initialize result containers
+        results = {
+            'guidelines': [],
+            'cks_topics': [],
+            'bnf_summaries': [],
+            'pubmed_articles': []
+        }
+
+        # Execute configured searches in parallel
+        search_tasks = []
+        for search_config in config.searches:
+            # Substitute clinical_scenario into tool params
+            params = {
+                key: value.format(clinical_scenario=clinical_scenario) if isinstance(value, str) else value
+                for key, value in search_config.tool_params.items()
+            }
+
+            search_tasks.append(
+                self._execute_search(search_config, params, verbose)
+            )
+
+        # Wait for all searches to complete
+        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # Process results
+        for search_config, search_result in zip(config.searches, search_results):
+            if isinstance(search_result, Exception):
+                if verbose:
+                    print(f"⚠️  Search failed for {search_config.tool_name}: {search_result}")
+                continue
+
+            if search_result:
+                # Store in appropriate result key
+                result_list = results[search_config.result_key]
+
+                if search_config.deduplicate:
+                    # Deduplicate by title
+                    existing_titles = {item.get('title', '').lower() for item in result_list}
+                    new_items = [
+                        item for item in search_result
+                        if item.get('title', '').lower() not in existing_titles
+                    ]
+                    result_list.extend(new_items)
+                else:
+                    result_list.extend(search_result)
+
+        # Check if we need PubMed fallback
+        guideline_count = len(results['guidelines'])
+        needs_pubmed_fallback = (
+            config.pubmed_fallback and
+            guideline_count < config.min_results_threshold
+        )
+
+        if needs_pubmed_fallback:
+            if verbose:
+                print(f"\n📚 PubMed Fallback: Only {guideline_count} guideline(s) found")
+
+            pubmed_result = await self._search_pubmed(clinical_scenario, verbose)
+            if pubmed_result:
+                results['pubmed_articles'].extend(pubmed_result)
+
+        # For India, always search PubMed in addition to FOGSI
+        if region_key == "INDIA" and not needs_pubmed_fallback:
+            if verbose:
+                print(f"\n📚 Searching PubMed (India region)")
+
+            pubmed_result = await self._search_pubmed(clinical_scenario, verbose)
+            if pubmed_result:
+                results['pubmed_articles'].extend(pubmed_result)
+
+        return (
+            results['guidelines'],
+            results['cks_topics'],
+            results['bnf_summaries'],
+            results['pubmed_articles']
+        )
+
+    async def _execute_search(
+        self,
+        search_config: SearchConfig,
+        params: Dict[str, Any],
+        verbose: bool
+    ) -> List[dict]:
+        """Execute a single configured search operation."""
+        try:
+            if verbose:
+                print(f"  🔍 {search_config.resource_type.value}: {search_config.tool_name}")
+
+            result = await self.client.call_tool(search_config.tool_name, params)
+
+            if isinstance(result, dict):
+                # Handle different response formats
+                if 'summaries' in result:
+                    return result['summaries']
+                elif 'guidelines' in result:
+                    return result['guidelines']
+                elif 'topics' in result:
+                    return result['topics']
+                elif 'success' in result and result['success']:
+                    # Generic success response
+                    return []
+
+            return []
+
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠️  Error: {str(e)}")
+            return []
+
+    async def _search_pubmed(
+        self,
+        clinical_scenario: str,
+        verbose: bool
+    ) -> List[dict]:
+        """Search PubMed for additional evidence."""
+        try:
+            result = await self.client.call_tool(
+                "search_pubmed",
+                {"query": clinical_scenario, "max_results": 5}
+            )
+
+            if isinstance(result, dict) and result.get('success'):
+                articles = result.get('articles', [])
+                if verbose and articles:
+                    print(f"    ✓ Found {len(articles)} PubMed article(s)")
+                return articles
+
+            return []
+
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠️  PubMed search error: {str(e)}")
+            return []
 
 
 class ClinicalDecisionSupportClient:
@@ -65,6 +349,9 @@ class ClinicalDecisionSupportClient:
 
         api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.anthropic = Anthropic(api_key=api_key) if api_key else None
+
+        # Initialize regional search service
+        self.regional_search = RegionalSearchService(self)
 
     async def get_location_from_ip(self, user_ip: Optional[str] = None) -> dict:
         """
@@ -576,55 +863,16 @@ class ClinicalDecisionSupportClient:
         verbose: bool = True
     ) -> tuple[List[dict], List[dict], List[dict], List[dict]]:
         """
-        Route guideline search based on region.
+        Route guideline search based on region using configuration-driven service.
 
         Returns:
             Tuple of (guidelines, cks_topics, bnf_summaries, pubmed_articles)
         """
-        guidelines = []
-        cks_topics = []
-        bnf_summaries = []
-        pubmed_articles = []
-
-        if location_info['country_code'] in ['GB', 'UK']:
-            # Search UK resources
-            guidelines, cks_topics, bnf_summaries = await self._search_uk_resources(
-                clinical_scenario,
-                verbose
-            )
-
-            # Step 2b: If no/few resources found, search PubMed for evidence
-            total_nice_resources = len(guidelines) + len(cks_topics)
-            if total_nice_resources < 2:
-                if verbose:
-                    print(f"\n📰 Step 2b: Limited guidelines found, searching PubMed for evidence...")
-                pubmed_articles = await self._search_international_resources(
-                    clinical_scenario,
-                    verbose
-                )
-
-        elif location_info['country_code'] == 'IN':
-            # Search India resources
-            guidelines = await self._search_india_resources(clinical_scenario, verbose)
-
-            # Also search PubMed
-            if verbose:
-                print(f"\n📰 Step 2b: Searching PubMed for additional evidence...")
-            pubmed_articles = await self._search_international_resources(
-                clinical_scenario,
-                verbose
-            )
-
-        else:
-            # For other locations, go straight to PubMed
-            if verbose:
-                print(f"\n📚 Step 2: Regional guidelines not available for {location_info['country_code']}")
-            pubmed_articles = await self._search_international_resources(
-                clinical_scenario,
-                verbose
-            )
-
-        return guidelines, cks_topics, bnf_summaries, pubmed_articles
+        return await self.regional_search.search_by_region(
+            location_info['country_code'],
+            clinical_scenario,
+            verbose
+        )
 
     async def _fetch_guideline_details(
         self,
