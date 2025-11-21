@@ -21,16 +21,25 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typing import Dict, List, Any, Optional
 import os
+import httpx
 
 
 # Server paths
 SERVERS_DIR = Path(__file__).parent
 MCP_SERVERS = {
-    "geolocation": str(SERVERS_DIR / "geolocation_server.py"),
     "patient_info": str(SERVERS_DIR / "patient_info_server.py"),
     "nice": str(SERVERS_DIR / "nice_guidelines_server.py"),
     "bnf": str(SERVERS_DIR / "bnf_server.py"),
+    "fogsi": str(SERVERS_DIR / "fogsi_server.py"),  # FOGSI Guidelines (India)
     "pubmed": str(SERVERS_DIR / "pubmed_server.py")
+}
+
+# Region-specific server mapping
+REGION_SERVERS = {
+    "GB": ["patient_info", "nice", "bnf", "pubmed"],  # UK
+    "UK": ["patient_info", "nice", "bnf", "pubmed"],  # UK (alternate code)
+    "IN": ["patient_info", "fogsi", "pubmed"],  # India
+    "default": ["patient_info", "pubmed"]  # International fallback
 }
 
 
@@ -57,31 +66,102 @@ class ClinicalDecisionSupportClient:
         api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.anthropic = Anthropic(api_key=api_key) if api_key else None
 
-    async def connect_to_servers(self, server_paths: Optional[Dict[str, str]] = None, verbose: bool = True):
+    async def get_location_from_ip(self, user_ip: Optional[str] = None) -> dict:
         """
-        Connect to multiple MCP servers in parallel.
+        Get location information from IP address using direct HTTP call (no MCP).
+
+        This is called BEFORE connecting to MCP servers to determine which
+        region-specific servers to load.
 
         Args:
+            user_ip: Optional IP address. If None, will auto-detect.
+
+        Returns:
+            Dictionary with:
+            - country: Country name
+            - country_code: ISO country code (e.g., 'GB', 'IN', 'US')
+            - ip: IP address used for lookup
+        """
+        try:
+            # Use ip-api.com for geolocation (free, no API key required)
+            if user_ip:
+                url = f"http://ip-api.com/json/{user_ip}?fields=status,message,country,countryCode"
+            else:
+                # Auto-detect by not specifying IP
+                url = "http://ip-api.com/json/?fields=status,message,country,countryCode"
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get('status') == 'fail':
+                    print(f"⚠️  Geolocation failed: {data.get('message', 'Unknown error')}")
+                    return {
+                        'country': 'Unknown',
+                        'country_code': 'XX',
+                        'ip': user_ip or 'unknown'
+                    }
+
+                return {
+                    'country': data.get('country', 'Unknown'),
+                    'country_code': data.get('countryCode', 'XX'),
+                    'ip': user_ip or 'auto-detected'
+                }
+        except Exception as e:
+            print(f"⚠️  Geolocation error: {str(e)}")
+            return {
+                'country': 'Unknown',
+                'country_code': 'XX',
+                'ip': user_ip or 'unknown'
+            }
+
+    async def connect_to_servers(self, country_code: Optional[str] = None, server_paths: Optional[Dict[str, str]] = None, verbose: bool = True):
+        """
+        Connect to region-specific MCP servers in parallel.
+
+        Args:
+            country_code: ISO country code (e.g., 'GB', 'IN', 'US'). If provided,
+                         only connects to servers relevant for that region.
             server_paths: Optional dict of server_name -> server_path. Uses defaults if None.
             verbose: Whether to print connection status
         """
-        servers = server_paths or MCP_SERVERS
+        # Filter servers based on country code
+        if country_code and not server_paths:
+            # Get region-specific server list
+            server_names = REGION_SERVERS.get(country_code.upper(), REGION_SERVERS["default"])
+
+            if verbose:
+                print(f"🌍 Region: {country_code.upper()} - Loading region-specific servers")
+
+            # Build filtered server dict
+            servers = {
+                name: MCP_SERVERS[name]
+                for name in server_names
+                if name in MCP_SERVERS and Path(MCP_SERVERS[name]).exists()
+            }
+        else:
+            servers = server_paths or MCP_SERVERS
 
         if verbose:
-            print(f"🔄 Connecting to {len(servers)} servers in parallel...")
+            print(f"🔄 Connecting to {len(servers)} server(s) in parallel...")
+            if country_code:
+                print(f"   Region-specific servers for {country_code}: {', '.join(servers.keys())}")
 
         # Validate all servers exist
         for server_name, server_path in servers.items():
             if not Path(server_path).exists():
-                raise FileNotFoundError(f"Server not found: {server_path}")
+                print(f"   ⚠️  Skipping {server_name} - file not found: {server_path}")
+                continue
 
         # Connect to all servers in parallel using asyncio.gather
         connection_tasks = [
             self._connect_single_server(server_name, server_path, verbose)
             for server_name, server_path in servers.items()
+            if Path(server_path).exists()
         ]
 
-        await asyncio.gather(*connection_tasks)
+        await asyncio.gather(*connection_tasks, return_exceptions=True)
 
         # Build tool registry by listing tools from all servers in parallel
         await self._discover_tools(verbose)
@@ -261,20 +341,22 @@ class ClinicalDecisionSupportClient:
             except:
                 pass
 
-        # Step 1: Determine location
+        # Step 1: Determine location (using direct geolocation, not MCP)
         if verbose:
             print("\n📍 Step 1: Determining location...")
 
         if location_override:
             location_info = {
                 'country_code': location_override.upper(),
-                'country': 'Detected from IP' if location_override else 'User specified'
+                'country': 'User specified',
+                'ip': 'override'
             }
             if verbose:
-                print(f"   Location: {location_override} (detected from IP address)")
+                print(f"   Location: {location_override} (user override)")
         else:
-            result = await self.call_tool("get_user_country", {})
-            location_info = json.loads(result.content[0].text)  # Parse the returned dict
+            # This should be passed in from the API layer after calling get_location_from_ip
+            # Fallback to direct geolocation if not provided
+            location_info = await self.get_location_from_ip()
             if verbose:
                 print(f"   Auto-detected: {location_info['country']} ({location_info['country_code']})")
 
@@ -401,7 +483,11 @@ class ClinicalDecisionSupportClient:
             if verbose:
                 print(f"   Found {len(guidelines)} guideline(s), {len(cks_topics)} CKS topic(s), and {len(bnf_summaries)} BNF treatment summar{'y' if len(bnf_summaries) == 1 else 'ies'}")
                 for g in guidelines[:3]:
-                    print(f"      • Guideline {g['reference']}: {g['title'][:50]}...")
+                    # Check if NICE (has reference) or FOGSI (no reference)
+                    if 'reference' in g:
+                        print(f"      • Guideline {g['reference']}: {g['title'][:50]}...")
+                    else:
+                        print(f"      • {g['title'][:60]}...")
                 for topic in cks_topics[:3]:
                     print(f"      • CKS: {topic['title'][:50]}...")
                 for bnf in bnf_summaries[:3]:
@@ -424,10 +510,68 @@ class ClinicalDecisionSupportClient:
                     print(f"   Found {pubmed_data.get('count', 0)} PubMed articles")
                     for article in pubmed_articles[:3]:
                         print(f"      • PMID {article['pmid']}: {article['title'][:60]}...")
-        else:
-            # For non-UK locations, go straight to PubMed
+
+        elif location_info['country_code'] == 'IN':
+            # For India, search FOGSI (Federation of Obstetric & Gynaecological Societies of India) guidelines
             if verbose:
-                print(f"\n📚 Step 2: NICE guidelines not available for {location_info['country_code']}")
+                print(f"\n📚 Step 2: Searching FOGSI guidelines for India...")
+
+            # Extract key medical terms from scenario
+            scenario_lower = clinical_scenario.lower()
+            search_terms = []
+
+            # Common OB/GYN and general medical conditions
+            conditions = ['pregnancy', 'preeclampsia', 'gestational', 'labor', 'delivery', 'cesarean',
+                         'postpartum', 'antenatal', 'prenatal', 'diabetes', 'hypertension', 'fever',
+                         'infection', 'bleeding', 'pain']
+            for condition in conditions:
+                if condition in scenario_lower:
+                    search_terms.append(condition)
+
+            # If no specific condition found, use full scenario
+            if not search_terms:
+                search_terms = [clinical_scenario]
+
+            # Search FOGSI guidelines
+            fogsi_guidelines = []
+            for term in search_terms[:2]:  # Limit to first 2 terms
+                try:
+                    result = await self.call_tool("search_fogsi_guidelines", {
+                        "keyword": term,
+                        "max_results": 3
+                    })
+                    fogsi_data = json.loads(result.content[0].text)
+                    if fogsi_data.get('success'):
+                        fogsi_guidelines.extend(fogsi_data.get('results', []))
+                except Exception as e:
+                    if verbose:
+                        print(f"   ⚠️  FOGSI search failed for '{term}': {str(e)}")
+
+            # Store in guidelines list for compatibility with rest of workflow
+            guidelines = fogsi_guidelines
+
+            # Also search PubMed for additional evidence
+            if verbose:
+                print(f"   Found {len(fogsi_guidelines)} FOGSI guideline(s)")
+                print(f"\n📰 Step 2b: Searching PubMed for additional evidence...")
+
+            result = await self.call_tool("search_pubmed", {
+                "query": clinical_scenario,
+                "max_results": 5
+            })
+            pubmed_data = json.loads(result.content[0].text)
+            pubmed_articles = pubmed_data.get('results', [])
+
+            if verbose:
+                print(f"   Found {pubmed_data.get('count', 0)} PubMed articles")
+                if fogsi_guidelines:
+                    for guideline in fogsi_guidelines[:3]:
+                        print(f"      • {guideline['title'][:60]}...")
+
+        else:
+            # For other locations, go straight to PubMed
+            if verbose:
+                print(f"\n📚 Step 2: Regional guidelines not available for {location_info['country_code']}")
                 print(f"\n📰 Step 2b: Searching PubMed for evidence...")
 
             result = await self.call_tool("search_pubmed", {
@@ -476,6 +620,29 @@ class ClinicalDecisionSupportClient:
             except Exception as e:
                 return ('guideline', None, guideline.get('reference', 'guideline'), False, str(e))
 
+        async def fetch_fogsi_guideline_detail(guideline):
+            """Fetch FOGSI guideline content using URL instead of reference"""
+            try:
+                result = await self.call_tool("get_fogsi_guideline_content", {
+                    "guideline_url": guideline['url']
+                })
+                guideline_detail = json.loads(result.content[0].text)
+
+                if guideline_detail.get('success'):
+                    return ('guideline', {
+                        'title': guideline['title'],
+                        'url': guideline['url'],
+                        'overview': guideline.get('description', ''),
+                        'sections': guideline_detail.get('sections', []),
+                        'content': guideline_detail.get('content', ''),
+                        'category': guideline.get('category', 'General')
+                    }, guideline['title'], True, None)
+                else:
+                    error_msg = guideline_detail.get('error', 'Unknown error')
+                    return ('guideline', None, guideline['title'], False, error_msg)
+            except Exception as e:
+                return ('guideline', None, guideline.get('title', 'guideline'), False, str(e))
+
         async def fetch_cks_detail(topic):
             try:
                 result = await self.call_tool("get_cks_topic", {
@@ -523,7 +690,13 @@ class ClinicalDecisionSupportClient:
             if verbose:
                 print(f"   Retrieving full guideline content for {len(guidelines[:3])} guideline(s) (parallel)...")
             for guideline in guidelines[:3]:
-                detail_tasks.append(fetch_guideline_detail(guideline))
+                # Check if this is a FOGSI guideline (no 'reference' field) or NICE guideline
+                if 'reference' in guideline:
+                    # NICE guideline - use NICE fetcher
+                    detail_tasks.append(fetch_guideline_detail(guideline))
+                else:
+                    # FOGSI guideline - use FOGSI fetcher
+                    detail_tasks.append(fetch_fogsi_guideline_detail(guideline))
 
         if cks_topics:
             if verbose:
@@ -741,9 +914,16 @@ class ClinicalDecisionSupportClient:
         summary_parts.append(f"\n📍 Location: {location_info.get('country', 'Unknown')} ({location_info.get('country_code', 'XX')})")
 
         if guidelines:
-            summary_parts.append(f"\n📚 Found {len(guidelines)} relevant NICE guideline(s):")
+            # Check if these are NICE or FOGSI guidelines
+            guideline_type = "NICE" if guidelines and 'reference' in guidelines[0] else "FOGSI"
+            summary_parts.append(f"\n📚 Found {len(guidelines)} relevant {guideline_type} guideline(s):")
             for g in guidelines[:3]:
-                summary_parts.append(f"   • {g['reference']}: {g['title']}")
+                if 'reference' in g:
+                    # NICE guideline
+                    summary_parts.append(f"   • {g['reference']}: {g['title']}")
+                else:
+                    # FOGSI guideline
+                    summary_parts.append(f"   • {g['title']}")
                 summary_parts.append(f"     {g['url']}")
 
         if cks_topics:
@@ -966,9 +1146,12 @@ Patient Information:
         guidelines_context = ""
         guideline_num = 1
 
-        # Add NICE guidelines
+        # Add guidelines (NICE or FOGSI)
         for guideline in guideline_contents:
-            guidelines_context += f"""
+            # Check if this is a NICE guideline (has 'reference') or FOGSI guideline
+            if 'reference' in guideline:
+                # NICE guideline
+                guidelines_context += f"""
 --- Guideline {guideline_num}: {guideline['reference']} - {guideline['title']} ---
 URL: {guideline['url']}
 Published: {guideline['published_date']}
@@ -976,9 +1159,27 @@ Overview: {guideline['overview'][:1000]}
 
 Sections:
 """
-            for section in guideline['sections'][:5]:  # Limit to first 5 sections
-                # sections are strings (section titles), not dictionaries
-                guidelines_context += f"  • {section}\n"
+                for section in guideline['sections'][:5]:  # Limit to first 5 sections
+                    # sections are strings (section titles), not dictionaries
+                    guidelines_context += f"  • {section}\n"
+            else:
+                # FOGSI guideline
+                guidelines_context += f"""
+--- Guideline {guideline_num}: {guideline['title']} ---
+URL: {guideline['url']}
+Category: {guideline.get('category', 'General')}
+Overview: {guideline['overview'][:1000]}
+
+Content Summary:
+{guideline.get('content', '')[:2000]}
+
+Sections:
+"""
+                for section in guideline['sections'][:5]:  # Limit to first 5 sections
+                    if isinstance(section, dict):
+                        guidelines_context += f"  • {section.get('heading', 'Section')}\n"
+                    else:
+                        guidelines_context += f"  • {section}\n"
 
             guidelines_context += "\n"
             guideline_num += 1
