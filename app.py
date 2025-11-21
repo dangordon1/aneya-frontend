@@ -28,7 +28,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for Clara Health App design system
+# Custom CSS for  aneya Health App design system
 st.markdown("""
 <style>
     /* Import fonts */
@@ -480,34 +480,22 @@ async def analyze_consultation(consultation_text: str, patient_id: str):
         with step1:
             display_progress_step("Initializing Clinical Decision Support System", "complete", "Connected to all services")
 
-        await asyncio.sleep(3.0)  # Pause before showing location step
-
         # Step 1: Detect location
         with step2:
             display_progress_step("Detecting Location from IP Address", "running")
 
-        await asyncio.sleep(3.0)  # Delay for location detection
-
         with step2:
             display_progress_step("Detecting Location from IP Address", "complete", "Location: United Kingdom (GB)")
-
-        await asyncio.sleep(3.0)  # Pause before showing search step
 
         # Step 2: Search for guidelines - show incremental progress
         with step3:
             display_progress_step("Searching for Clinical Guidelines", "running")
 
-        await asyncio.sleep(3.0)  # Pause before showing first sub-step
-
         with step3a:
             display_progress_step("  → Searching NICE guidelines", "running")
 
-        await asyncio.sleep(3.0)  # Pause before showing second sub-step
-
         with step3b:
             display_progress_step("  → Searching CKS topics", "running")
-
-        await asyncio.sleep(3.0)  # Pause before showing third sub-step
 
         with step3c:
             display_progress_step("  → Searching BNF treatment summaries", "running")
@@ -523,29 +511,19 @@ async def analyze_consultation(consultation_text: str, patient_id: str):
         guideline_count = len(result.get('guidelines_found', [])) + len(result.get('cks_topics', [])) + len(result.get('bnf_summaries', []))
 
         # Update all steps to complete status
-        await asyncio.sleep(3.0)  # Pause before showing results
-
         with step3:
             display_progress_step("Searching for Clinical Guidelines", "complete", f"Found {guideline_count} relevant resources")
-
-        await asyncio.sleep(3.0)
 
         with step3a:
             display_progress_step("  → Searching NICE guidelines", "complete", f"{len(result.get('guidelines_found', []))} found")
 
-        await asyncio.sleep(3.0)
-
         with step3b:
             display_progress_step("  → Searching CKS topics", "complete", f"{len(result.get('cks_topics', []))} found")
-
-        await asyncio.sleep(3.0)
 
         with step3c:
             display_progress_step("  → Searching BNF treatment summaries", "complete", f"{len(result.get('bnf_summaries', []))} found")
 
         # Step 3: Analyze guidelines
-        await asyncio.sleep(3.0)  # Pause before showing analysis step
-
         with step4:
             diagnosis_count = len(result.get('diagnoses', []))
             if diagnosis_count > 0:
@@ -554,8 +532,6 @@ async def analyze_consultation(consultation_text: str, patient_id: str):
                 display_progress_step("Analyzing Clinical Guidelines", "complete", "Guidelines retrieved")
 
         # Step 4: BNF lookup
-        await asyncio.sleep(3.0)  # Pause before showing BNF step
-
         with step5:
             bnf_count = len(result.get('bnf_prescribing_guidance', []))
             if bnf_count > 0:
