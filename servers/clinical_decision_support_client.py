@@ -85,7 +85,7 @@ REGION_CONFIGS = {
             ),
             SearchConfig(
                 resource_type=ResourceType.TREATMENT,
-                tool_name="search_bnf_treatment_summary",
+                tool_name="search_bnf_treatment_summaries",
                 tool_params={"condition": "{clinical_scenario}"},
                 result_key="bnf_summaries",
                 deduplicate=True,
@@ -604,6 +604,62 @@ class ClinicalDecisionSupportClient:
                 pass
 
         return patient_info, seasonal_context, patient_age, allergies
+
+    async def _extract_search_terms(
+        self,
+        clinical_scenario: str,
+        verbose: bool = True
+    ) -> str:
+        """
+        Extract key medical conditions from consultation text for focused guideline searching.
+
+        Args:
+            clinical_scenario: Raw consultation text
+            verbose: Whether to print progress
+
+        Returns:
+            Simplified search terms (e.g., "throat infection" instead of "prescribe amoxicillin for throat infection")
+        """
+        if verbose:
+            print("\n🔍 Extracting key medical conditions for guideline search...")
+
+        try:
+            prompt = f"""Extract the PRIMARY medical condition or symptom from this clinical consultation for searching medical guidelines.
+
+Consultation: "{clinical_scenario}"
+
+Return ONLY 1-3 words describing the core medical condition (e.g., "throat infection", "pneumonia", "asthma exacerbation").
+Do NOT include:
+- Medication names
+- Dosages
+- Instructions like "prescribe" or "treat"
+- Patient details
+
+Examples:
+- "prescribe amoxicillin 500mg for bacterial throat infection" → "throat infection"
+- "3-year-old with croup and stridor" → "croup"
+- "patient with pneumonia needs antibiotics" → "pneumonia"
+
+Medical condition:"""
+
+            message = self.anthropic.messages.create(
+                model="claude-haiku-4-5",  # Use latest Haiku 4.5 model (Oct 2025)
+                max_tokens=50,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            search_terms = message.content[0].text.strip().strip('"').strip("'")
+
+            if verbose:
+                print(f"   📝 Search terms: \"{search_terms}\" (from: \"{clinical_scenario[:60]}...\")")
+
+            return search_terms
+
+        except Exception as e:
+            if verbose:
+                print(f"   ⚠️  Failed to extract search terms: {e}")
+                print(f"   Using original text...")
+            return clinical_scenario
 
     async def _determine_location(
         self,
@@ -1254,6 +1310,342 @@ class ClinicalDecisionSupportClient:
         verbose: bool = True
     ) -> Dict[str, Any]:
         """
+        Streamlined clinical decision support workflow.
+
+        New architecture:
+        1. LLM Call 1 WITH TOOLS: Claude analyzes consultation, searches guidelines using MCP tools,
+           outputs structured diagnoses + drug names
+        2. Direct BNF parsing: search_bnf_drug() → get_bnf_drug_info() → structured data
+        3. No second LLM call needed (BNF pages have consistent structure)
+
+        Benefits:
+        - Faster: Only 1 LLM call instead of 2-3
+        - Cheaper: Saves tokens on additional LLM calls
+        - More reliable: Deterministic BNF parsing vs LLM extraction
+        - Smarter: Claude chooses which tools to use dynamically
+
+        Args:
+            clinical_scenario: Patient case description
+            patient_id: Optional patient ID (not used in streamlined version)
+            patient_age: Optional patient age (not used in streamlined version)
+            allergies: Optional known allergies (not used in streamlined version)
+            location_override: Optional country code override (not used in streamlined version)
+            verbose: Whether to print workflow steps
+
+        Returns:
+            Dictionary with diagnoses (including treatments, drug names, BNF info) and summary
+        """
+        if verbose:
+            print("\n" + "="*70)
+            print("🏥 STREAMLINED CLINICAL DECISION SUPPORT")
+            print("="*70)
+            print(f"Consultation: {clinical_scenario[:100]}...")
+            print("="*70)
+
+        # Step 1: Claude analyzes consultation WITH TOOLS
+        if verbose:
+            print("\n🤖 Step 1: Analyzing consultation with Claude (with tools)...")
+
+        # Get all available tools from MCP servers
+        tools = await self.get_all_tools_for_claude()
+
+        if verbose:
+            print(f"   Available tools: {len(tools)} tools from MCP servers")
+            # Show relevant search tools
+            relevant_tools = [t['name'] for t in tools if 'search' in t['name'].lower() or 'nice' in t['name'].lower() or 'bnf' in t['name'].lower()]
+            print(f"   Relevant tools: {', '.join(relevant_tools[:8])}")
+
+        # Build prompt for Claude
+        prompt = f"""Analyze this clinical consultation and provide structured diagnosis and treatment information.
+
+CONSULTATION: {clinical_scenario}
+
+TASK:
+1. Use the available tools to search for relevant clinical guidelines and treatment information
+2. Based on the consultation and evidence found, identify:
+   - The diagnosis (with confidence level: high/medium/low)
+   - Appropriate treatments
+   - Specific drug names mentioned or recommended (use generic names, e.g., "Amoxicillin" not "Amoxil")
+
+Return your final answer as JSON ONLY (no other text):
+
+{{
+  "diagnoses": [
+    {{
+      "diagnosis": "medical condition name",
+      "confidence": "high|medium|low",
+      "treatments": [
+        {{
+          "name": "treatment description",
+          "drug_names": ["generic drug name 1", "generic drug name 2"],
+          "notes": "any relevant clinical notes from guidelines"
+        }}
+      ]
+    }}
+  ]
+}}"""
+
+        # Call Claude with tools
+        messages = [{"role": "user", "content": prompt}]
+        diagnoses = []
+
+        try:
+            # Initial call to Claude
+            response = self.anthropic.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=4096,
+                tools=tools,
+                messages=messages
+            )
+
+            if verbose:
+                print(f"   Stop reason: {response.stop_reason}")
+
+            # Tool use loop
+            while response.stop_reason == "tool_use":
+                # Execute tools
+                tool_results = []
+                for content_block in response.content:
+                    if content_block.type == "tool_use":
+                        tool_name = content_block.name
+                        tool_input = content_block.input
+
+                        if verbose:
+                            print(f"   🔧 Calling tool: {tool_name}({tool_input})")
+
+                        # Call the MCP tool
+                        result = await self.call_tool(tool_name, tool_input)
+                        result_text = result.content[0].text
+
+                        if verbose:
+                            # Parse and show summary
+                            try:
+                                data = json.loads(result_text)
+                                if 'results' in data:
+                                    print(f"      → Found {len(data['results'])} results")
+                            except:
+                                pass
+
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": content_block.id,
+                            "content": result_text
+                        })
+
+                # Add assistant response and tool results to conversation
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": tool_results})
+
+                # Continue conversation
+                response = self.anthropic.messages.create(
+                    model="claude-haiku-4-5",
+                    max_tokens=4096,
+                    tools=tools,
+                    messages=messages
+                )
+
+                if verbose:
+                    print(f"   Stop reason: {response.stop_reason}")
+
+            # Extract final JSON response
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    try:
+                        # Try direct JSON parse
+                        result = json.loads(block.text)
+                        diagnoses = result.get('diagnoses', [])
+                        break
+                    except:
+                        # Try to find JSON in text
+                        text = block.text
+                        if '{' in text:
+                            json_start = text.index('{')
+                            json_end = text.rindex('}') + 1
+                            try:
+                                result = json.loads(text[json_start:json_end])
+                                diagnoses = result.get('diagnoses', [])
+                                break
+                            except:
+                                pass
+
+            if verbose:
+                print(f"\n   ✓ Extracted {len(diagnoses)} diagnoses")
+                for d in diagnoses:
+                    print(f"      • {d.get('diagnosis')} ({d.get('confidence')} confidence)")
+                    for tx in d.get('treatments', []):
+                        drugs = ', '.join(tx.get('drug_names', []))
+                        print(f"        - {tx.get('name')}: {drugs}")
+
+        except Exception as e:
+            if verbose:
+                print(f"   ⚠️  Error: {e}")
+                import traceback
+                traceback.print_exc()
+            diagnoses = []
+
+        # Step 2: Get BNF drug information (direct parsing, no LLM)
+        if verbose:
+            print(f"\n💊 Step 2: Fetching BNF drug information...")
+
+        # Extract all drug names
+        all_drugs = []
+        for diag in diagnoses:
+            for tx in diag.get('treatments', []):
+                all_drugs.extend(tx.get('drug_names', []))
+
+        # Remove duplicates
+        all_drugs = list(set(all_drugs))
+
+        # Search BNF and get detailed info for each drug
+        async def get_drug_details(drug_name):
+            try:
+                # Step 2a: Search for drug
+                if verbose:
+                    print(f"   🔍 Searching BNF for: {drug_name}")
+
+                search_result = await self.call_tool("search_bnf_drug", {
+                    "drug_name": drug_name
+                })
+                search_data = json.loads(search_result.content[0].text)
+                results = search_data.get('results', [])
+
+                if not results:
+                    if verbose:
+                        print(f"      ⚠️  No BNF page found for {drug_name}")
+                    return None
+
+                drug_url = results[0].get('url')
+                if verbose:
+                    print(f"      ✓ Found: {drug_url}")
+
+                # Step 2b: Get detailed drug info
+                if verbose:
+                    print(f"   📄 Fetching detailed info for: {drug_name}")
+
+                info_result = await self.call_tool("get_bnf_drug_info", {
+                    "drug_url": drug_url
+                })
+                info_data = json.loads(info_result.content[0].text)
+
+                if info_data.get('success'):
+                    if verbose:
+                        print(f"      ✓ Retrieved structured data")
+                    return {
+                        'drug_name': drug_name,
+                        'url': drug_url,
+                        'bnf_data': info_data
+                    }
+                else:
+                    if verbose:
+                        print(f"      ⚠️  Failed to parse: {info_data.get('error')}")
+                    return None
+
+            except Exception as e:
+                if verbose:
+                    print(f"   ⚠️  Error with {drug_name}: {e}")
+                return None
+
+        drug_details = []
+        if all_drugs:
+            if verbose:
+                print(f"   Found {len(all_drugs)} drugs to look up: {', '.join(all_drugs)}\n")
+
+            # Get details for all drugs in parallel
+            results = await asyncio.gather(
+                *[get_drug_details(drug) for drug in all_drugs],
+                return_exceptions=True
+            )
+
+            for result in results:
+                if result and not isinstance(result, Exception):
+                    drug_details.append(result)
+
+        # Step 3: Add BNF data to diagnoses
+        if verbose:
+            print(f"\n📋 Step 3: Adding BNF data to diagnoses...")
+
+        # Create lookup dict
+        drug_lookup = {d['drug_name']: d for d in drug_details}
+
+        for diag in diagnoses:
+            for tx in diag.get('treatments', []):
+                tx['bnf_info'] = {}
+
+                for drug_name in tx.get('drug_names', []):
+                    if drug_name in drug_lookup:
+                        details = drug_lookup[drug_name]
+                        bnf_data = details['bnf_data']
+
+                        tx['bnf_info'][drug_name] = {
+                            'url': details['url'],
+                            'indications': bnf_data.get('indications', 'Not available'),
+                            'dosage': bnf_data.get('dosage', 'Not available'),
+                            'contraindications': bnf_data.get('contraindications', 'Not available'),
+                            'cautions': bnf_data.get('cautions', 'Not available'),
+                            'side_effects': bnf_data.get('side_effects', 'Not available'),
+                            'interactions': bnf_data.get('interactions', 'Not available'),
+                        }
+
+                        if verbose:
+                            print(f"   ✓ Added BNF data for: {drug_name}")
+
+        # Step 4: Generate summary
+        if verbose:
+            print(f"\n📄 Step 4: Generating summary...")
+
+        summary = f"""
+CLINICAL DECISION SUPPORT REPORT
+
+DIAGNOSES ({len(diagnoses)}):
+"""
+        for diag in diagnoses:
+            summary += f"\n• {diag.get('diagnosis')} ({diag.get('confidence')} confidence)"
+            for tx in diag.get('treatments', []):
+                summary += f"\n  Treatment: {tx.get('name')}"
+
+                if tx.get('notes'):
+                    summary += f"\n  Notes: {tx.get('notes')}"
+
+                # Add BNF info for each drug
+                for drug_name in tx.get('drug_names', []):
+                    bnf_info = tx.get('bnf_info', {}).get(drug_name)
+                    if bnf_info:
+                        summary += f"\n\n  Drug: {drug_name}"
+                        summary += f"\n  BNF: {bnf_info['url']}"
+                        summary += f"\n  Dosage: {bnf_info['dosage'][:200]}..." if len(bnf_info['dosage']) > 200 else f"\n  Dosage: {bnf_info['dosage']}"
+                        summary += f"\n  Contraindications: {bnf_info['contraindications'][:200]}..." if len(bnf_info['contraindications']) > 200 else f"\n  Contraindications: {bnf_info['contraindications']}"
+
+                        if bnf_info['interactions'] and bnf_info['interactions'] != 'Not available':
+                            summary += f"\n  Interactions: {bnf_info['interactions'][:200]}..." if len(bnf_info['interactions']) > 200 else f"\n  Interactions: {bnf_info['interactions']}"
+
+        if not diagnoses:
+            summary += "\nNo diagnoses identified."
+
+        result = {
+            'diagnoses': diagnoses,
+            'summary': summary,
+            'bnf_prescribing_guidance': []  # For backwards compatibility with API
+        }
+
+        if verbose:
+            print("\n" + "="*70)
+            print("✅ STREAMLINED ANALYSIS COMPLETE")
+            print("="*70)
+            print(f"Diagnoses: {len(diagnoses)}")
+            print("="*70)
+
+        return result
+
+    async def clinical_decision_support_old(
+        self,
+        clinical_scenario: str,
+        patient_id: Optional[str] = None,
+        patient_age: Optional[str] = None,
+        allergies: Optional[str] = None,
+        location_override: Optional[str] = None,
+        verbose: bool = True
+    ) -> Dict[str, Any]:
+        """
         Orchestrate clinical decision support workflow.
 
         Workflow:
@@ -1289,9 +1681,14 @@ class ClinicalDecisionSupportClient:
         # Step 1: Determine location
         location_info = await self._determine_location(location_override, verbose)
 
+        # Step 1.5: Extract key medical conditions from consultation for focused searching
+        search_terms = clinical_scenario  # Default to full text
+        if self.anthropic:
+            search_terms = await self._extract_search_terms(clinical_scenario, verbose)
+
         # Step 2: Search guidelines by region
         guidelines, cks_topics, bnf_summaries, pubmed_articles = await self._search_guidelines_by_region(
-            location_info, clinical_scenario, verbose
+            location_info, search_terms, verbose
         )
 
         # Step 3: Fetch guideline details and analyze with Claude
@@ -1642,7 +2039,7 @@ Instructions:
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -1867,7 +2264,7 @@ If BNF summary lacks dosing details, the medication will be enriched later from 
         try:
             # Call Claude API
             message = self.anthropic.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
@@ -2078,7 +2475,7 @@ Return ONLY a JSON object with these fields:
 Focus on: {condition}. Be concise. If not found, use most common adult dose."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-3-5-haiku-20241022",
+                    model="claude-haiku-4-5",
                     max_tokens=200,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -2166,7 +2563,7 @@ Return ONLY a JSON object with BRIEF (1-2 sentence) summaries:
 Be extremely concise. Focus on key dose adjustments and safety warnings only."""
 
                 response = self.anthropic.messages.create(
-                    model="claude-3-5-haiku-20241022",
+                    model="claude-haiku-4-5",
                     max_tokens=300,
                     messages=[{"role": "user", "content": prompt}]
                 )

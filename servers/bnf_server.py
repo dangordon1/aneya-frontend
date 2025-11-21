@@ -57,17 +57,24 @@ HEADERS = {
 session = requests.Session()
 session.headers.update(HEADERS)
 
-# Configure proxy if provided via environment variable
-# Format: http://proxy-host:port or http://user:pass@proxy-host:port
+# Configure ScrapeOps proxy if API key is provided
+SCRAPEOPS_API_KEY = os.getenv('SCRAPEOPS_API_KEY')
+SCRAPEOPS_PROXY_URL = 'https://proxy.scrapeops.io/v1/'
+
+if SCRAPEOPS_API_KEY:
+    print(f"🔄 BNF server using ScrapeOps proxy (API key: {SCRAPEOPS_API_KEY[:10]}...)")
+    print(f"   Features: residential IPs + JavaScript rendering")
+else:
+    print("📡 BNF server using direct connection (no proxy)")
+
+# Legacy proxy support (kept for backwards compatibility with ScraperAPI if needed)
 PROXY_URL = os.getenv('BNF_PROXY_URL')
-if PROXY_URL:
-    print(f"🔄 BNF server using proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
+if PROXY_URL and not SCRAPEOPS_API_KEY:
+    print(f"🔄 BNF server using legacy proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
     session.proxies = {
         'http': PROXY_URL,
         'https': PROXY_URL,
     }
-else:
-    print("📡 BNF server using direct connection (no proxy)")
 
 # Initialize cache
 cache = get_cache()
@@ -76,6 +83,7 @@ cache = get_cache()
 def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Response], Dict[str, Any]]:
     """
     Make a GET request with proper error handling and rate limiting.
+    Uses ScrapeOps if API key is available, otherwise direct or legacy proxy.
 
     Args:
         url: The URL to request
@@ -86,27 +94,48 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
     """
     debug_info = {
         "url": url,
+        "scrapeops_enabled": bool(SCRAPEOPS_API_KEY),
         "proxy_enabled": bool(PROXY_URL),
         "proxy_url": PROXY_URL.split('@')[-1] if PROXY_URL and '@' in PROXY_URL else PROXY_URL if PROXY_URL else None,
         "timeout": timeout
     }
 
     try:
-        # Log request details
-        proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
-        print(f"🌐 [{proxy_status}] Requesting: {url}")
-        if session.proxies:
-            proxy_host = session.proxies.get('https', 'unknown')
-            # Mask password in logs
-            if '@' in proxy_host:
-                proxy_display = proxy_host.split('@')[-1]
-            else:
-                proxy_display = proxy_host
-            print(f"   Using proxy: {proxy_display}")
+        # Use ScrapeOps if API key is available
+        if SCRAPEOPS_API_KEY:
+            print(f"🌐 [SCRAPEOPS] Requesting: {url}")
+            print(f"   Features: residential + render_js")
 
-        # Add a small delay to be respectful to the server
-        time.sleep(0.5)
-        response = session.get(url, timeout=timeout)
+            # Add delay to be respectful
+            time.sleep(0.5)
+
+            # Make request through ScrapeOps API
+            response = requests.get(
+                SCRAPEOPS_PROXY_URL,
+                params={
+                    'api_key': SCRAPEOPS_API_KEY,
+                    'url': url,
+                    'render_js': 'true',
+                    'residential': 'true',
+                },
+                timeout=120  # Longer timeout for ScrapeOps (includes rendering)
+            )
+        else:
+            # Use direct connection or legacy proxy
+            proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
+            print(f"🌐 [{proxy_status}] Requesting: {url}")
+            if session.proxies:
+                proxy_host = session.proxies.get('https', 'unknown')
+                # Mask password in logs
+                if '@' in proxy_host:
+                    proxy_display = proxy_host.split('@')[-1]
+                else:
+                    proxy_display = proxy_host
+                print(f"   Using proxy: {proxy_display}")
+
+            # Add a small delay to be respectful to the server
+            time.sleep(0.5)
+            response = session.get(url, timeout=timeout)
 
         # Log response details
         print(f"✅ Response received: {response.status_code} (size: {len(response.content)} bytes)")
