@@ -47,6 +47,19 @@ echo -e "${YELLOW}Project ID: ${PROJECT_ID}${NC}"
 echo -e "${YELLOW}Region: ${REGION}${NC}"
 echo -e "${YELLOW}Service: ${SERVICE_NAME}${NC}"
 
+# Run pre-deployment tests
+echo -e "${YELLOW}Running pre-deployment tests...${NC}"
+if [ -f "./test_before_deploy.sh" ]; then
+    if ! bash ./test_before_deploy.sh; then
+        echo -e "${RED}ERROR: Pre-deployment tests failed${NC}"
+        echo -e "${RED}Aborting deployment${NC}"
+        exit 1
+    fi
+else
+    echo -e "${YELLOW}⚠ No test script found (test_before_deploy.sh)${NC}"
+    echo -e "${YELLOW}  Proceeding without tests...${NC}"
+fi
+
 # Check for Anthropic API key
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo -e "${RED}ERROR: ANTHROPIC_API_KEY environment variable not set${NC}"
@@ -103,11 +116,17 @@ echo -e "${YELLOW}Deploying to Cloud Run...${NC}"
 
 # Build environment variables string
 ENV_VARS="ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
-if [ ! -z "${BNF_PROXY_URL}" ]; then
-    echo -e "${GREEN}✓ BNF_PROXY_URL configured${NC}"
+
+# Add ScrapeOps API key if available (preferred for Cloud Run)
+if [ ! -z "${SCRAPEOPS_API_KEY}" ]; then
+    echo -e "${GREEN}✓ SCRAPEOPS_API_KEY configured (BNF access via residential proxy)${NC}"
+    ENV_VARS="${ENV_VARS},SCRAPEOPS_API_KEY=${SCRAPEOPS_API_KEY}"
+elif [ ! -z "${BNF_PROXY_URL}" ]; then
+    echo -e "${GREEN}✓ BNF_PROXY_URL configured (legacy proxy)${NC}"
     ENV_VARS="${ENV_VARS},BNF_PROXY_URL=${BNF_PROXY_URL}"
 else
-    echo -e "${YELLOW}⚠ BNF_PROXY_URL not set (BNF may be blocked on Cloud Run)${NC}"
+    echo -e "${YELLOW}⚠ No proxy configured (BNF will be blocked on Cloud Run)${NC}"
+    echo -e "${YELLOW}  Set SCRAPEOPS_API_KEY to enable BNF access via proxy${NC}"
 fi
 
 gcloud run deploy "${SERVICE_NAME}" \
