@@ -56,9 +56,10 @@ async def lifespan(app: FastAPI):
 
     print(f"✅ Anthropic API key loaded (ends with ...{anthropic_key[-4:]})")
 
+    # Initialize client but DON'T connect to servers yet
+    # Servers will be connected per-request based on user's region (detected from IP)
     client = ClinicalDecisionSupportClient(anthropic_api_key=anthropic_key)
-    await client.connect_to_servers(verbose=False)
-    print("✅ Connected to all MCP servers")
+    print("✅ Client initialized (servers will be loaded based on user region)")
 
     yield
 
@@ -198,20 +199,30 @@ async def analyze_consultation(request: AnalysisRequest):
         print(f"Consultation: {request.consultation[:100]}...")
         print(f"{'='*70}\n")
 
-        # Determine location from user IP if provided, otherwise let backend auto-detect
+        # Step 1: Get geolocation FIRST (direct HTTP call, no MCP)
         location_to_use = request.location_override  # Manual override takes precedence
+        detected_country = None
 
         if not location_to_use and request.user_ip:
-            # Direct API call to ip-api.com (no MCP overhead)
-            geo_data = await get_country_from_ip(request.user_ip)
-            if geo_data:
+            # Use client's direct geolocation method (no MCP)
+            geo_data = await client.get_location_from_ip(request.user_ip)
+            if geo_data and geo_data.get('country_code') != 'XX':
                 location_to_use = geo_data.get('country_code')
-                print(f"🌍 Detected location from IP {request.user_ip}: {geo_data.get('country')} ({location_to_use})")
+                detected_country = geo_data.get('country')
+                print(f"🌍 Detected location from IP {request.user_ip}: {detected_country} ({location_to_use})")
             else:
                 print(f"⚠️  Geolocation failed. Backend will auto-detect.")
                 location_to_use = None
 
-        # Run the clinical decision support workflow with VERBOSE logging
+        # Step 2: Connect to region-specific MCP servers
+        # Only connect if not already connected (check if we have sessions)
+        if not client.sessions:
+            print(f"🔄 Connecting to region-specific MCP servers for {location_to_use or 'default'}...")
+            await client.connect_to_servers(country_code=location_to_use, verbose=True)
+        else:
+            print(f"✅ Using existing MCP server connections")
+
+        # Step 3: Run the clinical decision support workflow
         result = await client.clinical_decision_support(
             clinical_scenario=request.consultation,
             patient_id=request.patient_id,
