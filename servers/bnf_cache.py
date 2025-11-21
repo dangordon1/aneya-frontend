@@ -8,11 +8,25 @@ to reduce proxy usage and improve response times.
 
 import hashlib
 import os
+import sys
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
+from contextlib import contextmanager
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+
+
+@contextmanager
+def suppress_stderr():
+    """Context manager to suppress stderr output (prevents protobuf messages from corrupting MCP stdout)."""
+    stderr = sys.stderr
+    try:
+        sys.stderr = open(os.devnull, 'w')
+        yield
+    finally:
+        sys.stderr.close()
+        sys.stderr = stderr
 
 
 class BNFCache:
@@ -39,13 +53,16 @@ class BNFCache:
         self.db = None
 
         # Initialize Firebase Admin SDK
+        # Use suppress_stderr to prevent protobuf error messages from corrupting MCP JSON-RPC stdout
         try:
-            # Check if already initialized
-            if not firebase_admin._apps:
-                # Try to use default credentials (works on Cloud Run)
-                firebase_admin.initialize_app()
+            with suppress_stderr():
+                # Check if already initialized
+                if not firebase_admin._apps:
+                    # Try to use default credentials (works on Cloud Run)
+                    firebase_admin.initialize_app()
 
-            self.db = firestore.client()
+                self.db = firestore.client()
+
             self.enabled = True
             print(f"✅ BNF cache enabled (Firestore collection: {collection_name}, TTL: {default_ttl_days} days)")
 
