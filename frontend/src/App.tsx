@@ -21,7 +21,7 @@ export default function App() {
       console.log('Checking backend availability...');
       console.log('API URL:', API_URL);
       try {
-        const healthResponse = await fetch(`${API_URL}/api/health`, {
+        const healthResponse = await fetch(`${API_URL}/health`, {
           method: 'GET',
           signal: AbortSignal.timeout(5000) // 5 second timeout
         });
@@ -39,7 +39,7 @@ export default function App() {
       } catch (healthError) {
         console.error('Backend unavailable:', healthError);
         alert(
-          'Unable to connect to the Clara backend server.\n\n' +
+          'Unable to connect to the  aneya backend server.\n\n' +
           'Please ensure the API server is running.\n' +
           'Local development: python api.py\n' +
           'Production: Check Vercel deployment logs'

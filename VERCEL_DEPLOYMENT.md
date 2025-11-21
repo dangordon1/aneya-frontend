@@ -1,6 +1,6 @@
-# Deploying Clara to Vercel
+# Deploying  aneya to Vercel
 
-This guide walks you through deploying the Clara Clinical Decision Support application to Vercel.
+This guide walks you through deploying the  aneya Clinical Decision Support application to Vercel.
 
 ## Prerequisites
 
@@ -144,7 +144,7 @@ Visit your Vercel app URL:
 https://<your-project>.vercel.app
 ```
 
-You should see the Clara interface.
+You should see the  aneya interface.
 
 ## Configuration Details
 

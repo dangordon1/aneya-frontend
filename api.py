@@ -4,7 +4,7 @@ Clara API - FastAPI Backend
 Wraps the Clinical Decision Support Client for the React frontend
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -15,6 +15,8 @@ import os
 import sys
 import json
 import httpx
+import tempfile
+from faster_whisper import WhisperModel
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,15 +27,16 @@ from clinical_decision_support_client import ClinicalDecisionSupportClient
 
 # Global client instance (reused across requests)
 client: Optional[ClinicalDecisionSupportClient] = None
+whisper_model: Optional[WhisperModel] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
-    global client
+    global client, whisper_model
 
     # Startup
-    print("🚀 Starting Clara API...")
+    print("🚀 Starting  aneya API...")
 
     # Check for Anthropic API key - REQUIRED!
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
@@ -41,7 +44,7 @@ async def lifespan(app: FastAPI):
         error_msg = """
         ❌ FATAL ERROR: ANTHROPIC_API_KEY not found!
 
-        Clara requires an Anthropic API key to function.
+         aneya requires an Anthropic API key to function.
 
         To fix this:
         1. Create a .env file in the project root if it doesn't exist
@@ -59,6 +62,9 @@ async def lifespan(app: FastAPI):
     client = ClinicalDecisionSupportClient(anthropic_api_key=anthropic_key)
     await client.connect_to_servers(verbose=False)
     print("✅ Connected to all MCP servers")
+
+    # Initialize Whisper model (lazy-loaded on first transcription request)
+    print("🎤 Whisper model will load on first transcription")
 
     yield
 
@@ -253,6 +259,67 @@ async def get_examples():
             }
         ]
     }
+
+
+@app.post("/api/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...)):
+    """
+    Transcribe audio file to text using Faster Whisper (medium model)
+
+    Args:
+        audio: Audio file (webm, mp3, wav, etc.)
+
+    Returns:
+        Transcribed text from the audio
+    """
+    global whisper_model
+
+    try:
+        # Lazy-load Whisper model on first request
+        if whisper_model is None:
+            print("🎤 Loading Whisper medium model (first time - may take 10-20 seconds)...")
+            whisper_model = WhisperModel(
+                "medium",
+                device="cpu",  # Use "cuda" if GPU available
+                compute_type="int8"  # Faster on CPU, use "float16" for GPU
+            )
+            print("✅ Whisper model loaded")
+
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            content = await audio.read()
+            temp_audio.write(content)
+            temp_audio_path = temp_audio.name
+
+        try:
+            # Transcribe audio
+            print(f"🎤 Transcribing audio ({len(content)} bytes)...")
+            segments, info = whisper_model.transcribe(
+                temp_audio_path,
+                beam_size=5,
+                language="en",  # Can be auto-detected by removing this
+                vad_filter=True,  # Voice activity detection to remove silence
+            )
+
+            # Combine all segments into full text
+            transcription = " ".join([segment.text for segment in segments])
+
+            print(f"✅ Transcription complete: {len(transcription)} characters")
+
+            return {
+                "success": True,
+                "text": transcription.strip(),
+                "language": info.language,
+                "duration": info.duration
+            }
+
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_audio_path)
+
+    except Exception as e:
+        print(f"❌ Transcription error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 
 if __name__ == "__main__":

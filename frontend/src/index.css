@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  /* Clara Health Color Palette */
+  /*  aneya Health Color Palette */
   --clara-purple: #351431;
   --clara-pink: #F0D1DA;
   --clara-white: #FFFFFF;
@@ -26,7 +26,7 @@ body {
   color: var(--clara-purple);
 }
 
-/* Clara Health Typography - Headings use serif */
+/*  aneya Health Typography - Headings use serif */
 h1, h2, h3, h4 {
   font-family: Georgia, serif;
   color: var(--clara-purple);
@@ -62,7 +62,7 @@ p {
   line-height: 22px;
 }
 
-/* Clara Health custom utility classes */
+/*  aneya Health custom utility classes */
 .clara-shadow-card {
   box-shadow: 0px 2px 12px rgba(53, 20, 49, 0.08);
 }
