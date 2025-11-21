@@ -67,6 +67,7 @@ if SCRAPEOPS_API_KEY:
     print(f"   Features: residential IPs + JavaScript rendering", file=sys.stderr)
 else:
     print("📡 BNF server using direct connection (no proxy)", file=sys.stderr)
+    print("⚠️  WARNING: SCRAPEOPS_API_KEY not set - BNF will likely be blocked on Cloud Run!", file=sys.stderr)
 
 # Legacy proxy support (kept for backwards compatibility with ScraperAPI if needed)
 PROXY_URL = os.getenv('BNF_PROXY_URL')

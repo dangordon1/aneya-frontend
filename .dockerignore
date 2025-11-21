@@ -59,6 +59,7 @@ notebooks/
 
 # Test files
 test_*.py
+!test_cloudrun_proxy.py
 *_test.py
 
 # Lock files (using requirements.txt instead)
