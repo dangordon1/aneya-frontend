@@ -38,5 +38,5 @@ EXPOSE 8080
 
 # Run the application with uvicorn
 # Platform provides PORT env var, default to 8080
-# Use shell form to ensure environment variable expansion
+# Use shell form to ensure environment variable expansion (Railway rebuild)
 CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"]
