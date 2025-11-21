@@ -32,11 +32,9 @@ COPY servers/ ./servers/
 RUN useradd -m -u 1000 aneya && chown -R aneya:aneya /app
 USER aneya
 
-# Expose port (Cloud Run and Railway provide PORT env var)
-ENV PORT=8080
+# Expose port 8080
 EXPOSE 8080
 
-# Run the application with uvicorn
-# Platform provides PORT env var, default to 8080
-# Use shell form (NOT exec form) for proper environment variable expansion
-CMD uvicorn api:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info
+# Run the application with uvicorn on port 8080
+# Cloud Run will override via PORT env var, Railway uses fixed port
+CMD uvicorn api:app --host 0.0.0.0 --port 8080 --log-level info
