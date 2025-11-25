@@ -8,8 +8,11 @@ to reduce proxy usage and improve response times.
 
 import hashlib
 import os
+import sys
+import contextlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
+from mcp_utils import print_stderr
 
 # Try to import Firebase - if it fails, caching will be disabled
 # This prevents protobuf error messages from corrupting MCP stdout
@@ -17,10 +20,26 @@ FIREBASE_AVAILABLE = False
 firebase_admin = None
 firestore = None
 
+# Context manager to suppress ALL Firebase/Google Cloud SDK stderr output
+@contextlib.contextmanager
+def suppress_firebase_stderr():
+    """Suppress Firebase/Google Cloud SDK stderr to prevent MCP stdout contamination"""
+    # Redirect stderr to /dev/null
+    devnull = open(os.devnull, 'w')
+    old_stderr = sys.stderr
+    try:
+        sys.stderr = devnull
+        yield
+    finally:
+        sys.stderr = old_stderr
+        devnull.close()
+
 try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore as _firestore
-    from google.cloud.firestore_v1.base_query import FieldFilter
+    # Suppress Firebase/protobuf stderr messages during import
+    with suppress_firebase_stderr():
+        import firebase_admin
+        from firebase_admin import credentials, firestore as _firestore
+        from google.cloud.firestore_v1.base_query import FieldFilter
     firestore = _firestore
     FIREBASE_AVAILABLE = True
 except Exception:
@@ -53,24 +72,26 @@ class BNFCache:
 
         # Check if Firebase is available
         if not FIREBASE_AVAILABLE:
-            print(f"⚠️  BNF cache disabled: Firebase Admin SDK not available")
-            print("   Cache will be bypassed (searches will use proxy/direct connection)")
+            print_stderr(f"⚠️  BNF cache disabled: Firebase Admin SDK not available")
+            print_stderr("   Cache will be bypassed (searches will use proxy/direct connection)")
             return
 
         # Initialize Firebase Admin SDK
         try:
-            # Check if already initialized
-            if not firebase_admin._apps:
-                # Try to use default credentials (works on Cloud Run)
-                firebase_admin.initialize_app()
+            # Check if already initialized (suppress stderr for all Firebase operations)
+            with suppress_firebase_stderr():
+                if not firebase_admin._apps:
+                    # Try to use default credentials (works on Cloud Run)
+                    firebase_admin.initialize_app()
 
-            self.db = firestore.client()
+                self.db = firestore.client()
+
             self.enabled = True
-            print(f"✅ BNF cache enabled (Firestore collection: {collection_name}, TTL: {default_ttl_days} days)")
+            print_stderr(f"✅ BNF cache enabled (Firestore collection: {collection_name}, TTL: {default_ttl_days} days)")
 
         except Exception as e:
-            print(f"⚠️  BNF cache disabled: {str(e)}")
-            print("   Cache will be bypassed (searches will use proxy/direct connection)")
+            print_stderr(f"⚠️  BNF cache disabled: {str(e)}")
+            print_stderr("   Cache will be bypassed (searches will use proxy/direct connection)")
 
     def _generate_cache_key(self, key_type: str, value: str) -> str:
         """
@@ -115,37 +136,40 @@ class BNFCache:
 
         try:
             cache_key = self._generate_cache_key(key_type, value)
-            doc_ref = self.db.collection(self.collection_name).document(cache_key)
-            doc = doc_ref.get()
 
-            if not doc.exists:
-                return None
+            # Suppress Firebase stderr for all database operations
+            with suppress_firebase_stderr():
+                doc_ref = self.db.collection(self.collection_name).document(cache_key)
+                doc = doc_ref.get()
 
-            data = doc.to_dict()
-
-            # Check if expired
-            created_at = data.get('created_at')
-            ttl_days = data.get('ttl_days', self.default_ttl_days)
-
-            if created_at:
-                expiry_date = created_at + timedelta(days=ttl_days)
-                if datetime.now(timezone.utc) > expiry_date:
-                    print(f"🗑️  Cache expired: {cache_key}")
-                    # Delete expired entry
-                    doc_ref.delete()
+                if not doc.exists:
                     return None
 
-            # Increment hit count
-            doc_ref.update({
-                'hit_count': firestore.Increment(1),
-                'last_accessed': datetime.now(timezone.utc)
-            })
+                data = doc.to_dict()
 
-            print(f"💾 Cache hit: {cache_key} (hits: {data.get('hit_count', 0) + 1})")
+                # Check if expired
+                created_at = data.get('created_at')
+                ttl_days = data.get('ttl_days', self.default_ttl_days)
+
+                if created_at:
+                    expiry_date = created_at + timedelta(days=ttl_days)
+                    if datetime.now(timezone.utc) > expiry_date:
+                        print_stderr(f"🗑️  Cache expired: {cache_key}")
+                        # Delete expired entry
+                        doc_ref.delete()
+                        return None
+
+                # Increment hit count
+                doc_ref.update({
+                    'hit_count': firestore.Increment(1),
+                    'last_accessed': datetime.now(timezone.utc)
+                })
+
+            print_stderr(f"💾 Cache hit: {cache_key} (hits: {data.get('hit_count', 0) + 1})")
             return data.get('content')
 
         except Exception as e:
-            print(f"⚠️  Cache get error: {str(e)}")
+            print_stderr(f"⚠️  Cache get error: {str(e)}")
             return None
 
     def set(self, key_type: str, value: str, content: Any, ttl_days: Optional[int] = None):
@@ -176,13 +200,15 @@ class BNFCache:
                 'search_term': value
             }
 
-            doc_ref = self.db.collection(self.collection_name).document(cache_key)
-            doc_ref.set(doc_data)
+            # Suppress Firebase stderr for database write
+            with suppress_firebase_stderr():
+                doc_ref = self.db.collection(self.collection_name).document(cache_key)
+                doc_ref.set(doc_data)
 
-            print(f"💾 Cache set: {cache_key}")
+            print_stderr(f"💾 Cache set: {cache_key}")
 
         except Exception as e:
-            print(f"⚠️  Cache set error: {str(e)}")
+            print_stderr(f"⚠️  Cache set error: {str(e)}")
 
     def invalidate(self, key_type: str, value: str):
         """
@@ -197,12 +223,16 @@ class BNFCache:
 
         try:
             cache_key = self._generate_cache_key(key_type, value)
-            doc_ref = self.db.collection(self.collection_name).document(cache_key)
-            doc_ref.delete()
-            print(f"🗑️  Cache invalidated: {cache_key}")
+
+            # Suppress Firebase stderr for database delete
+            with suppress_firebase_stderr():
+                doc_ref = self.db.collection(self.collection_name).document(cache_key)
+                doc_ref.delete()
+
+            print_stderr(f"🗑️  Cache invalidated: {cache_key}")
 
         except Exception as e:
-            print(f"⚠️  Cache invalidate error: {str(e)}")
+            print_stderr(f"⚠️  Cache invalidate error: {str(e)}")
 
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -215,22 +245,24 @@ class BNFCache:
             return {'enabled': False}
 
         try:
-            collection = self.db.collection(self.collection_name)
+            # Suppress Firebase stderr for database queries
+            with suppress_firebase_stderr():
+                collection = self.db.collection(self.collection_name)
 
-            # Get total count
-            docs = collection.stream()
-            total = sum(1 for _ in docs)
+                # Get total count
+                docs = collection.stream()
+                total = sum(1 for _ in docs)
 
-            # Get top hits
-            top_hits = collection.order_by('hit_count', direction=firestore.Query.DESCENDING).limit(10).stream()
-            top_list = [
-                {
-                    'key': doc.id,
-                    'hits': doc.to_dict().get('hit_count', 0),
-                    'created': doc.to_dict().get('created_at'),
-                }
-                for doc in top_hits
-            ]
+                # Get top hits
+                top_hits = collection.order_by('hit_count', direction=firestore.Query.DESCENDING).limit(10).stream()
+                top_list = [
+                    {
+                        'key': doc.id,
+                        'hits': doc.to_dict().get('hit_count', 0),
+                        'created': doc.to_dict().get('created_at'),
+                    }
+                    for doc in top_hits
+                ]
 
             return {
                 'enabled': True,
@@ -241,7 +273,7 @@ class BNFCache:
             }
 
         except Exception as e:
-            print(f"⚠️  Cache stats error: {str(e)}")
+            print_stderr(f"⚠️  Cache stats error: {str(e)}")
             return {'enabled': True, 'error': str(e)}
 
     def clear_expired(self) -> int:
@@ -256,28 +288,31 @@ class BNFCache:
 
         try:
             now = datetime.now(timezone.utc)
-            collection = self.db.collection(self.collection_name)
 
-            # Find expired documents
-            docs = collection.stream()
-            deleted = 0
+            # Suppress Firebase stderr for database operations
+            with suppress_firebase_stderr():
+                collection = self.db.collection(self.collection_name)
 
-            for doc in docs:
-                data = doc.to_dict()
-                created_at = data.get('created_at')
-                ttl_days = data.get('ttl_days', self.default_ttl_days)
+                # Find expired documents
+                docs = collection.stream()
+                deleted = 0
 
-                if created_at:
-                    expiry_date = created_at + timedelta(days=ttl_days)
-                    if now > expiry_date:
-                        doc.reference.delete()
-                        deleted += 1
+                for doc in docs:
+                    data = doc.to_dict()
+                    created_at = data.get('created_at')
+                    ttl_days = data.get('ttl_days', self.default_ttl_days)
 
-            print(f"🗑️  Cleared {deleted} expired cache entries")
+                    if created_at:
+                        expiry_date = created_at + timedelta(days=ttl_days)
+                        if now > expiry_date:
+                            doc.reference.delete()
+                            deleted += 1
+
+            print_stderr(f"🗑️  Cleared {deleted} expired cache entries")
             return deleted
 
         except Exception as e:
-            print(f"⚠️  Cache clear error: {str(e)}")
+            print_stderr(f"⚠️  Cache clear error: {str(e)}")
             return 0
 
 

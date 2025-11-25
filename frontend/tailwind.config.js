@@ -7,11 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        'clara-purple': '#351431',
-        'clara-pink': '#F0D1DA',
-        'clara-purple-hover': '#4A1E45',
-        'clara-text-secondary': '#5C3E53',
-        'clara-text-disabled': '#8B7A87',
+        'aneya-navy': '#0c3555',
+        'aneya-teal': '#1d9e99',
+        'aneya-seagreen': '#409f88',
+        'aneya-cream': '#f6f5ee',
+        'aneya-navy-hover': '#0a2a42',
+        'aneya-text-secondary': '#517a9a',
+        'aneya-text-disabled': '#8fa9be',
+        'aneya-soft-pink': '#F0D1DA',
+        'aneya-warning-bg': '#FFF9E6',
       },
       fontFamily: {
         'serif': ['Georgia', 'serif'],

@@ -58,13 +58,19 @@ HEADERS = {
 session = requests.Session()
 session.headers.update(HEADERS)
 
-# Configure ScrapeOps proxy if API key is provided
+# Configure ScrapeOps Residential Proxy if API key is provided
 SCRAPEOPS_API_KEY = os.getenv('SCRAPEOPS_API_KEY')
-SCRAPEOPS_PROXY_URL = 'https://proxy.scrapeops.io/v1/'
 
 if SCRAPEOPS_API_KEY:
-    print(f"🔄 BNF server using ScrapeOps proxy (API key: {SCRAPEOPS_API_KEY[:10]}...)", file=sys.stderr)
-    print(f"   Features: residential IPs + JavaScript rendering", file=sys.stderr)
+    # Use ScrapeOps Residential & Mobile Proxy Aggregator (proxy port format)
+    # Add UK geotargeting to bypass BNF's geographic restrictions
+    SCRAPEOPS_PROXY = f"http://scrapeops.country=uk:{SCRAPEOPS_API_KEY}@residential-proxy.scrapeops.io:8181"
+    session.proxies = {
+        'http': SCRAPEOPS_PROXY,
+        'https': SCRAPEOPS_PROXY,
+    }
+    print(f"🔄 BNF server using ScrapeOps Residential Proxy (UK geotargeted)", file=sys.stderr)
+    print(f"   Features: UK residential IPs from 20+ proxy providers", file=sys.stderr)
 else:
     print("📡 BNF server using direct connection (no proxy)", file=sys.stderr)
     print("⚠️  WARNING: SCRAPEOPS_API_KEY not set - BNF will likely be blocked on Cloud Run!", file=sys.stderr)
@@ -85,7 +91,7 @@ cache = get_cache()
 def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Response], Dict[str, Any]]:
     """
     Make a GET request with proper error handling and rate limiting.
-    Uses ScrapeOps if API key is available, otherwise direct or legacy proxy.
+    Uses configured proxy (ScrapeOps residential or legacy) if available.
 
     Args:
         url: The URL to request
@@ -96,48 +102,28 @@ def make_request(url: str, timeout: int = 30) -> tuple[Optional[requests.Respons
     """
     debug_info = {
         "url": url,
-        "scrapeops_enabled": bool(SCRAPEOPS_API_KEY),
-        "proxy_enabled": bool(PROXY_URL),
-        "proxy_url": PROXY_URL.split('@')[-1] if PROXY_URL and '@' in PROXY_URL else PROXY_URL if PROXY_URL else None,
+        "proxy_enabled": bool(session.proxies),
         "timeout": timeout
     }
 
     try:
-        # Use ScrapeOps if API key is available
-        if SCRAPEOPS_API_KEY:
-            print(f"🌐 [SCRAPEOPS] Requesting: {url}", file=sys.stderr)
-            print(f"   Features: residential + render_js", file=sys.stderr)
+        # Log proxy status
+        proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
+        print(f"🌐 [{proxy_status}] Requesting: {url}", file=sys.stderr)
+        if session.proxies:
+            proxy_host = session.proxies.get('https', 'unknown')
+            # Mask credentials in logs
+            if '@' in proxy_host:
+                proxy_display = proxy_host.split('@')[-1]
+            else:
+                proxy_display = proxy_host
+            print(f"   Using proxy: {proxy_display}", file=sys.stderr)
 
-            # Add delay to be respectful
-            time.sleep(0.5)
+        # Add a small delay to be respectful to the server
+        time.sleep(0.5)
 
-            # Make request through ScrapeOps API
-            response = requests.get(
-                SCRAPEOPS_PROXY_URL,
-                params={
-                    'api_key': SCRAPEOPS_API_KEY,
-                    'url': url,
-                    'render_js': 'true',
-                    'residential': 'true',
-                },
-                timeout=120  # Longer timeout for ScrapeOps (includes rendering)
-            )
-        else:
-            # Use direct connection or legacy proxy
-            proxy_status = "WITH PROXY" if session.proxies else "NO PROXY"
-            print(f"🌐 [{proxy_status}] Requesting: {url}", file=sys.stderr)
-            if session.proxies:
-                proxy_host = session.proxies.get('https', 'unknown')
-                # Mask password in logs
-                if '@' in proxy_host:
-                    proxy_display = proxy_host.split('@')[-1]
-                else:
-                    proxy_display = proxy_host
-                print(f"   Using proxy: {proxy_display}", file=sys.stderr)
-
-            # Add a small delay to be respectful to the server
-            time.sleep(0.5)
-            response = session.get(url, timeout=timeout)
+        # Make request through session (which has proxy configured if available)
+        response = session.get(url, timeout=timeout)
 
         # Log response details
         print(f"✅ Response received: {response.status_code} (size: {len(response.content)} bytes)", file=sys.stderr)

@@ -51,17 +51,36 @@ const STEPS: Step[] = [
   }
 ];
 
-export function ProgressScreen({ onComplete }: ProgressScreenProps) {
+export function ProgressScreen({ onComplete: _onComplete }: ProgressScreenProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Show all steps immediately without animation delays
-    if (currentStep < STEPS.length) {
-      setCurrentStep(currentStep + 1);
-    }
-    // Note: We don't auto-complete here - the parent component (App.tsx)
-    // will call onComplete when the actual API call finishes
-  }, [currentStep, onComplete]);
+    let cancelled = false;
+
+    // Async function to show steps with delays
+    const showStepsWithDelay = async () => {
+      // Delays for each step (in ms)
+      const delays = [800, 1200, 2000, 3000, 2500, 2000];
+
+      for (let i = 0; i < STEPS.length; i++) {
+        if (cancelled) break;
+
+        setCurrentStep(i + 1);
+
+        // Wait for the delay before showing next step (can be interrupted)
+        if (i < STEPS.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, delays[i]));
+        }
+      }
+    };
+
+    showStepsWithDelay();
+
+    // Cleanup function - called when component unmounts (i.e., when backend responds)
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const getStepStatus = (stepId: number): StepStatus => {
     if (stepId < currentStep) return 'complete';
@@ -70,12 +89,12 @@ export function ProgressScreen({ onComplete }: ProgressScreenProps) {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-aneya-cream">
       <div className="max-w-3xl mx-auto px-6 py-12">
-        <h1 className="text-[32px] leading-[38px] text-[#351431] mb-2">
+        <h1 className="text-[32px] leading-[38px] text-aneya-navy mb-2">
           Analysing Consultation
         </h1>
-        <p className="text-[17px] leading-[26px] text-[#5C3E53] mb-12">
+        <p className="text-[17px] leading-[26px] text-aneya-text-secondary mb-12">
           Please wait while we process your consultation with real-time clinical guidelines and AI analysis...
         </p>
 
@@ -91,14 +110,14 @@ export function ProgressScreen({ onComplete }: ProgressScreenProps) {
         </div>
 
         <div className="mt-8 text-center">
-          <p className="text-[15px] leading-[22px] text-[#5C3E53] mb-4">
+          <p className="text-[15px] leading-[22px] text-aneya-text-secondary mb-4">
             This typically takes 20-40 seconds depending on the complexity of the case.
           </p>
 
           {/* Real-time processing indicator */}
-          <div className="flex items-center justify-center gap-3 mt-6 p-4 bg-[#F0D1DA] rounded-[10px]">
-            <Loader2 className="w-5 h-5 text-[#351431] animate-spin" />
-            <span className="text-[15px] leading-[22px] text-[#351431] font-medium">
+          <div className="flex items-center justify-center gap-3 mt-6 p-4 bg-aneya-teal/10 border-2 border-aneya-teal rounded-[10px]">
+            <Loader2 className="w-5 h-5 text-aneya-teal animate-spin" />
+            <span className="text-[15px] leading-[22px] text-aneya-navy font-medium">
               Processing with real-time AI analysis...
             </span>
           </div>

@@ -1,6 +1,6 @@
 #  aneya API - Vercel Serverless Functions
 
-This directory contains the serverless-adapted FastAPI backend for Clara, designed to run on Vercel's serverless platform.
+This directory contains the serverless-adapted FastAPI backend for Aneya, designed to run on Vercel's serverless platform.
 
 ## Files
 

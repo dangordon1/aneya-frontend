@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Clara API - Vercel Serverless Deployment
+Aneya API - Vercel Serverless Deployment
 FastAPI Backend adapted for Vercel's serverless platform
 """
 
@@ -36,7 +36,7 @@ def get_client() -> ClinicalDecisionSupportClient:
 
 
 app = FastAPI(
-    title="Clara Clinical Decision Support API",
+    title="Aneya Clinical Decision Support API",
     version="1.0.0"
 )
 
@@ -102,7 +102,7 @@ async def root():
     """Root endpoint"""
     return {
         "status": "ok",
-        "message": "Clara Clinical Decision Support API is running on Vercel"
+        "message": "Aneya Clinical Decision Support API is running on Vercel"
     }
 
 

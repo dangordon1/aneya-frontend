@@ -14,10 +14,10 @@ export function PrimaryButton({ children, onClick, fullWidth = false, disabled =
       onClick={onClick}
       disabled={disabled}
       className={`
-        bg-[#351431] text-white px-8 py-3 rounded-[10px]
-        hover:bg-[#4A1E45] transition-colors
+        bg-aneya-navy text-white px-8 py-3 rounded-[10px]
+        hover:bg-aneya-navy-hover transition-colors
         disabled:opacity-50 disabled:cursor-not-allowed
-        clara-shadow-button
+        aneya-shadow-button
         ${fullWidth ? 'w-full' : ''}
         ${className}
       `}
