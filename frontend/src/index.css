@@ -6,12 +6,13 @@
 
 :root {
   /*  aneya Health Color Palette */
-  --clara-purple: #351431;
-  --clara-pink: #F0D1DA;
-  --clara-white: #FFFFFF;
-  --clara-purple-hover: #4A1E45;
-  --clara-text-secondary: #5C3E53;
-  --clara-text-disabled: #8B7A87;
+  --aneya-navy: #0c3555;
+  --aneya-teal: #1d9e99;
+  --aneya-seagreen: #409f88;
+  --aneya-cream: #f6f5ee;
+  --aneya-navy-hover: #0a2a42;
+  --aneya-text-secondary: #517a9a;
+  --aneya-text-disabled: #8fa9be;
 }
 
 * {
@@ -22,14 +23,14 @@
 
 body {
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
-  background-color: var(--clara-white);
-  color: var(--clara-purple);
+  background-color: var(--aneya-cream);
+  color: var(--aneya-navy);
 }
 
 /*  aneya Health Typography - Headings use serif */
 h1, h2, h3, h4 {
   font-family: Georgia, serif;
-  color: var(--clara-purple);
+  color: var(--aneya-navy);
 }
 
 h1 {
@@ -63,12 +64,12 @@ p {
 }
 
 /*  aneya Health custom utility classes */
-.clara-shadow-card {
-  box-shadow: 0px 2px 12px rgba(53, 20, 49, 0.08);
+.aneya-shadow-card {
+  box-shadow: 0px 2px 12px rgba(12, 53, 85, 0.08);
 }
 
-.clara-shadow-button {
-  box-shadow: 0px 2px 8px rgba(53, 20, 49, 0.2);
+.aneya-shadow-button {
+  box-shadow: 0px 2px 8px rgba(12, 53, 85, 0.2);
 }
 
 /* Smooth transitions */

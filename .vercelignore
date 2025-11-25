@@ -1,5 +1,6 @@
 # Python backend files (not needed for frontend-only)
 api/
+backend/
 servers/
 *.py
 *.pyc
@@ -9,6 +10,11 @@ venv/
 requirements.txt
 pyproject.toml
 uv.lock
+
+# Whisper/speech recognition models (large files)
+sherpa-onnx*/
+*.tar.bz2
+*.onnx
 
 # Development files
 .env

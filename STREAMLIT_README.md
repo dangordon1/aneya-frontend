@@ -2,7 +2,7 @@
 
 ## Overview
 
-Clara is an AI-powered clinical decision support system with a user-friendly web interface built with Streamlit.
+Aneya is an AI-powered clinical decision support system with a user-friendly web interface built with Streamlit.
 
 ## Features
 
@@ -123,8 +123,8 @@ The app uses:
 ## File Structure
 
 ```
-clara/
-├── app.py                           # Main Streamlit application (Clara)
+aneya/
+├── app.py                           # Main Streamlit application (Aneya)
 ├── servers/
 │   ├── clinical_decision_support_client.py  # Core analysis logic
 │   ├── nice_guidelines_server.py   # NICE guidelines MCP server

@@ -11,41 +11,76 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export function InputScreen({ onAnalyze }: InputScreenProps) {
   const [consultation, setConsultation] = useState('');
-  const [patientId, setPatientId] = useState('P004');
+  const [patientId, setPatientId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-
+  const [streamingText, setStreamingText] = useState(''); // For showing partial results
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const accumulativeAudioRef = useRef<Blob[]>([]); // Store all chunks for accumulative transcription
+  const streamingTextRef = useRef<string>(''); // Ref to track latest streaming text for onstop handler
 
   const handleAnalyze = () => {
-    if (consultation.trim()) {
-      onAnalyze(consultation, patientId);
+    // Use streamingText if it exists (from voice input), otherwise use consultation
+    const textToAnalyze = streamingText.trim() || consultation.trim();
+    if (textToAnalyze) {
+      onAnalyze(textToAnalyze, patientId);
     }
   };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      accumulativeAudioRef.current = []; // Clear accumulative buffer
 
-      mediaRecorder.ondataavailable = (event) => {
+      // Clear previous states
+      setStreamingText('');
+      streamingTextRef.current = ''; // Clear ref
+
+      // Use timeslice to get chunks every 2 seconds for accumulative transcription
+      const CHUNK_DURATION_MS = 2000;
+
+      mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          accumulativeAudioRef.current.push(event.data); // Add to accumulative buffer
+
+          // If recording is still active, transcribe ALL audio so far (accumulative)
+          if (isRecording || mediaRecorderRef.current?.state === 'recording') {
+            await transcribeAccumulative();
+          }
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
+      mediaRecorder.onstop = () => {
+        // When recording stops, finalize the text using ref (avoids closure issue)
+        const finalText = streamingTextRef.current.trim();
+
+        // Clear streaming text first to avoid duplication in textarea
+        setStreamingText('');
+        streamingTextRef.current = '';
+
+        // Then append to consultation if there's text
+        if (finalText) {
+          setConsultation(prev => prev ? `${prev}\n\n${finalText}` : finalText);
+        }
 
         // Stop all tracks to release microphone
-        stream.getTracks().forEach(track => track.stop());
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+
+        // Finally, update recording state
+        setIsRecording(false);
       };
 
-      mediaRecorder.start();
+      // Start recording with timeslice for accumulative processing
+      mediaRecorder.start(CHUNK_DURATION_MS);
       setIsRecording(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
@@ -56,66 +91,48 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
+      // Don't set isRecording here - let onstop handler do it to avoid race condition
+      // setIsRecording(false);
     }
   };
 
-  const transcribeAudio = async (audioBlob: Blob) => {
-    setIsTranscribing(true);
-
+  const transcribeAccumulative = async () => {
     try {
+      // Create a blob from ALL accumulated audio chunks so far
+      const accumulativeBlob = new Blob(accumulativeAudioRef.current, { type: 'audio/webm' });
+
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('audio', accumulativeBlob, 'accumulative.webm');
 
       const response = await fetch(`${API_URL}/api/transcribe`, {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error(`Transcription failed: ${response.status}`);
-      }
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.text) {
+          const fullTranscription = result.text.trim();
 
-      const result = await response.json();
-
-      if (result.success && result.text) {
-        let transcribedText = result.text;
-
-        // Extract patient ID if mentioned (e.g., "Patient P004", "ID: P123", "patient ID P456")
-        const patientIdPattern = /(?:patient\s+(?:id\s+)?|id\s*:?\s*)([A-Z]?\d{3,4})/i;
-        const match = transcribedText.match(patientIdPattern);
-
-        if (match) {
-          const extractedId = match[1].toUpperCase();
-          // If it's just a number, prefix with 'P'
-          const formattedId = /^\d+$/.test(extractedId) ? `P${extractedId.padStart(3, '0')}` : extractedId;
-          setPatientId(formattedId);
-
-          // Remove the patient ID mention from the transcribed text
-          transcribedText = transcribedText.replace(match[0], '').trim();
+          // Update the entire streaming text (this is the complete transcription so far)
+          setStreamingText(fullTranscription);
+          streamingTextRef.current = fullTranscription; // Keep ref in sync
         }
-
-        // Append transcription to existing text (or replace if you prefer)
-        setConsultation(prev => prev ? `${prev}\n\n${transcribedText}` : transcribedText);
-      } else {
-        throw new Error('No transcription text returned');
       }
     } catch (error) {
-      console.error('Transcription error:', error);
-      alert(`Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsTranscribing(false);
+      console.error('Accumulative transcription error:', error);
+      // Don't alert for errors, just log them
     }
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-aneya-cream">
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <h1 className="text-[32px] leading-[38px] text-[#351431] mb-8">Clinical Decision Support</h1>
+        <h1 className="text-[32px] leading-[38px] text-aneya-navy mb-8">Clinical Decision Support</h1>
 
         {/* Patient ID - above consultation summary */}
         <div className="mb-6">
-          <label htmlFor="patient-id" className="block mb-2 text-[14px] leading-[18px] text-[#351431]">
+          <label htmlFor="patient-id" className="block mb-2 text-[14px] leading-[18px] text-aneya-navy">
             Patient ID:
           </label>
           <input
@@ -124,41 +141,29 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
             value={patientId}
             onChange={(e) => setPatientId(e.target.value)}
             placeholder="e.g., P004"
-            className="w-full max-w-xs p-3 border-2 border-[#F0D1DA] rounded-[10px] focus:outline-none focus:border-[#351431] transition-colors text-[16px] leading-[1.5] text-[#351431]"
+            className="w-full max-w-xs p-3 bg-white border-2 border-aneya-teal rounded-[10px] focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
           />
         </div>
 
         {/* Consultation summary */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <label htmlFor="consultation" className="text-[14px] leading-[18px] text-[#351431]">
-              Heidi consultation summary:
+          <div className="mb-3 flex items-center justify-between">
+            <label htmlFor="consultation" className="text-[14px] leading-[18px] text-aneya-navy">
+              aneya consultation summary:
             </label>
 
-            {/* Microphone button */}
             <button
               onClick={isRecording ? stopRecording : startRecording}
-              disabled={isTranscribing}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-[10px] font-medium text-[14px]
                 transition-all duration-200
                 ${isRecording
                   ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
-                  : isTranscribing
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-[#351431] hover:bg-[#4a1d43] text-white'
+                  : 'bg-aneya-navy hover:bg-aneya-navy-hover text-white'
                 }
               `}
             >
-              {isTranscribing ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Transcribing...
-                </>
-              ) : isRecording ? (
+              {isRecording ? (
                 <>
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                     <rect x="6" y="6" width="8" height="8" rx="1" />
@@ -170,7 +175,7 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                   </svg>
-                  Voice Input
+                  Record Consultation
                 </>
               )}
             </button>
@@ -178,11 +183,29 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
 
           <textarea
             id="consultation"
-            value={consultation}
-            onChange={(e) => setConsultation(e.target.value)}
+            value={streamingText ? `${consultation}${consultation ? '\n\n' : ''}${streamingText}` : consultation}
+            onChange={(e) => {
+              // Only allow edits when not recording
+              if (!isRecording) {
+                setConsultation(e.target.value);
+              }
+            }}
             placeholder={EXAMPLE_CONSULTATION}
-            className="w-full h-[300px] p-4 border-2 border-[#F0D1DA] rounded-[10px] resize-none focus:outline-none focus:border-[#351431] transition-colors text-[16px] leading-[1.5] text-[#351431]"
+            className="w-full h-[300px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
+            disabled={isRecording}
           />
+
+          {/* Streaming indicator */}
+          {isRecording && (
+            <div className="mt-2 flex items-center gap-2 text-[12px] text-aneya-navy">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span>
+                {streamingText
+                  ? 'Live transcription updating...'
+                  : 'Recording... transcription will begin shortly'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Bottom button */}

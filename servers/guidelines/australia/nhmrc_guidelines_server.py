@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from typing import Optional, List, Dict, Any
 from urllib.parse import urljoin
 from fastmcp import FastMCP
+from mcp_utils import print_stderr
 
 # Initialize FastMCP server with proper name and instructions
 mcp = FastMCP(
@@ -49,13 +50,13 @@ def fetch_guidelines_page(retries: int = 3) -> Optional[BeautifulSoup]:
             return BeautifulSoup(response.content, 'lxml')
         except requests.Timeout:
             if attempt < retries - 1:
-                print(f"Timeout on attempt {attempt + 1}, retrying...")
+                print_stderr(f"Timeout on attempt {attempt + 1}, retrying...")
                 continue
             else:
-                print(f"Error fetching guidelines page: Timeout after {retries} attempts")
+                print_stderr(f"Error fetching guidelines page: Timeout after {retries} attempts")
                 return None
         except requests.RequestException as e:
-            print(f"Error fetching guidelines page: {e}")
+            print_stderr(f"Error fetching guidelines page: {e}")
             return None
     return None
 

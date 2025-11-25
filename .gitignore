@@ -29,3 +29,6 @@ frontend/dist/
 
 # Vercel
 .vercel
+
+# Test files
+transcription/test_audio.mp3

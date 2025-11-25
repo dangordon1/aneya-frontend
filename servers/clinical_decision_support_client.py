@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 import os
 import httpx
+import time
 
 
 # ============================================================================
@@ -1343,6 +1344,36 @@ Medical condition:"""
             print(f"Consultation: {clinical_scenario[:100]}...")
             print("="*70)
 
+        # Step 0: Get patient info if patient_id provided
+        if patient_id and verbose:
+            print("\n📋 Step 0: Retrieving patient information...")
+
+        if patient_id:
+            try:
+                tool_start = time.time()
+                patient_info_result = await self.call_tool("get_patient_info", {"patient_id": patient_id})
+                tool_latency = time.time() - tool_start
+
+                patient_data = json.loads(patient_info_result.content[0].text)
+
+                if verbose:
+                    print(f"   ⏱️  Tool 'get_patient_info' latency: {tool_latency:.2f}s")
+
+                if patient_data.get('success'):
+                    # Override with actual patient data from database
+                    patient_age = patient_data.get('age', patient_age)
+                    if not allergies and patient_data.get('allergies'):
+                        allergies = ', '.join(patient_data.get('allergies', []))
+
+                    if verbose:
+                        print(f"   ✓ Retrieved patient info: Age {patient_age}, Weight {patient_data.get('weight_kg')}kg")
+                else:
+                    if verbose:
+                        print(f"   ⚠️  Could not retrieve patient info: {patient_data.get('error')}")
+            except Exception as e:
+                if verbose:
+                    print(f"   ⚠️  Error retrieving patient info: {e}")
+
         # Step 1: Claude analyzes consultation WITH TOOLS
         if verbose:
             print("\n🤖 Step 1: Analyzing consultation with Claude (with tools)...")
@@ -1356,10 +1387,22 @@ Medical condition:"""
             relevant_tools = [t['name'] for t in tools if 'search' in t['name'].lower() or 'nice' in t['name'].lower() or 'bnf' in t['name'].lower()]
             print(f"   Relevant tools: {', '.join(relevant_tools[:8])}")
 
+        # Build patient context section for prompt
+        patient_context = ""
+        if patient_age or patient_id or allergies:
+            patient_context = "\n\nPATIENT INFORMATION:"
+            if patient_age:
+                patient_context += f"\n- Age: {patient_age}"
+            if patient_id:
+                patient_context += f"\n- Patient ID: {patient_id}"
+            if allergies:
+                patient_context += f"\n- Known allergies: {allergies}"
+            patient_context += "\n\nNote: Extract additional patient details (age, weight, pregnancy status, etc.) from the consultation text if mentioned."
+
         # Build prompt for Claude
         prompt = f"""Analyze this clinical consultation and provide structured diagnosis and treatment information.
 
-CONSULTATION: {clinical_scenario}
+CONSULTATION: {clinical_scenario}{patient_context}
 
 TASK:
 1. Use the available tools to search for relevant clinical guidelines and treatment information
@@ -1367,10 +1410,17 @@ TASK:
    - The diagnosis (with confidence level: high/medium/low)
    - Appropriate treatments
    - Specific drug names mentioned or recommended (use generic names, e.g., "Amoxicillin" not "Amoxil")
+   - Patient age/weight if mentioned in consultation (override provided patient info if consultation is more specific)
 
 Return your final answer as JSON ONLY (no other text):
 
 {{
+  "patient": {{
+    "age": "extracted or provided age",
+    "weight_kg": "weight in kg if mentioned",
+    "pregnancy_status": "pregnant/not pregnant/unknown",
+    "special_populations": ["elderly", "pediatric", "renal_impairment", etc. if applicable]
+  }},
   "diagnoses": [
     {{
       "diagnosis": "medical condition name",
@@ -1392,14 +1442,17 @@ Return your final answer as JSON ONLY (no other text):
 
         try:
             # Initial call to Claude
+            llm_start = time.time()
             response = self.anthropic.messages.create(
                 model="claude-haiku-4-5",
                 max_tokens=4096,
                 tools=tools,
                 messages=messages
             )
+            llm_latency = time.time() - llm_start
 
             if verbose:
+                print(f"   ⏱️  LLM Call #1 latency: {llm_latency:.2f}s")
                 print(f"   Stop reason: {response.stop_reason}")
 
             # Tool use loop
@@ -1414,47 +1467,67 @@ Return your final answer as JSON ONLY (no other text):
                         if verbose:
                             print(f"   🔧 Calling tool: {tool_name}({tool_input})")
 
-                        # Call the MCP tool
-                        result = await self.call_tool(tool_name, tool_input)
-                        result_text = result.content[0].text
+                        # Call the MCP tool (with error handling for unknown tools)
+                        try:
+                            tool_start = time.time()
+                            result = await self.call_tool(tool_name, tool_input)
+                            tool_latency = time.time() - tool_start
+                            result_text = result.content[0].text
 
-                        if verbose:
-                            # Parse and show summary
-                            try:
-                                data = json.loads(result_text)
-                                if 'results' in data:
-                                    print(f"      → Found {len(data['results'])} results")
-                            except:
-                                pass
+                            if verbose:
+                                print(f"      ⏱️  Tool '{tool_name}' latency: {tool_latency:.2f}s")
+                                # Parse and show summary
+                                try:
+                                    data = json.loads(result_text)
+                                    if 'results' in data:
+                                        print(f"      → Found {len(data['results'])} results")
+                                except:
+                                    pass
 
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": content_block.id,
-                            "content": result_text
-                        })
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": content_block.id,
+                                "content": result_text
+                            })
+                        except Exception as e:
+                            # Return error to Claude so it can continue
+                            error_message = f'{{"error": "Tool call failed: {str(e)}"}}'
+                            if verbose:
+                                print(f"      ⚠️  Error: {e}")
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": content_block.id,
+                                "content": error_message,
+                                "is_error": True
+                            })
 
                 # Add assistant response and tool results to conversation
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
 
                 # Continue conversation
+                llm_start = time.time()
                 response = self.anthropic.messages.create(
                     model="claude-haiku-4-5",
                     max_tokens=4096,
                     tools=tools,
                     messages=messages
                 )
+                llm_latency = time.time() - llm_start
 
                 if verbose:
+                    print(f"   ⏱️  LLM Call (continuation) latency: {llm_latency:.2f}s")
                     print(f"   Stop reason: {response.stop_reason}")
 
             # Extract final JSON response
+            patient_info = {}
             for block in response.content:
                 if hasattr(block, 'text'):
                     try:
                         # Try direct JSON parse
                         result = json.loads(block.text)
                         diagnoses = result.get('diagnoses', [])
+                        patient_info = result.get('patient', {})
                         break
                     except:
                         # Try to find JSON in text
@@ -1465,12 +1538,15 @@ Return your final answer as JSON ONLY (no other text):
                             try:
                                 result = json.loads(text[json_start:json_end])
                                 diagnoses = result.get('diagnoses', [])
+                                patient_info = result.get('patient', {})
                                 break
                             except:
                                 pass
 
             if verbose:
                 print(f"\n   ✓ Extracted {len(diagnoses)} diagnoses")
+                if patient_info:
+                    print(f"   ✓ Patient: {patient_info.get('age', 'N/A')}, {patient_info.get('weight_kg', 'N/A')}kg")
                 for d in diagnoses:
                     print(f"      • {d.get('diagnosis')} ({d.get('confidence')} confidence)")
                     for tx in d.get('treatments', []):
@@ -1622,10 +1698,184 @@ DIAGNOSES ({len(diagnoses)}):
         if not diagnoses:
             summary += "\nNo diagnoses identified."
 
+        # Step 5: Build bnf_prescribing_guidance for frontend compatibility
+        # BATCH OPTIMIZATION: Collect all BNF data first, then make ONE LLM call
+        bnf_prescribing_guidance = []
+
+        # Extract current medications from consultation text (for interaction checking)
+        import re
+        current_meds = []
+        med_patterns = [
+            r'on ([a-z]+(?:illin|pril|formin|olol|statin|zole|pine))',  # Common drug suffixes
+            r'taking ([a-z]+(?:illin|pril|formin|olol|statin|zole|pine))',
+            r'current.*?:([^.]+)',
+            r'medications?:([^.]+)'
+        ]
+        for pattern in med_patterns:
+            matches = re.findall(pattern, clinical_scenario.lower())
+            current_meds.extend(matches)
+        if current_meds:
+            # Clean up and deduplicate
+            current_meds = list(set([m.strip() for m in current_meds if m.strip()]))
+
+        # First pass: collect ALL BNF data from ALL diagnoses
+        all_bnf_items = []  # List of (condition, bnf_info) tuples
+        for diag in diagnoses:
+            for tx in diag.get('treatments', []):
+                bnf_info = tx.get('bnf_info', {})
+                if bnf_info:
+                    condition = diag.get('diagnosis', 'Unknown condition')
+                    all_bnf_items.append((condition, bnf_info, diag))
+
+        # If we have any BNF data and Claude is available, make ONE batch call
+        if all_bnf_items and self.anthropic:
+            if verbose:
+                print(f"\n   🔍 Batch parsing BNF data for {len(all_bnf_items)} condition(s)...")
+
+            # Build patient context string (shared across all medications)
+            patient_context_str = ""
+            if patient_info or allergies or current_meds:
+                patient_context_str = "\n\nPATIENT CONTEXT:"
+                if patient_info:
+                    if patient_info.get('age'):
+                        patient_context_str += f"\n- Age: {patient_info['age']}"
+                    if patient_info.get('weight_kg'):
+                        patient_context_str += f"\n- Weight: {patient_info['weight_kg']}kg"
+                    if patient_info.get('pregnancy_status'):
+                        patient_context_str += f"\n- Pregnancy: {patient_info['pregnancy_status']}"
+                    if patient_info.get('special_populations'):
+                        patient_context_str += f"\n- Special populations: {', '.join(patient_info['special_populations'])}"
+                if allergies:
+                    patient_context_str += f"\n- Known allergies: {allergies}"
+                if current_meds:
+                    patient_context_str += f"\n- Current medications: {', '.join(current_meds)}"
+
+            # Build comprehensive BNF summary for ALL medications
+            batch_bnf_summary = f"{patient_context_str}\n\n"
+            condition_index = {}  # Map condition to index for response parsing
+            for idx, (condition, bnf_info, diag) in enumerate(all_bnf_items):
+                batch_bnf_summary += f"=== CONDITION {idx+1}: {condition} ===\n"
+                condition_index[idx] = (condition, diag, bnf_info)
+
+                for drug_name, drug_data in bnf_info.items():
+                    batch_bnf_summary += f"\nDRUG: {drug_name}\n"
+                    batch_bnf_summary += f"INDICATIONS: {drug_data.get('indications', 'Not available')[:500]}\n"
+                    batch_bnf_summary += f"DOSAGE: {drug_data.get('dosage', 'Not available')[:2000]}\n"
+
+                    # Include interaction data for parsing
+                    interactions_raw = drug_data.get('interactions', '')
+                    if interactions_raw and len(interactions_raw) > 50:
+                        batch_bnf_summary += f"INTERACTIONS: {interactions_raw[:1000]}\n"
+
+                batch_bnf_summary += "\n"
+
+            # Enhanced prompt for batch processing with interaction extraction
+            batch_parse_prompt = f"""Extract patient-specific prescribing information for ALL conditions listed below.
+
+{batch_bnf_summary}
+
+CRITICAL INSTRUCTIONS:
+1. For DOSE: If patient age is known, extract ONLY the age-appropriate dose for that specific age group. Do NOT include other age ranges.
+2. For DOSE: If patient age is unknown, select the most commonly used adult dose or note "Age-dependent - see BNF"
+3. For NOTES: Include relevant warnings for this specific patient (renal/hepatic impairment, etc.)
+4. For DRUG_INTERACTIONS: Extract specific interactions with patient's current medications ({', '.join(current_meds) if current_meds else 'none listed'}).
+   - Parse the INTERACTIONS section to find actual drug-drug interactions, NOT just "View interactions" links
+   - Focus on clinically significant interactions only
+   - If no interactions found, use empty string
+5. Return separate entries for EACH condition
+
+Return ONLY valid JSON (no other text):
+
+{{
+  "conditions": [
+    {{
+      "condition_number": 1,
+      "treatments": [
+        {{
+          "medication": "drug name",
+          "dose": "patient-specific dose",
+          "route": "route (e.g., 'Oral', 'IV')",
+          "duration": "duration",
+          "notes": "patient-specific considerations",
+          "drug_interactions": "specific interactions with current meds (e.g., 'May enhance hypoglycemic effect of metformin' or 'Risk of hyperkalaemia with ramipril')"
+        }}
+      ]
+    }}
+  ]
+}}"""
+
+            try:
+                llm_start = time.time()
+                response = self.anthropic.messages.create(
+                    model="claude-haiku-4-5",
+                    max_tokens=4096,  # Increased for batch processing
+                    messages=[{"role": "user", "content": batch_parse_prompt}]
+                )
+                llm_latency = time.time() - llm_start
+
+                if verbose:
+                    print(f"      ⏱️  LLM Call (BATCH BNF parsing for {len(all_bnf_items)} condition(s)) latency: {llm_latency:.2f}s")
+
+                # Extract JSON from response
+                response_text = response.content[0].text
+
+                # Try to find JSON in the response
+                if '{' in response_text:
+                    json_start = response_text.index('{')
+                    json_end = response_text.rindex('}') + 1
+                    parsed_data = json.loads(response_text[json_start:json_end])
+
+                    # Process each condition's treatments
+                    for condition_result in parsed_data.get('conditions', []):
+                        condition_num = condition_result.get('condition_number', 0)
+                        if condition_num - 1 in condition_index:
+                            condition, diag, bnf_info = condition_index[condition_num - 1]
+
+                            # Build treatment list
+                            first_line_treatments = []
+                            for treatment in condition_result.get('treatments', []):
+                                drug_name = treatment.get('medication', '').strip()
+                                drug_data = bnf_info.get(drug_name, {})
+
+                                first_line_treatments.append({
+                                    'medication': drug_name,
+                                    'dose': treatment.get('dose', 'See BNF'),
+                                    'route': treatment.get('route', 'See BNF'),
+                                    'duration': treatment.get('duration', 'See BNF'),
+                                    'notes': treatment.get('notes', ''),
+                                    'drug_interactions': treatment.get('drug_interactions', ''),
+                                    'bnf_url': drug_data.get('url', '') if drug_data else ''
+                                })
+
+                            if verbose:
+                                print(f"      ✓ Extracted {len(first_line_treatments)} treatment(s) for {condition}")
+
+                            if first_line_treatments:
+                                bnf_prescribing_guidance.append({
+                                    'condition': condition,
+                                    'source': 'BNF (British National Formulary)',
+                                    'source_url': 'https://bnf.nice.org.uk',
+                                    'severity_assessment': f"{diag.get('confidence', 'unknown')} confidence diagnosis",
+                                    'special_considerations': {
+                                        'elderly': 'See individual drug monographs',
+                                        'renal_impairment': 'See individual drug monographs',
+                                        'hepatic_impairment': 'See individual drug monographs',
+                                        'pregnancy': 'See individual drug monographs'
+                                    },
+                                    'first_line_treatments': first_line_treatments,
+                                    'alternative_treatments': []
+                                })
+
+            except Exception as e:
+                if verbose:
+                    print(f"      ⚠️  Batch BNF parsing error: {e}")
+                # Fallback to no guidance
+                pass
+
         result = {
             'diagnoses': diagnoses,
             'summary': summary,
-            'bnf_prescribing_guidance': []  # For backwards compatibility with API
+            'bnf_prescribing_guidance': bnf_prescribing_guidance
         }
 
         if verbose:

@@ -21,42 +21,42 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <h1 className="text-[32px] leading-[38px] text-[#351431] mb-8">
+        <h1 className="text-[32px] leading-[38px] text-aneya-navy mb-8">
           Clinical Analysis Report
         </h1>
 
         {/* 1. Patient Information Card */}
         {patientInfo && patientInfo.success && (
           <section className="mb-8">
-            <h2 className="text-[26px] leading-[32px] text-[#351431] mb-4">Patient Information</h2>
-            <div className="bg-white rounded-[16px] p-6 clara-shadow-card border border-[#F0D1DA]">
+            <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Patient Information</h2>
+            <div className="bg-white rounded-[16px] p-6 aneya-shadow-card border border-aneya-soft-pink">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 <div>
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-1">Patient ID</div>
-                  <div className="text-[17px] leading-[26px] text-[#351431]">{patientInfo.patient_id || 'N/A'}</div>
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Patient ID</div>
+                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.patient_id || 'N/A'}</div>
                 </div>
                 <div>
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-1">Age</div>
-                  <div className="text-[17px] leading-[26px] text-[#351431]">{patientInfo.age || 'N/A'}</div>
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Age</div>
+                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.age || 'N/A'}</div>
                 </div>
                 <div>
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-1">Gender</div>
-                  <div className="text-[17px] leading-[26px] text-[#351431]">{patientInfo.gender || 'N/A'}</div>
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Gender</div>
+                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.gender || 'N/A'}</div>
                 </div>
                 <div>
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-1">Weight</div>
-                  <div className="text-[17px] leading-[26px] text-[#351431]">{patientInfo.weight_kg ? `${patientInfo.weight_kg} kg` : 'N/A'}</div>
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Weight</div>
+                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.weight_kg ? `${patientInfo.weight_kg} kg` : 'N/A'}</div>
                 </div>
                 <div>
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-1">BMI</div>
-                  <div className="text-[17px] leading-[26px] text-[#351431]">{patientInfo.bmi || 'N/A'}</div>
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">BMI</div>
+                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.bmi || 'N/A'}</div>
                 </div>
               </div>
 
-              <div className="border-t border-[#F0D1DA] pt-4">
+              <div className="border-t border-aneya-soft-pink pt-4">
                 <div className="mb-4">
-                  <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-2">Allergies</div>
-                  <div className="text-[15px] leading-[22px] text-[#351431]">
+                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-2">Allergies</div>
+                  <div className="text-[15px] leading-[22px] text-aneya-navy">
                     {patientInfo.allergies && patientInfo.allergies.length > 0
                       ? patientInfo.allergies.join(', ')
                       : 'No known drug allergies (NKDA)'}
@@ -65,8 +65,8 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
 
                 {patientInfo.current_medications && patientInfo.current_medications.length > 0 && (
                   <div>
-                    <div className="text-[13px] leading-[18px] text-[#5C3E53] mb-2">Current Medications</div>
-                    <ul className="text-[15px] leading-[22px] text-[#351431] space-y-1">
+                    <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-2">Current Medications</div>
+                    <ul className="text-[15px] leading-[22px] text-aneya-navy space-y-1">
                       {patientInfo.current_medications.map((med: string, idx: number) => (
                         <li key={idx}>• {med}</li>
                       ))}
@@ -81,12 +81,12 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
         {/* 2. Clinical Diagnoses Section */}
         {diagnoses.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-[26px] leading-[32px] text-[#351431] mb-4">Clinical Diagnoses</h2>
+            <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Clinical Diagnoses</h2>
 
             {/* Primary Diagnosis */}
             {diagnoses[0] && (
               <>
-                <p className="text-[17px] leading-[26px] text-[#351431] mb-3 font-semibold">Primary Diagnosis:</p>
+                <p className="text-[17px] leading-[26px] text-aneya-navy mb-3 font-semibold">Primary Diagnosis:</p>
                 <DiagnosisCard
                   diagnosisNumber={1}
                   diagnosis={diagnoses[0].diagnosis}
@@ -102,7 +102,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
             {/* Alternative Diagnoses */}
             {diagnoses.length > 1 && (
               <>
-                <p className="text-[17px] leading-[26px] text-[#351431] mb-3 mt-6 font-semibold">Alternative Diagnoses:</p>
+                <p className="text-[17px] leading-[26px] text-aneya-navy mb-3 mt-6 font-semibold">Alternative Diagnoses:</p>
                 <div className="space-y-4">
                   {diagnoses.slice(1).map((diag: any, idx: number) => (
                     <DiagnosisCard
@@ -125,21 +125,21 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
         {/* 3. Prescribing Guidance Section */}
         {bnfGuidance.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-[26px] leading-[32px] text-[#351431] mb-4">
+            <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">
               Evidence-Based Prescribing Guidance
             </h2>
 
             {bnfGuidance.map((guidance: any, idx: number) => (
-              <div key={idx} className="mb-6 bg-white rounded-[16px] p-6 clara-shadow-card border border-[#F0D1DA]">
-                <h3 className="text-[22px] leading-[28px] text-[#351431] mb-2">
+              <div key={idx} className="mb-6 bg-white rounded-[16px] p-6 aneya-shadow-card border border-aneya-soft-pink">
+                <h3 className="text-[22px] leading-[28px] text-aneya-navy mb-2">
                   Prescribing Guidance {idx + 1}: {guidance.condition}
                 </h3>
 
                 {guidance.source && (
-                  <p className="text-[15px] leading-[22px] text-[#5C3E53] mb-2">
+                  <p className="text-[15px] leading-[22px] text-aneya-text-secondary mb-2">
                     <strong>Source:</strong>{' '}
                     {guidance.source_url ? (
-                      <a href={guidance.source_url} target="_blank" rel="noopener noreferrer" className="text-[#351431] hover:underline">
+                      <a href={guidance.source_url} target="_blank" rel="noopener noreferrer" className="text-aneya-navy hover:underline">
                         {guidance.source}
                       </a>
                     ) : (
@@ -149,7 +149,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                 )}
 
                 {guidance.severity_assessment && (
-                  <p className="text-[15px] leading-[22px] text-[#5C3E53] mb-4">
+                  <p className="text-[15px] leading-[22px] text-aneya-text-secondary mb-4">
                     <strong>Severity Assessment:</strong> {guidance.severity_assessment}
                   </p>
                 )}
@@ -158,7 +158,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                   {/* Special Considerations */}
                   {guidance.special_considerations && (
                     <ExpandableSection title="Special Considerations" defaultExpanded={false}>
-                      <div className="space-y-3 text-[15px] leading-[22px] text-[#351431]">
+                      <div className="space-y-3 text-[15px] leading-[22px] text-aneya-navy">
                         {guidance.special_considerations.elderly && (
                           <p><strong>Elderly:</strong> {guidance.special_considerations.elderly}</p>
                         )}
@@ -223,12 +223,12 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
         {/* 4. Resources Consulted Section */}
         {(niceGuidelines.length > 0 || cksTopics.length > 0 || bnfSummaries.length > 0) && (
           <section className="mb-8">
-            <h2 className="text-[26px] leading-[32px] text-[#351431] mb-4">Resources Consulted</h2>
+            <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Resources Consulted</h2>
 
-            <div className="bg-white rounded-[16px] p-6 clara-shadow-card border border-[#F0D1DA] space-y-6">
+            <div className="bg-white rounded-[16px] p-6 aneya-shadow-card border border-aneya-soft-pink space-y-6">
               {niceGuidelines.length > 0 && (
                 <div>
-                  <h3 className="text-[18px] leading-[24px] text-[#351431] mb-3">NICE Guidelines</h3>
+                  <h3 className="text-[18px] leading-[24px] text-aneya-navy mb-3">NICE Guidelines</h3>
                   <ul className="space-y-2">
                     {niceGuidelines.map((guideline: any, idx: number) => (
                       <li key={idx}>
@@ -236,7 +236,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                           href={guideline.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-[#351431] hover:underline"
+                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-aneya-navy hover:underline"
                         >
                           <ExternalLink className="w-4 h-4" />
                           <span>{guideline.reference}: {guideline.title}</span>
@@ -249,7 +249,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
 
               {cksTopics.length > 0 && (
                 <div>
-                  <h3 className="text-[18px] leading-[24px] text-[#351431] mb-3">CKS Topics</h3>
+                  <h3 className="text-[18px] leading-[24px] text-aneya-navy mb-3">CKS Topics</h3>
                   <ul className="space-y-2">
                     {cksTopics.map((topic: any, idx: number) => (
                       <li key={idx}>
@@ -257,7 +257,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                           href={topic.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-[#351431] hover:underline"
+                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-aneya-navy hover:underline"
                         >
                           <ExternalLink className="w-4 h-4" />
                           <span>{topic.title}</span>
@@ -270,7 +270,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
 
               {bnfSummaries.length > 0 && (
                 <div>
-                  <h3 className="text-[18px] leading-[24px] text-[#351431] mb-3">BNF Summaries</h3>
+                  <h3 className="text-[18px] leading-[24px] text-aneya-navy mb-3">BNF Summaries</h3>
                   <ul className="space-y-2">
                     {bnfSummaries.map((bnf: any, idx: number) => (
                       <li key={idx}>
@@ -278,7 +278,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                           href={bnf.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-[#351431] hover:underline"
+                          className="inline-flex items-center gap-2 text-[15px] leading-[22px] text-aneya-navy hover:underline"
                         >
                           <ExternalLink className="w-4 h-4" />
                           <span>{bnf.title}</span>
@@ -296,8 +296,8 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
         <section className="mb-8">
           <WarningBox>
             <div className="space-y-2">
-              <h3 className="text-[18px] leading-[24px] text-[#351431]">Clinical Disclaimer</h3>
-              <p className="text-[15px] leading-[22px] text-[#351431]">
+              <h3 className="text-[18px] leading-[24px] text-aneya-navy">Clinical Disclaimer</h3>
+              <p className="text-[15px] leading-[22px] text-aneya-navy">
                 This analysis is provided as a clinical decision support tool and should not replace clinical judgment.
                 Always consider individual patient factors, local antimicrobial resistance patterns, and current clinical guidelines.
                 Verify all medication doses and interactions before prescribing. In case of clinical deterioration or uncertainty,

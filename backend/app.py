@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Clara - Clinical Decision Support System
+Aneya - Clinical Decision Support System
 Streamlit Web Application
 
 A healthcare AI assistant that analyzes patient consultations and provides
@@ -13,8 +13,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import sys
 
-# Add servers directory to path
-sys.path.insert(0, str(Path(__file__).parent / "servers"))
+# Add servers directory to path (servers is in root directory, one level up from backend)
+sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
 from clinical_decision_support_client import ClinicalDecisionSupportClient
 
 # Load environment variables
@@ -23,7 +23,7 @@ load_dotenv(env_path)
 
 # Page configuration
 st.set_page_config(
-    page_title="Clara - Clinical Decision Support",
+    page_title="Aneya - Clinical Decision Support",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -567,7 +567,7 @@ def main():
         st.session_state.patient_id = "P004"
 
     # Header
-    st.markdown('<h1 class="main-header">Clara</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Aneya</h1>', unsafe_allow_html=True)
 
     # Sidebar for example cases
     with st.sidebar:
