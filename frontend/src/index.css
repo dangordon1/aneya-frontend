@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  /*  aneya Health Color Palette */
+  /* aneya Health Color Palette */
   --aneya-navy: #0c3555;
   --aneya-teal: #1d9e99;
   --aneya-seagreen: #409f88;
@@ -27,7 +27,7 @@ body {
   color: var(--aneya-navy);
 }
 
-/*  aneya Health Typography - Headings use serif */
+/* aneya Health Typography - Headings use serif */
 h1, h2, h3, h4 {
   font-family: Georgia, serif;
   color: var(--aneya-navy);
@@ -63,7 +63,7 @@ p {
   line-height: 22px;
 }
 
-/*  aneya Health custom utility classes */
+/* aneya Health custom utility classes */
 .aneya-shadow-card {
   box-shadow: 0px 2px 12px rgba(12, 53, 85, 0.08);
 }

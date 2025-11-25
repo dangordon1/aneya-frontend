@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { PrimaryButton } from './PrimaryButton';
+import { useDeepgramTranscription } from '../hooks/useDeepgramTranscription';
 
 interface InputScreenProps {
   onAnalyze: (consultation: string, patientId: string) => void;
@@ -7,132 +8,67 @@ interface InputScreenProps {
 
 const EXAMPLE_CONSULTATION = `Patient presents with a 3-day history of productive cough with green sputum, fever (38.5°C), and shortness of breath. They report feeling generally unwell with fatigue and reduced appetite. Past medical history includes type 2 diabetes mellitus (well controlled on metformin) and hypertension (on ramipril). No known drug allergies. Non-smoker. On examination: respiratory rate 22/min, oxygen saturation 94% on air, crackles heard in right lower zone on auscultation.`;
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
 export function InputScreen({ onAnalyze }: InputScreenProps) {
   const [consultation, setConsultation] = useState('');
-  const [patientId, setPatientId] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [streamingText, setStreamingText] = useState(''); // For showing partial results
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const accumulativeAudioRef = useRef<Blob[]>([]); // Store all chunks for accumulative transcription
-  const streamingTextRef = useRef<string>(''); // Ref to track latest streaming text for onstop handler
+  const [patientId, setPatientId] = useState('P004');
 
-  const handleAnalyze = () => {
-    // Use streamingText if it exists (from voice input), otherwise use consultation
-    const textToAnalyze = streamingText.trim() || consultation.trim();
-    if (textToAnalyze) {
-      onAnalyze(textToAnalyze, patientId);
-    }
-  };
+  const {
+    isRecording,
+    isConnecting,
+    interimText,
+    finalTranscript,
+    error: transcriptionError,
+    startRecording,
+    stopRecording,
+    clearTranscript,
+  } = useDeepgramTranscription();
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      accumulativeAudioRef.current = []; // Clear accumulative buffer
+  // Update consultation text when final transcript changes
+  useEffect(() => {
+    if (finalTranscript) {
+      // Extract patient ID if mentioned
+      const patientIdPattern = /(?:patient\s+(?:id\s+)?|id\s*:?\s*)([A-Z]?\d{3,4})/i;
+      const match = finalTranscript.match(patientIdPattern);
 
-      // Clear previous states
-      setStreamingText('');
-      streamingTextRef.current = ''; // Clear ref
+      if (match) {
+        const extractedId = match[1].toUpperCase();
+        const formattedId = /^\d+$/.test(extractedId) ? `P${extractedId.padStart(3, '0')}` : extractedId;
+        setPatientId(formattedId);
+      }
 
-      // Use timeslice to get chunks every 2 seconds for accumulative transcription
-      const CHUNK_DURATION_MS = 2000;
-
-      mediaRecorder.ondataavailable = async (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-          accumulativeAudioRef.current.push(event.data); // Add to accumulative buffer
-
-          // If recording is still active, transcribe ALL audio so far (accumulative)
-          if (isRecording || mediaRecorderRef.current?.state === 'recording') {
-            await transcribeAccumulative();
-          }
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        // When recording stops, finalize the text using ref (avoids closure issue)
-        const finalText = streamingTextRef.current.trim();
-
-        // Clear streaming text first to avoid duplication in textarea
-        setStreamingText('');
-        streamingTextRef.current = '';
-
-        // Then append to consultation if there's text
-        if (finalText) {
-          setConsultation(prev => prev ? `${prev}\n\n${finalText}` : finalText);
-        }
-
-        // Stop all tracks to release microphone
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-
-        // Finally, update recording state
-        setIsRecording(false);
-      };
-
-      // Start recording with timeslice for accumulative processing
-      mediaRecorder.start(CHUNK_DURATION_MS);
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-      alert('Unable to access microphone. Please check permissions.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      // Don't set isRecording here - let onstop handler do it to avoid race condition
-      // setIsRecording(false);
-    }
-  };
-
-  const transcribeAccumulative = async () => {
-    try {
-      // Create a blob from ALL accumulated audio chunks so far
-      const accumulativeBlob = new Blob(accumulativeAudioRef.current, { type: 'audio/webm' });
-
-      const formData = new FormData();
-      formData.append('audio', accumulativeBlob, 'accumulative.webm');
-
-      const response = await fetch(`${API_URL}/api/transcribe`, {
-        method: 'POST',
-        body: formData,
+      // Set consultation text (append to existing if any)
+      setConsultation(prev => {
+        if (!prev) return finalTranscript;
+        return `${prev}\n\n${finalTranscript}`;
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.text) {
-          const fullTranscription = result.text.trim();
+      // Clear the transcript after appending
+      clearTranscript();
+    }
+  }, [finalTranscript, clearTranscript]);
 
-          // Update the entire streaming text (this is the complete transcription so far)
-          setStreamingText(fullTranscription);
-          streamingTextRef.current = fullTranscription; // Keep ref in sync
-        }
-      }
-    } catch (error) {
-      console.error('Accumulative transcription error:', error);
-      // Don't alert for errors, just log them
+  const handleAnalyze = () => {
+    if (consultation.trim()) {
+      onAnalyze(consultation, patientId);
+    }
+  };
+
+  const handleRecordClick = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
   return (
-    <div className="min-h-screen bg-aneya-cream">
+    <div className="min-h-screen bg-white">
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <h1 className="text-[32px] leading-[38px] text-aneya-navy mb-8">Clinical Decision Support</h1>
+        <h1 className="text-[32px] leading-[38px] text-[#0c3555] mb-8">Clinical Decision Support</h1>
 
         {/* Patient ID - above consultation summary */}
         <div className="mb-6">
-          <label htmlFor="patient-id" className="block mb-2 text-[14px] leading-[18px] text-aneya-navy">
+          <label htmlFor="patient-id" className="block mb-2 text-[14px] leading-[18px] text-[#0c3555]">
             Patient ID:
           </label>
           <input
@@ -141,33 +77,46 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
             value={patientId}
             onChange={(e) => setPatientId(e.target.value)}
             placeholder="e.g., P004"
-            className="w-full max-w-xs p-3 bg-white border-2 border-aneya-teal rounded-[10px] focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
+            className="w-full max-w-xs p-3 border-2 border-[#1d9e99] rounded-[10px] focus:outline-none focus:border-[#0c3555] transition-colors text-[16px] leading-[1.5] text-[#0c3555]"
           />
         </div>
 
         {/* Consultation summary */}
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <label htmlFor="consultation" className="text-[14px] leading-[18px] text-aneya-navy">
-              aneya consultation summary:
+          <div className="flex items-center justify-between mb-3">
+            <label htmlFor="consultation" className="text-[14px] leading-[18px] text-[#0c3555]">
+              Heidi consultation summary:
             </label>
 
+            {/* Microphone button */}
             <button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={handleRecordClick}
+              disabled={isConnecting}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-[10px] font-medium text-[14px]
                 transition-all duration-200
                 ${isRecording
-                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
-                  : 'bg-aneya-navy hover:bg-aneya-navy-hover text-white'
+                  ? 'bg-red-500 hover:bg-red-600 text-white'
+                  : isConnecting
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-[#0c3555] hover:bg-[#f6f5ee] text-white'
                 }
               `}
             >
-              {isRecording ? (
+              {isConnecting ? (
                 <>
-                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                    <rect x="6" y="6" width="8" height="8" rx="1" />
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
+                  Connecting...
+                </>
+              ) : isRecording ? (
+                <>
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                  </span>
                   Stop Recording
                 </>
               ) : (
@@ -181,31 +130,36 @@ export function InputScreen({ onAnalyze }: InputScreenProps) {
             </button>
           </div>
 
-          <textarea
-            id="consultation"
-            value={streamingText ? `${consultation}${consultation ? '\n\n' : ''}${streamingText}` : consultation}
-            onChange={(e) => {
-              // Only allow edits when not recording
-              if (!isRecording) {
-                setConsultation(e.target.value);
-              }
-            }}
-            placeholder={EXAMPLE_CONSULTATION}
-            className="w-full h-[300px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
-            disabled={isRecording}
-          />
-
-          {/* Streaming indicator */}
-          {isRecording && (
-            <div className="mt-2 flex items-center gap-2 text-[12px] text-aneya-navy">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span>
-                {streamingText
-                  ? 'Live transcription updating...'
-                  : 'Recording... transcription will begin shortly'}
-              </span>
+          {/* Transcription error display */}
+          {transcriptionError && (
+            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-[10px] text-red-700 text-[14px]">
+              {transcriptionError}
             </div>
           )}
+
+          {/* Live transcription preview */}
+          {(isRecording || interimText) && (
+            <div className="mb-3 p-3 bg-[#1d9e99]/30 border border-[#1d9e99] rounded-[10px]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-[12px] text-[#0c3555] font-medium">Live Transcription</span>
+              </div>
+              <p className="text-[14px] text-[#0c3555] italic">
+                {interimText || 'Listening...'}
+              </p>
+            </div>
+          )}
+
+          <textarea
+            id="consultation"
+            value={consultation}
+            onChange={(e) => setConsultation(e.target.value)}
+            placeholder={EXAMPLE_CONSULTATION}
+            className="w-full h-[300px] p-4 border-2 border-[#1d9e99] rounded-[10px] resize-none focus:outline-none focus:border-[#0c3555] transition-colors text-[16px] leading-[1.5] text-[#0c3555]"
+          />
         </div>
 
         {/* Bottom button */}

@@ -109,11 +109,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-aneya-cream">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="bg-aneya-navy py-4 px-6 border-b border-aneya-teal sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex items-center">
-          <img src="/aneya-logo.png" alt="aneya" className="h-40" />
+      <header className="bg-[#0c3555] py-4 px-6 aneya-shadow-card sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-white text-[28px]" style={{ fontFamily: 'Georgia, serif' }}>
+            clara
+          </h1>
         </div>
       </header>
 

@@ -13,33 +13,33 @@ export function ProgressStep({ title, status, substeps, className = '' }: Progre
   const getIcon = () => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-6 h-6 text-aneya-text-disabled" />;
+        return <Clock className="w-6 h-6 text-[#8B7A87]" />;
       case 'running':
-        return <Loader2 className="w-6 h-6 text-aneya-teal animate-spin" />;
+        return <Loader2 className="w-6 h-6 text-[#0c3555] animate-spin" />;
       case 'complete':
-        return <CheckCircle2 className="w-6 h-6 text-aneya-seagreen" />;
+        return <CheckCircle2 className="w-6 h-6 text-[#0c3555]" />;
     }
   };
 
   const getTextColor = () => {
     switch (status) {
       case 'pending':
-        return 'text-aneya-text-disabled';
+        return 'text-[#8B7A87]';
       case 'running':
-        return 'text-aneya-navy';
+        return 'text-[#0c3555]';
       case 'complete':
-        return 'text-aneya-navy';
+        return 'text-[#0c3555]';
     }
   };
 
   const getBgColor = () => {
     switch (status) {
       case 'pending':
-        return 'bg-white border-2 border-transparent';
+        return 'bg-white';
       case 'running':
-        return 'bg-aneya-teal/10 border-2 border-aneya-teal';
+        return 'bg-[#1d9e99]';
       case 'complete':
-        return 'bg-white border-2 border-aneya-seagreen';
+        return 'bg-[#1d9e99]';
     }
   };
 
@@ -52,7 +52,7 @@ export function ProgressStep({ title, status, substeps, className = '' }: Progre
           {substeps && status === 'running' && (
             <div className="mt-3 space-y-2">
               {substeps.map((substep, index) => (
-                <div key={index} className="flex items-center gap-2 text-[15px] leading-[22px] text-aneya-text-secondary ml-4">
+                <div key={index} className="flex items-center gap-2 text-[15px] leading-[22px] text-[#5C3E53] ml-4">
                   <span>{substep}</span>
                 </div>
               ))}
