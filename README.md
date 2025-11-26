@@ -6,7 +6,7 @@ React + TypeScript frontend for clinical decision support with real-time voice t
 
 This is the user-facing interface for aneya, providing:
 - **React + TypeScript UI** - Modern, responsive clinical interface
-- **Real-time Voice Transcription** - Deepgram integration for consultation dictation
+- **Real-time Voice Transcription** - NVIDIA Parakeet TDT model for consultation dictation
 - **aneya Branding** - Custom color scheme and design system
 - **Clinical Workflow** - Intuitive interface for consultation analysis
 
@@ -25,10 +25,12 @@ This is the user-facing interface for aneya, providing:
 ## Features
 
 ### Voice Transcription
-- Real-time speech-to-text using Deepgram's nova-2-medical model
-- WebSocket streaming for low-latency transcription
-- Automatic patient ID extraction from dictation
-- Interim and final transcript display
+- Real-time speech-to-text using **NVIDIA Parakeet TDT 1.1B** model
+- Accumulative transcription pattern for high accuracy (5% WER)
+- Progressive updates every 2 seconds during recording
+- Medical terminology optimized
+
+**Note on Cold Start Latency:** The first transcription request takes ~5 seconds due to model loading. Subsequent requests are 2-3 seconds. See [Performance](#performance) section for details.
 
 ### User Interface
 - Clean, professional design with aneya branding
@@ -72,15 +74,15 @@ Create `frontend/.env` for local development:
 
 ```bash
 VITE_API_URL=http://localhost:8000
-VITE_DEEPGRAM_API_KEY=your-deepgram-key
 ```
 
 For production (configured in Vercel):
 
 ```bash
 VITE_API_URL=https://aneya-backend-fhnsxp4nua-nw.a.run.app
-VITE_DEEPGRAM_API_KEY=your-deepgram-key
 ```
+
+Note: Transcription uses the backend's Parakeet TDT model - no separate API keys required for voice input.
 
 ### Running Locally
 
@@ -139,13 +141,13 @@ React components in `frontend/src/components/`:
 - **PrimaryButton.tsx** - Branded button component
 - **ProgressStep.tsx** - Individual progress step indicator
 
-### Hooks
+### Voice Input Architecture
 
-- **useDeepgramTranscription.ts** - WebSocket-based voice transcription
-  - Manages MediaRecorder for audio capture
-  - Handles WebSocket connection to backend
-  - Provides interim and final transcripts
-  - Auto-reconnection logic
+Voice transcription uses an **accumulative pattern** in `InputScreen.tsx`:
+- Records audio in 2-second chunks via MediaRecorder
+- Sends progressively longer audio blobs to `/api/transcribe`
+- Backend transcribes using Parakeet TDT and returns full text
+- UI updates with complete transcription (not incremental)
 
 ## API Integration
 
@@ -162,7 +164,28 @@ Frontend makes a single POST to `/api/analyze` with:
 }
 ```
 
-WebSocket endpoint for transcription: `/ws/transcribe`
+Transcription endpoint: `POST /api/transcribe` (multipart form with audio file)
+
+## Performance
+
+### Cold Start Behavior
+
+The first transcription request is slower than subsequent ones:
+
+| Request | Latency | Reason |
+|---------|---------|--------|
+| First | ~5-6 seconds | Model loading into memory |
+| Subsequent | ~2-3 seconds | Model already loaded |
+
+**Why this happens:**
+- Parakeet TDT is a 600MB model that must be loaded into CPU/GPU memory
+- Cloud Run may scale to zero, requiring cold start on first request
+- NeMo framework has initialization overhead
+
+**Mitigation options:**
+1. Set Cloud Run `min-instances: 1` to keep backend warm
+2. Implement a warm-up request on page load
+3. Show user feedback during first transcription
 
 ## Related Repositories
 

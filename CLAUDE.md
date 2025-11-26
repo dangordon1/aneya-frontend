@@ -4,120 +4,83 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**aneya** is a clinical decision support system consisting of:
-- **React + TypeScript frontend** (port 5173) - User interface with Figma-based design
-- **FastAPI backend** (port 8000) - API wrapper for clinical decision support
-- **Multi-MCP server architecture** - Specialized healthcare data servers
-- **Claude AI integration** - AI-powered guideline analysis and prescribing recommendations
+**aneya** is a clinical decision support system with a **split repository architecture**:
 
-The system provides evidence-based clinical recommendations by searching UK health guidelines (NICE, BNF) and medical literature (PubMed), then using Claude to synthesize prescribing guidance.
+- **This repo (aneya)**: React + TypeScript frontend
+- **Backend repo (aneya-backend)**: FastAPI + MCP servers (separate repository)
+
+**Live URLs:**
+- Frontend: https://aneya.vercel.app
+- Backend: https://aneya-backend-fhnsxp4nua-nw.a.run.app
 
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────┐         ┌─────────────────────┐
-│  React Frontend │ ───────▶│  FastAPI Backend │ ───────▶│  MCP Servers        │
-│  (Port 5173)    │         │  (Port 8000)     │         │  + Claude AI        │
-└─────────────────┘         └──────────────────┘         └─────────────────────┘
+┌─────────────────┐         ┌──────────────────────────────────────────────┐
+│  React Frontend │ ───────▶│  FastAPI Backend (separate repo)              │
+│  (Vercel)       │         │  - MCP Servers (NICE, BNF, PubMed)           │
+│                 │         │  - Parakeet TDT transcription                │
+│                 │         │  - Claude AI analysis                        │
+└─────────────────┘         └──────────────────────────────────────────────┘
 ```
 
-### MCP Server Architecture
+## This Repository Contains
 
-The backend connects to **5 independent FastMCP servers**:
+- `frontend/` - React + TypeScript application
+- Voice transcription UI (uses backend's Parakeet TDT model)
+- Clinical consultation input and results display
+- Vercel deployment configuration
 
-1. **Geolocation** (`servers/geolocation_server.py`) - IP-based country detection
-2. **Patient Info** (`servers/patient_info_server.py`) - Patient data management
-3. **NICE Guidelines** (`servers/nice_guidelines_server.py`) - UK clinical guidelines
-4. **BNF** (`servers/bnf_server.py`) - British National Formulary drug information
-5. **PubMed** (`servers/pubmed_server.py`) - 35M+ medical research articles
+## Backend Repository (aneya-backend)
 
-**Key Feature:** All servers connect in **parallel** using `asyncio.gather()` for performance.
+The backend is in a **separate repository**: [aneya-backend](https://github.com/dangordon1/aneya-backend)
 
-### Clinical Decision Support Workflow
-
-Located in `servers/clinical_decision_support_client.py`:
-
-1. **Detect Location** - Auto-detect user country from IP (defaults to GB)
-2. **Search Guidelines** - Search NICE guidelines (UK) or PubMed (international)
-3. **Identify Medications** - Extract relevant drugs from consultation
-4. **Search BNF** - Parallel search for all medications
-5. **AI Analysis** - Two separate Claude API calls:
-   - **Call 1:** Analyze guidelines → extract diagnoses and treatments
-   - **Call 2:** Analyze BNF data → extract specific prescribing guidance
-6. **Generate Report** - Compile comprehensive clinical report
-
-**Fallback Strategy:** If NICE returns <2 guidelines OR non-UK location → automatically searches PubMed for evidence.
+It contains:
+- FastAPI server with MCP server integration
+- NVIDIA Parakeet TDT 1.1B for voice transcription
+- NICE Guidelines, BNF, PubMed scrapers
+- Claude AI integration for clinical analysis
 
 ## Development Setup
 
 ### Prerequisites
 
-- Python 3.12+ with `uv` package manager
 - Node.js 18+ with `npm`
-- Anthropic API key (required for AI features)
 
 ### Installation
 
 ```bash
-# Install Python dependencies
-uv sync
-
-# Install frontend dependencies
 cd frontend
 npm install
 ```
 
 ### Environment Variables
 
-Create `.env` file in project root:
+Create `frontend/.env`:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
+VITE_API_URL=http://localhost:8000
 ```
+
+For production, this points to the Cloud Run backend.
 
 ## Running the Application
 
-### Full Stack (Development)
+### Frontend Only (connects to production backend)
 
-**Terminal 1 - Backend:**
-```bash
-python api.py
-# or
-uv run python api.py
-```
-Backend runs on: http://localhost:8000
-
-**Terminal 2 - Frontend:**
 ```bash
 cd frontend
 npm run dev
 ```
+
 Frontend runs on: http://localhost:5173
 
-### Alternative Interfaces
+### Full Stack (requires backend repo)
 
-**Streamlit UI (Legacy):**
-```bash
-streamlit run app.py
-# or
-uv run streamlit run app.py
-```
-
-**Individual MCP Servers (Testing):**
-```bash
-python servers/nice_guidelines_server.py
-python servers/bnf_server.py
-python servers/geolocation_server.py
-```
-
-**MCP Inspector (Testing):**
-```bash
-fastmcp dev servers/nice_guidelines_server.py
-```
+1. Clone and run the backend repo: [aneya-backend](https://github.com/dangordon1/aneya-backend)
+2. Run frontend with `VITE_API_URL=http://localhost:8000`
 
 ## Build Commands
-
-### Frontend
 
 ```bash
 cd frontend
@@ -130,158 +93,33 @@ npm run build
 
 # Preview production build
 npm run preview
-
-# TypeScript compilation
-npm run build  # Includes: tsc && vite build
-```
-
-### Backend
-
-```bash
-# Run with Uvicorn (production)
-uvicorn api:app --host 0.0.0.0 --port 8000
-
-# Run directly (development)
-python api.py
 ```
 
 ## Deployment
 
-### Current Setup
+### Frontend to Vercel
 
-- **Frontend**: Deployed on **Vercel** (static React build)
-- **Backend**: Deployed on **Google Cloud Run** (containerized FastAPI + MCP servers)
-  - **Region:** europe-west2 (London)
-  - **Container Registry:** Google Artifact Registry
-
-### Quick Deploy
-
-**Backend to Cloud Run:**
-```bash
-# Set required environment variables
-export GCP_PROJECT_ID=your-project-id
-export ANTHROPIC_API_KEY=sk-ant-xxxxx
-
-# Deploy using the provided script
-./deploy-cloudrun.sh
-```
-
-**Frontend to Vercel:**
 ```bash
 cd frontend
 vercel --prod
 ```
 
-### Deployment Configuration
+### Backend
 
-**Frontend (vercel.json):**
-```json
-{
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/dist"
-}
-```
+See the [aneya-backend](https://github.com/dangordon1/aneya-backend) repository for Cloud Run deployment.
 
-**Backend (Dockerfile):**
-- Multi-stage build with Python 3.12
-- Platform: `linux/amd64`
-- Port: 8080 (Cloud Run standard)
-- Health check endpoint: `/health`
-- Non-root user for security
-
-**Cloud Run Configuration:**
-- Memory: 2Gi
-- CPU: 2 vCPUs
-- Timeout: 300s (5 minutes)
-- Min instances: 0 (scales to zero)
-- Max instances: 10
-- Environment variables: `ANTHROPIC_API_KEY`
-
-### Detailed Documentation
-
-For complete deployment instructions, see:
-- **Backend:** `CLOUDRUN_DEPLOYMENT.md` - Google Cloud Run deployment guide
-- **Frontend:** `VERCEL_DEPLOYMENT.md` - Vercel deployment guide (if exists)
-
-## Important Implementation Details
-
-### Two MCP Frameworks in Use
-
-**⚠️ IMPORTANT:** This codebase contains servers using TWO different MCP frameworks:
-
-1. **FastMCP** (Recommended - Use for new servers)
-   - Used by: BNF, Geolocation, Patient Info, PubMed
-   - Pattern: `@mcp.tool()` decorators
-   - Run: `mcp.run()`
-
-2. **Standard MCP** (Legacy)
-   - Used by: NICE Guidelines
-   - Pattern: `@server.list_tools()`, `@server.call_tool()` handlers
-   - Run: Async stdio server
-
-**Global instruction:** Always use FastMCP for new servers.
-
-### Web Scraping Strategy
-
-All healthcare data is accessed via **web scraping** (not APIs):
-
-- **NICE**: Scrapes `www.nice.org.uk`
-  - Parses JSON-LD structured data
-  - 30-second timeout with proper User-Agent
-  - Async with `httpx`
-
-- **BNF**: Scrapes `bnf.nice.org.uk`
-  - Session management for cookies
-  - 0.5-second rate limiting between requests
-  - Sync with `requests`
-
-- **PubMed**: Uses E-utilities API (public)
-  - Search and fetch via `eutils.ncbi.nlm.nih.gov`
-
-### Parallel Execution Patterns
-
-The client uses `asyncio.gather()` extensively:
-
-```python
-# Connect all servers in parallel
-connection_tasks = [
-    self._connect_single_server(name, path, verbose)
-    for name, path in servers.items()
-]
-await asyncio.gather(*connection_tasks)
-
-# Search all medications in parallel
-search_tasks = [
-    self.call_tool("search_bnf_drug", {"drug_name": med})
-    for med in medications
-]
-results = await asyncio.gather(*search_tasks, return_exceptions=True)
-```
-
-### Claude AI Integration
-
-Two separate API calls in the workflow:
-
-**Call 1 - Guideline Analysis:**
-- Input: NICE guidelines, CKS topics, BNF treatment summaries
-- Output: Diagnoses with confidence levels, treatment options
-
-**Call 2 - BNF Prescribing Guidance:**
-- Input: BNF drug detail pages
-- Output: First-line treatments with exact dosing, alternatives, special considerations
-
-Both calls use structured prompts in `clinical_decision_support_client.py`.
-
-### API Endpoints
+## API Endpoints (Backend)
 
 **FastAPI Backend:**
-- `GET /` - Root endpoint
-- `GET /health` - Health check (verifies MCP connections)
+- `GET /health` - Health check
 - `POST /api/analyze` - Main consultation analysis endpoint
+- `POST /api/transcribe` - Voice transcription (Parakeet TDT)
 - `GET /api/examples` - Example clinical scenarios
 
-**Frontend makes a single POST to `/api/analyze` with:**
+**Frontend makes requests to:**
 ```typescript
+// Consultation analysis
+POST /api/analyze
 {
   consultation: string,
   patient_id?: string,
@@ -290,13 +128,17 @@ Both calls use structured prompts in `clinical_decision_support_client.py`.
   user_ip?: string,
   location_override?: string
 }
+
+// Voice transcription
+POST /api/transcribe
+FormData with audio file
 ```
 
-### Frontend Component Structure
+## Frontend Component Structure
 
 React components in `frontend/src/components/`:
 
-- `InputScreen.tsx` - Consultation input with example cases
+- `InputScreen.tsx` - Consultation input with voice recording
 - `ProgressScreen.tsx` - Animated progress indicators (6 steps)
 - `AnalysisComplete.tsx` - Completion status
 - `ReportScreen.tsx` - Main results display
@@ -305,12 +147,24 @@ React components in `frontend/src/components/`:
 - `ExpandableSection.tsx` - Collapsible content sections
 - `WarningBox.tsx` - Clinical warnings and disclaimers
 
+### Voice Transcription Implementation
+
+Located in `InputScreen.tsx`:
+- Uses **accumulative transcription pattern** (not streaming)
+- Records audio in 2-second chunks via MediaRecorder
+- Sends progressively longer audio blobs to `/api/transcribe`
+- Backend uses Parakeet TDT 1.1B model for transcription
+
+**Cold Start Behavior:**
+- First transcription: ~5-6 seconds (model loading)
+- Subsequent: ~2-3 seconds (model cached)
+
 ### Design System
 
 **Colors:**
-- Primary: `#351431` (deep purple)
-- Accent: `#F0D1DA` (soft pink)
-- Text: `#2D2D2D` (dark gray)
+- Primary: `#0c3555` (aneya-navy)
+- Accent: `#1d9e99` (aneya-teal)
+- Background: `#f6f5ee` (aneya-cream)
 
 **Typography:**
 - Headings: Georgia (serif)
@@ -321,16 +175,7 @@ React components in `frontend/src/components/`:
 ## File Structure
 
 ```
-heidi/
-├── api.py                              # FastAPI backend
-├── app.py                              # Streamlit UI (legacy)
-├── servers/
-│   ├── clinical_decision_support_client.py  # Core orchestration
-│   ├── nice_guidelines_server.py       # NICE MCP server
-│   ├── bnf_server.py                   # BNF MCP server
-│   ├── patient_info_server.py          # Patient data MCP server
-│   ├── geolocation_server.py           # Geolocation MCP server
-│   └── pubmed_server.py                # PubMed MCP server
+aneya/
 ├── frontend/                           # React + TypeScript
 │   ├── src/
 │   │   ├── App.tsx                    # Main application
@@ -340,53 +185,19 @@ heidi/
 │   ├── vite.config.ts
 │   ├── tsconfig.json
 │   └── tailwind.config.js
-├── .env                               # Environment variables (local only)
-├── pyproject.toml                     # Python dependencies
-├── requirements.txt                   # Docker/Cloud Run deployment
-├── Dockerfile                         # Cloud Run container definition
-├── .dockerignore                      # Docker build exclusions
-├── deploy-cloudrun.sh                 # Cloud Run deployment script
-└── vercel.json                        # Vercel frontend configuration
+├── vercel.json                        # Vercel configuration
+├── README.md                          # Project overview
+├── CLAUDE.md                          # This file
+├── ACCUMULATIVE_TRANSCRIPTION.md      # Transcription implementation details
+└── PARAKEET_DEPLOYMENT.md            # Voice transcription setup
 ```
 
-## Common Development Tasks
-
-### Adding a New MCP Server
-
-1. Create `servers/new_server.py` using FastMCP framework
-2. Add to `MCP_SERVERS` dict in `clinical_decision_support_client.py`
-3. Implement tools using `@mcp.tool()` decorators
-4. Return structured dictionaries with `success`/`error` fields
-5. Include comprehensive docstrings
-
-### Modifying the Clinical Workflow
-
-Edit `clinical_decision_support` method in `servers/clinical_decision_support_client.py`:
-- Workflow steps are clearly commented
-- Uses `call_tool()` to route to appropriate servers
-- Implements Claude API calls with structured prompts
-
-### Adding Frontend Components
+## Adding Frontend Components
 
 1. Create component in `frontend/src/components/`
 2. Use TypeScript with proper type definitions
 3. Follow Tailwind CSS patterns from existing components
 4. Import in `App.tsx` and integrate into UI flow
-
-### Testing API Changes
-
-```bash
-# Start backend
-python api.py
-
-# Test with curl
-curl -X POST http://localhost:8000/api/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"consultation": "3-year-old with croup"}'
-
-# Or use the frontend
-cd frontend && npm run dev
-```
 
 ## Safety and Clinical Disclaimers
 
@@ -397,22 +208,3 @@ cd frontend && npm run dev
 - Consider renal/hepatic function, pregnancy status
 - Follow local protocols and formularies
 - System provides reference information, not clinical judgment
-
-## Known Issues and Limitations
-
-1. **UK-focused:** Primarily uses UK guidelines (NICE, BNF)
-2. **Web scraping dependency:** Changes to source websites may break scrapers
-3. **Rate limiting:** BNF server includes 0.5s delays to avoid blocks
-4. **NHMRC timeouts:** Australian server may experience geographic restrictions
-5. **Anthropic API required:** Core features won't work without valid API key
-
-## Documentation Files
-
-- `README.md` - Project overview and MCP server details
-- `STREAMLIT_README.md` - Streamlit UI documentation
-- `FRONTEND_README.md` - Full stack architecture details
-- `servers/README.md` - Multi-server architecture
-- `servers/NICE_GUIDELINES_README.md` - NICE server details
-- `servers/HEIDI_README.md` - Legacy orchestrator docs
-- `CLOUDRUN_DEPLOYMENT.md` - Google Cloud Run deployment guide (backend)
-- `VERCEL_DEPLOYMENT.md` - Vercel deployment guide (frontend)

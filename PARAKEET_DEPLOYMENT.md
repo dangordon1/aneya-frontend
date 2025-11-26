@@ -1,33 +1,74 @@
 # Parakeet TDT Deployment Guide
 
-## What Changed
+## Overview
 
-Successfully deployed **NVIDIA Parakeet TDT 1.1B** model to replace Faster-Whisper for voice transcription.
+Voice transcription uses **NVIDIA Parakeet TDT 1.1B** model deployed on the backend (aneya-backend repo).
 
-### Backend Changes (`backend/api.py`)
+**Note:** The backend is in a separate repository: [aneya-backend](https://github.com/dangordon1/aneya-backend)
 
-1. **Replaced Faster-Whisper with Parakeet TDT**
-   - Changed from `faster_whisper.WhisperModel` to `nemo.collections.asr.models.ASRModel`
-   - Model: `nvidia/parakeet-tdt-1.1b` from HuggingFace
+## Architecture
 
-2. **Updated Startup (lines 28-112)**
-   - Loads Parakeet TDT on startup (cached after first download ~600MB)
-   - Model loads in ~10 seconds (first time) or instantly (cached)
+```
+Frontend (this repo)          Backend (aneya-backend)
+┌─────────────────┐           ┌─────────────────────────┐
+│ InputScreen.tsx │ ─────────▶│ /api/transcribe         │
+│ - MediaRecorder │   POST    │ - Parakeet TDT 1.1B     │
+│ - 2s chunks     │   audio   │ - NeMo ASR framework    │
+└─────────────────┘           └─────────────────────────┘
+```
 
-3. **Updated `/api/transcribe` endpoint (lines 343-404)**
-   - Now uses Parakeet TDT for transcription
-   - Returns additional metadata: `latency_seconds` and `model` name
+## Cold Start Behavior
 
-### Frontend Changes (`frontend/src/components/InputScreen.tsx`)
+### The Problem
 
-1. **Re-enabled voice input functionality**
-   - Uncommented all voice recording code
-   - Button now labeled "Voice Input (Parakeet TDT)"
+The first transcription request takes significantly longer than subsequent ones:
 
-2. **UI Updates**
-   - Microphone button visible on input screen
-   - Shows recording state (Recording / Transcribing / Ready)
-   - 3 states: Blue (ready), Red pulsing (recording), Gray (transcribing)
+| Request | Latency | Reason |
+|---------|---------|--------|
+| **First** | ~5-6 seconds | Model loading into memory |
+| **Subsequent** | ~2-3 seconds | Model already cached |
+
+### Why This Happens
+
+1. **Model Size**: Parakeet TDT is ~600MB and must be loaded into CPU/GPU memory
+2. **NeMo Framework**: Has significant initialization overhead on first use
+3. **Cloud Run Scaling**: With `min-instances: 0`, containers cold start from scratch
+
+### Solutions
+
+**Option 1: Keep Backend Warm (Recommended for Production)**
+```bash
+# Set min-instances in Cloud Run deployment
+gcloud run deploy aneya-backend \
+  --min-instances=1 \
+  --memory=2Gi \
+  --cpu=2
+```
+Cost: ~$15-30/month for always-on instance
+
+**Option 2: Pre-warm on Page Load**
+Add to `InputScreen.tsx`:
+```typescript
+useEffect(() => {
+  // Send a tiny audio blob to pre-load the model
+  const silentBlob = new Blob([new ArrayBuffer(1000)], { type: 'audio/webm' });
+  const formData = new FormData();
+  formData.append('audio', silentBlob, 'warmup.webm');
+  fetch(`${API_URL}/api/transcribe`, { method: 'POST', body: formData })
+    .catch(() => {}); // Ignore errors
+}, []);
+```
+
+**Option 3: Show User Feedback**
+Current implementation shows "Recording... transcription will begin shortly" during cold start.
+
+## Frontend Implementation
+
+Located in `InputScreen.tsx`:
+
+1. **Accumulative Pattern**: Sends progressively longer audio (not individual chunks)
+2. **2-second intervals**: Records in 2s chunks, transcribes ALL audio so far
+3. **Full replacement**: Each transcription result replaces the previous one
 
 ## Performance Improvements
 
@@ -37,44 +78,21 @@ Successfully deployed **NVIDIA Parakeet TDT 1.1B** model to replace Faster-Whisp
 | **WER** | 14.29% | 5.00% | **3x more accurate** |
 | **CER** | 7.98% | 2.31% | **3.5x more accurate** |
 
-## How to Test
+## Testing Voice Input
 
-### 1. Backend is Already Running
+1. Start frontend: `cd frontend && npm run dev`
+2. Open http://localhost:5173
+3. Click **"Record Consultation"** button
+4. Allow microphone permissions when prompted
+5. Speak your clinical consultation
+6. Watch text appear progressively every ~2 seconds
+7. Click **"Stop Recording"** when done
+8. Text transfers to the main textarea
 
-Backend is running on http://localhost:8000 with Parakeet loaded.
-
-### 2. Start the Frontend
-
-```bash
-cd frontend
-npm run dev
-```
-
-Frontend will be at http://localhost:5173
-
-### 3. Test Voice Input
-
-1. Open http://localhost:5173
-2. Click the **"Voice Input (Parakeet TDT)"** button (top right of textarea)
-3. Allow microphone permissions when prompted
-4. Speak your clinical consultation
-5. Click **"Stop Recording"** (button turns red while recording)
-6. Wait ~2-3 seconds for transcription
-7. Text appears in the consultation textarea
-
-### 4. Expected Behavior
-
-**Recording:**
-- Button turns RED and pulses
-- Says "Stop Recording"
-
-**Transcribing:**
-- Button turns GRAY
-- Shows spinner and "Transcribing..."
-
-**Completed:**
-- Transcribed text appears in textarea
-- Button returns to BLUE "Voice Input (Parakeet TDT)"
+**Recording States:**
+- Button RED + pulsing = Recording active
+- Text updating in real-time = Transcription working
+- First update takes ~5s (cold start), subsequent updates ~2-3s
 
 ## Number Formatting Note
 
@@ -97,48 +115,22 @@ For clinical use, you may want to add post-processing to convert spelled-out num
 }
 ```
 
-## Dependencies Added
-
-### Python (backend)
-- `nemo_toolkit[asr]` - NVIDIA NeMo for Parakeet
-- NumPy constrained to `< 2.2` (Numba compatibility)
-
-### Already Installed
-- PyTorch (from existing requirements)
-- soundfile, scipy (from existing requirements)
-
 ## Troubleshooting
 
-### Model Not Loading
-```
-❌ Failed to load Parakeet TDT model
-```
-**Solution:** Ensure NeMo toolkit is installed: `uv pip install 'nemo_toolkit[asr]'`
-
-### Slow First Startup
-- First load downloads ~600MB model from HuggingFace
-- Takes 1-2 minutes
-- Subsequent loads are instant (cached)
+### Slow First Transcription
+This is expected cold start behavior - see [Cold Start Behavior](#cold-start-behavior) section above.
 
 ### Microphone Permissions
 - Browser will prompt for microphone access
 - Click "Allow" to enable voice input
 - Check browser settings if blocked
 
-### Transcription Errors
-Check backend logs:
-```bash
-# Look for transcription progress in terminal running backend
-```
+### No Transcription Appearing
+- Check browser console for errors
+- Verify backend is running and accessible
+- Check CORS settings if using different domains
 
-## Benchmark Results
+## Related Documentation
 
-Complete benchmark results saved in:
-- `benchmark_results_complete.json` - All 7 models tested
-- Shows Parakeet TDT as winner in both speed and accuracy
-
-## Next Steps (Optional)
-
-1. **Add number normalization** - Convert spelled-out numbers to digits
-2. **Deploy to Cloud Run** - Update Dockerfile with NeMo dependencies
-3. **Add Parakeet to production** - Update deployment scripts
+- `ACCUMULATIVE_TRANSCRIPTION.md` - Detailed explanation of the transcription pattern
+- `STT_BENCHMARK_README.md` - Benchmark methodology and results
