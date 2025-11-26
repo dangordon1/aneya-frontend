@@ -16,8 +16,8 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
   const cksTopics = result.cks_topics || [];
   const bnfSummaries = result.bnf_summaries || [];
 
-  // Map BNF guidance to the format expected by DiagnosisCard
-  const mappedTreatments = bnfGuidance.map((g: any) => ({
+  // Map BNF guidance from bnf_prescribing_guidance (if available)
+  const mappedBnfTreatments = bnfGuidance.map((g: any) => ({
     medication: g.medication,
     url: g.url,
     dosage: g.dosage || g.indications,
@@ -29,6 +29,33 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
     is_first_line: g.is_first_line,
     treatment_context: g.treatment_context
   }));
+
+  // Helper function to extract treatments from a diagnosis
+  // Supports both formats: direct BNF guidance and embedded diagnosis treatments
+  const getTreatmentsForDiagnosis = (diagnosis: any) => {
+    // If bnf_prescribing_guidance has data, use that (it's populated by BNF scraping)
+    if (mappedBnfTreatments.length > 0) {
+      return mappedBnfTreatments;
+    }
+
+    // Otherwise, use treatments embedded in the diagnosis (from NICE guidelines)
+    if (diagnosis.treatments && diagnosis.treatments.length > 0) {
+      return diagnosis.treatments.map((t: any, idx: number) => ({
+        medication: t.name || `Treatment ${idx + 1}`,
+        url: t.bnf_info?.url,
+        dosage: t.notes || t.bnf_info?.dosage,
+        indications: t.bnf_info?.indications,
+        contraindications: t.bnf_info?.contraindications,
+        cautions: t.bnf_info?.cautions,
+        side_effects: t.bnf_info?.side_effects,
+        interactions: t.bnf_info?.interactions,
+        is_first_line: idx === 0, // First treatment is first-line
+        treatment_context: t.drug_names?.join(', ') || ''
+      }));
+    }
+
+    return [];
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -107,7 +134,7 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
                   source={diagnoses[0].source}
                   url={diagnoses[0].url}
                   summary={diagnoses[0].summary}
-                  treatments={mappedTreatments}
+                  treatments={getTreatmentsForDiagnosis(diagnoses[0])}
                 />
               </>
             )}
