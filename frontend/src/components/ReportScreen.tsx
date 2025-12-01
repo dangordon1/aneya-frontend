@@ -1,15 +1,18 @@
+import { useState } from 'react';
 import { PrimaryButton } from './PrimaryButton';
 import { DiagnosisCard } from './DiagnosisCard';
 import { WarningBox } from './WarningBox';
 import { ExternalLink } from 'lucide-react';
+import { PatientDetails } from './InputScreen';
 
 interface ReportScreenProps {
   onStartNew: () => void;
   result: any;
+  patientDetails: PatientDetails | null;
 }
 
-export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
-  const patientInfo = result.patient_info;
+export function ReportScreen({ onStartNew, result, patientDetails }: ReportScreenProps) {
+  const [isPatientDetailsExpanded, setIsPatientDetailsExpanded] = useState(false);
   const diagnoses = result.diagnoses || [];
   const bnfGuidance = result.bnf_prescribing_guidance || [];
   const niceGuidelines = result.guidelines_found || [];
@@ -30,31 +33,12 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
     treatment_context: g.treatment_context
   }));
 
-  // Helper function to extract treatments from a diagnosis
-  // Supports both formats: direct BNF guidance and embedded diagnosis treatments
-  const getTreatmentsForDiagnosis = (diagnosis: any) => {
-    // If bnf_prescribing_guidance has data, use that (it's populated by BNF scraping)
-    if (mappedBnfTreatments.length > 0) {
-      return mappedBnfTreatments;
-    }
-
-    // Otherwise, use treatments embedded in the diagnosis (from NICE guidelines)
-    if (diagnosis.treatments && diagnosis.treatments.length > 0) {
-      return diagnosis.treatments.map((t: any, idx: number) => ({
-        medication: t.name || `Treatment ${idx + 1}`,
-        url: t.bnf_info?.url,
-        dosage: t.notes || t.bnf_info?.dosage,
-        indications: t.bnf_info?.indications,
-        contraindications: t.bnf_info?.contraindications,
-        cautions: t.bnf_info?.cautions,
-        side_effects: t.bnf_info?.side_effects,
-        interactions: t.bnf_info?.interactions,
-        is_first_line: idx === 0, // First treatment is first-line
-        treatment_context: t.drug_names?.join(', ') || ''
-      }));
-    }
-
-    return [];
+  // Helper function to get BNF treatments for a diagnosis
+  // Only returns data if we have real BNF prescribing guidance (not AI-generated fallbacks)
+  const getTreatmentsForDiagnosis = (_diagnosis: any) => {
+    // Only use bnf_prescribing_guidance - this contains real data scraped from BNF
+    // Do NOT fall back to diagnosis.treatments as those are AI-generated descriptions
+    return mappedBnfTreatments;
   };
 
   return (
@@ -64,56 +48,74 @@ export function ReportScreen({ onStartNew, result }: ReportScreenProps) {
           Clinical Analysis Report
         </h1>
 
-        {/* 1. Patient Information Card */}
-        {patientInfo && patientInfo.success && (
+        {/* 1. Patient Details - expandable section */}
+        {patientDetails && (
           <section className="mb-8">
-            <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Patient Information</h2>
-            <div className="bg-white rounded-[16px] p-6 aneya-shadow-card border border-aneya-soft-pink">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                <div>
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Patient ID</div>
-                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.patient_id || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Age</div>
-                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.age || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Gender</div>
-                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.gender || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">Weight</div>
-                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.weight_kg ? `${patientInfo.weight_kg} kg` : 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-1">BMI</div>
-                  <div className="text-[17px] leading-[26px] text-aneya-navy">{patientInfo.bmi || 'N/A'}</div>
-                </div>
+            <button
+              onClick={() => setIsPatientDetailsExpanded(!isPatientDetailsExpanded)}
+              className="w-full flex items-center justify-between p-4 bg-white border-2 border-aneya-teal rounded-[10px] hover:border-aneya-navy transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5 text-aneya-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-[14px] leading-[18px] text-aneya-navy font-medium">
+                  Patient Details
+                </span>
+                <span className="text-[12px] text-gray-500">
+                  ({patientDetails.name})
+                </span>
               </div>
+              <svg
+                className={`h-5 w-5 text-aneya-navy transition-transform duration-200 ${isPatientDetailsExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-              <div className="border-t border-aneya-soft-pink pt-4">
-                <div className="mb-4">
-                  <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-2">Allergies</div>
-                  <div className="text-[15px] leading-[22px] text-aneya-navy">
-                    {patientInfo.allergies && patientInfo.allergies.length > 0
-                      ? patientInfo.allergies.join(', ')
-                      : 'No known drug allergies (NKDA)'}
-                  </div>
-                </div>
-
-                {patientInfo.current_medications && patientInfo.current_medications.length > 0 && (
+            {/* Expandable content */}
+            {isPatientDetailsExpanded && (
+              <div className="mt-2 p-4 bg-white border-2 border-aneya-teal border-t-0 rounded-b-[10px] space-y-4">
+                {/* Name and Sex in a row */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-[13px] leading-[18px] text-aneya-text-secondary mb-2">Current Medications</div>
-                    <ul className="text-[15px] leading-[22px] text-aneya-navy space-y-1">
-                      {patientInfo.current_medications.map((med: string, idx: number) => (
-                        <li key={idx}>• {med}</li>
-                      ))}
-                    </ul>
+                    <div className="text-[12px] text-gray-600 mb-1">Name</div>
+                    <div className="text-[14px] text-aneya-navy">{patientDetails.name}</div>
                   </div>
-                )}
+                  <div>
+                    <div className="text-[12px] text-gray-600 mb-1">Sex</div>
+                    <div className="text-[14px] text-aneya-navy">{patientDetails.sex}</div>
+                  </div>
+                </div>
+
+                {/* Height and Weight in a row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[12px] text-gray-600 mb-1">Height</div>
+                    <div className="text-[14px] text-aneya-navy">{patientDetails.height}</div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-gray-600 mb-1">Weight</div>
+                    <div className="text-[14px] text-aneya-navy">{patientDetails.weight}</div>
+                  </div>
+                </div>
+
+                {/* Current Medications */}
+                <div>
+                  <div className="text-[12px] text-gray-600 mb-1">Current Medications</div>
+                  <div className="text-[14px] text-aneya-navy whitespace-pre-wrap">{patientDetails.currentMedications}</div>
+                </div>
+
+                {/* Current Conditions */}
+                <div>
+                  <div className="text-[12px] text-gray-600 mb-1">Current Conditions</div>
+                  <div className="text-[14px] text-aneya-navy whitespace-pre-wrap">{patientDetails.currentConditions}</div>
+                </div>
               </div>
-            </div>
+            )}
           </section>
         )}
 
