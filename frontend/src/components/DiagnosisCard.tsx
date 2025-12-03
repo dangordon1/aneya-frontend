@@ -228,7 +228,7 @@ function TreatmentCard({ treatment, isExpanded, onToggle, extractDosageSummary }
                   rel="noopener noreferrer"
                   className="text-aneya-navy hover:underline inline-flex items-center gap-1"
                 >
-                  View interactions on BNF
+                  View interactions
                   <ExternalLink className="w-3 h-3" />
                 </a>
               ) : (
