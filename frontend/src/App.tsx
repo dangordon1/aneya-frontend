@@ -3,8 +3,9 @@ import { InputScreen, PatientDetails } from './components/InputScreen';
 import { ProgressScreen } from './components/ProgressScreen';
 import { AnalysisComplete } from './components/AnalysisComplete';
 import { ReportScreen } from './components/ReportScreen';
+import { InvalidInputScreen } from './components/InvalidInputScreen';
 
-type Screen = 'input' | 'progress' | 'complete' | 'report';
+type Screen = 'input' | 'progress' | 'complete' | 'report' | 'invalid';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -29,10 +30,18 @@ const API_URL = (() => {
   return url;
 })();
 
+interface StreamEvent {
+  type: string;
+  data: any;
+  timestamp: number;
+}
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('input');
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [currentPatientDetails, setCurrentPatientDetails] = useState<PatientDetails | null>(null);
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
+  const [invalidInputMessage, setInvalidInputMessage] = useState<string>('');
 
   const handleAnalyze = async (consultation: string, patientDetails: PatientDetails) => {
     // Validate consultation is not empty or whitespace-only
@@ -43,6 +52,7 @@ export default function App() {
 
     setAnalysisResult(null); // Clear previous results
     setCurrentPatientDetails(patientDetails); // Store patient details for report
+    setStreamEvents([]); // Clear previous stream events
 
     try {
       // Check if backend is available first
@@ -89,8 +99,8 @@ export default function App() {
         console.warn('Could not detect IP address, backend will auto-detect:', error);
       }
 
-      // Call the FastAPI backend - this is the REAL analysis
-      const response = await fetch(`${API_URL}/api/analyze`, {
+      // Use streaming endpoint for real-time updates
+      const response = await fetch(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,7 +112,7 @@ export default function App() {
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
           current_conditions: patientDetails.currentConditions,
-          user_ip: userIp  // Send IP for geolocation
+          user_ip: userIp
         }),
       });
 
@@ -112,27 +122,75 @@ export default function App() {
         throw new Error(`Analysis failed: ${response.status}`);
       }
 
-      const result = await response.json();
-      console.log('Analysis result:', result); // Debug log
+      // Read the SSE stream
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult = null;
 
-      // Check if the backend returned an error due to invalid input
-      if (result.error === 'invalid_input') {
-        alert(
-          '⚠️ Invalid Input\n\n' +
-          result.error_message + '\n\n' +
-          'Examples of valid consultations:\n' +
-          '• "3-year-old with fever, cough, and difficulty breathing"\n' +
-          '• "Patient with chest pain and shortness of breath"\n' +
-          '• "72-year-old with suspected pneumonia, productive cough"'
-        );
-        setCurrentScreen('input');
-        return;
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, {stream: true});
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete event in buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const eventLines = line.split('\n');
+          let eventType = '';
+          let eventData = '';
+
+          for (const l of eventLines) {
+            if (l.startsWith('event: ')) {
+              eventType = l.substring(7);
+            } else if (l.startsWith('data: ')) {
+              eventData = l.substring(6);
+            }
+          }
+
+          if (eventType && eventData) {
+            try {
+              const data = JSON.parse(eventData);
+              console.log(`SSE Event: ${eventType}`, data);
+
+              // Add event to state for real-time display
+              setStreamEvents(prev => [...prev, {
+                type: eventType,
+                data: data,
+                timestamp: Date.now()
+              }]);
+
+              // Handle different event types
+              if (eventType === 'location') {
+                console.log('📍 Location detected:', data.country);
+              } else if (eventType === 'guideline_search') {
+                console.log('🔍 Searching:', data.source);
+              } else if (eventType === 'bnf_drug') {
+                console.log(`💊 Drug ${data.medication}: ${data.status}`);
+              } else if (eventType === 'complete') {
+                finalResult = data;
+              } else if (eventType === 'error') {
+                if (data.type === 'invalid_input') {
+                  setInvalidInputMessage(data.message);
+                  setCurrentScreen('invalid');
+                  return;
+                }
+                throw new Error(data.message);
+              }
+            } catch (e) {
+              console.error('Error parsing event data:', e);
+            }
+          }
+        }
       }
 
-      setAnalysisResult(result);
-
-      // Show completion screen (which will auto-advance to report after 2 seconds)
-      setCurrentScreen('complete');
+      if (finalResult) {
+        setAnalysisResult(finalResult);
+        setCurrentScreen('complete');
+      }
     } catch (error) {
       console.error('Analysis error:', error);
       alert(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the backend is running.`);
@@ -166,7 +224,17 @@ export default function App() {
         )}
 
         {currentScreen === 'progress' && (
-          <ProgressScreen onComplete={() => setCurrentScreen('complete')} />
+          <ProgressScreen
+            onComplete={() => setCurrentScreen('complete')}
+            streamEvents={streamEvents}
+          />
+        )}
+
+        {currentScreen === 'invalid' && (
+          <InvalidInputScreen
+            errorMessage={invalidInputMessage}
+            onReturnHome={handleStartNew}
+          />
         )}
 
         {currentScreen === 'complete' && (
