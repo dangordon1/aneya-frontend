@@ -20,7 +20,7 @@ This is the user-facing interface for aneya, providing:
 ```
 
 - **Frontend:** https://aneya.vercel.app
-- **Backend:** https://aneya-backend-fhnsxp4nua-nw.a.run.app
+- **Backend:** https://aneya-backend-217191264902.europe-west2.run.app
 
 ## Features
 
@@ -64,22 +64,23 @@ This is the user-facing interface for aneya, providing:
 
 ```bash
 # Install dependencies
-cd frontend
 npm install
 ```
 
 ### Environment Variables
 
-Create `frontend/.env` for local development:
+Create `.env.local` for local development:
 
 ```bash
 VITE_API_URL=http://localhost:8000
+VITE_DEEPGRAM_API_KEY=<your-key>
 ```
 
 For production (configured in Vercel):
 
 ```bash
-VITE_API_URL=https://aneya-backend-fhnsxp4nua-nw.a.run.app
+VITE_API_URL=https://aneya-backend-217191264902.europe-west2.run.app
+VITE_DEEPGRAM_API_KEY=<production-key>
 ```
 
 Note: Transcription uses the backend's Parakeet TDT model - no separate API keys required for voice input.
@@ -87,7 +88,6 @@ Note: Transcription uses the backend's Parakeet TDT model - no separate API keys
 ### Running Locally
 
 ```bash
-cd frontend
 npm run dev
 ```
 
@@ -96,8 +96,6 @@ Frontend runs on: http://localhost:5173
 ### Build
 
 ```bash
-cd frontend
-
 # Development build
 npm run dev
 
@@ -117,18 +115,17 @@ Deployed on **Vercel** (static React build)
 ### Deploy to Vercel
 
 ```bash
-cd frontend
 vercel --prod
 ```
 
 The `vercel.json` configuration automatically:
-- Builds from the `frontend/` directory
-- Outputs to `frontend/dist`
+- Builds from the root directory
+- Outputs to `dist/`
 - Handles routing for SPA
 
 ## Component Structure
 
-React components in `frontend/src/components/`:
+React components in `src/components/`:
 
 - **InputScreen.tsx** - Consultation input with voice recording
 - **ProgressScreen.tsx** - Animated progress indicators (6 steps)

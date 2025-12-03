@@ -1,34 +1,29 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+# Node/Frontend files
+node_modules/
 dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-venv/
-env/
-
-# Environment variables
 .env
 .env.local
 .env.production
-
-# IDE
-.vscode/
-.idea/
-
-# Logs
-*.log
-
-# Node (frontend)
-node_modules/
-frontend/dist/
+.env.production.local
+.env.development.local
 
 # Vercel
 .vercel
 
-# Test files
-transcription/test_audio.mp3
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+
+# Python-generated files (legacy - should be removed eventually)
+__pycache__/
+*.py[oc]
+build/
+wheels/
+*.egg-info
+.venv
+venv/
+env/
