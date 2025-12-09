@@ -15,8 +15,6 @@ interface ProgressScreenProps {
 export function ProgressScreen({ onComplete: _onComplete, streamEvents }: ProgressScreenProps) {
   const [detectedLocation, setDetectedLocation] = useState<string | null>(null);
   const [guidelinesSearched, setGuidelinesSearched] = useState<string[]>([]);
-  const [drugsLookingUp, setDrugsLookingUp] = useState<string[]>([]);
-  const [drugsComplete, setDrugsComplete] = useState<string[]>([]);
   const eventLogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,27 +32,6 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
       .filter(e => e.type === 'guideline_search')
       .map(e => e.data.source || 'Unknown source');
     setGuidelinesSearched(allGuidelineSources);
-
-    // For drugs, rebuild the state from all events
-    const lookingUp = new Set<string>();
-    const complete = new Set<string>();
-
-    streamEvents.forEach(event => {
-      if (event.type === 'bnf_drug') {
-        const medication = event.data.medication;
-        const status = event.data.status;
-
-        if (status === 'looking_up') {
-          lookingUp.add(medication);
-        } else if (status === 'complete') {
-          lookingUp.delete(medication);
-          complete.add(medication);
-        }
-      }
-    });
-
-    setDrugsLookingUp(Array.from(lookingUp));
-    setDrugsComplete(Array.from(complete));
 
     // Auto-scroll to bottom
     if (eventLogRef.current) {
@@ -128,7 +105,7 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
         </p>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           {/* Location */}
           <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -152,24 +129,6 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
             </div>
             <div className="text-[17px] leading-[22px] text-aneya-navy font-medium">
               {guidelinesSearched.length} sources searched
-            </div>
-          </div>
-
-          {/* Drugs Analyzed */}
-          <div className="bg-white border-2 border-green-400 rounded-[10px] p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Pill className="w-5 h-5 text-green-600" />
-              <span className="text-[13px] font-medium text-aneya-text-secondary uppercase tracking-wider">
-                Medications
-              </span>
-            </div>
-            <div className="text-[17px] leading-[22px] text-aneya-navy font-medium">
-              {drugsComplete.length} analyzed
-              {drugsLookingUp.length > 0 && (
-                <span className="text-[15px] text-gray-500 ml-1">
-                  ({drugsLookingUp.length} pending)
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -213,9 +172,7 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
         <div className="mt-6 flex items-center justify-center gap-3 p-4 bg-aneya-teal/10 border-2 border-aneya-teal rounded-[10px]">
           <Loader2 className="w-5 h-5 text-aneya-teal animate-spin" />
           <span className="text-[15px] leading-[22px] text-aneya-navy font-medium">
-            {drugsLookingUp.length > 0
-              ? `Looking up: ${drugsLookingUp.join(', ')}`
-              : guidelinesSearched.length > 0
+            {guidelinesSearched.length > 0
               ? 'Analyzing guidelines with AI...'
               : 'Processing consultation...'}
           </span>

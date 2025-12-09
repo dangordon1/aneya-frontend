@@ -1,45 +1,65 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PrimaryButton } from './PrimaryButton';
 import { DiagnosisCard } from './DiagnosisCard';
 import { WarningBox } from './WarningBox';
 import { ExternalLink } from 'lucide-react';
 import { PatientDetails } from './InputScreen';
+import { AppointmentWithPatient } from '../types/database';
+import { formatTime24 } from '../utils/dateHelpers';
 
 interface ReportScreenProps {
   onStartNew: () => void;
   result: any;
   patientDetails: PatientDetails | null;
+  errors?: string[];
+  drugDetails?: Record<string, any>;
+  appointmentContext?: AppointmentWithPatient;
+  onSaveConsultation?: () => void;
 }
 
-export function ReportScreen({ onStartNew, result, patientDetails }: ReportScreenProps) {
+export function ReportScreen({ onStartNew, result, patientDetails, errors = [], drugDetails = {}, appointmentContext, onSaveConsultation }: ReportScreenProps) {
   const [isPatientDetailsExpanded, setIsPatientDetailsExpanded] = useState(false);
   const diagnoses = result.diagnoses || [];
-  const bnfGuidance = result.bnf_prescribing_guidance || [];
   const niceGuidelines = result.guidelines_found || [];
   const cksTopics = result.cks_topics || [];
   const bnfSummaries = result.bnf_summaries || [];
 
-  // Map BNF guidance from bnf_prescribing_guidance (if available)
-  const mappedBnfTreatments = bnfGuidance.map((g: any) => ({
-    medication: g.medication,
-    url: g.url,
-    dosage: g.dosage || g.indications,
-    indications: g.indications,
-    contraindications: g.contraindications,
-    cautions: g.cautions,
-    side_effects: g.side_effects,
-    interactions: g.interactions,
-    is_first_line: g.is_first_line,
-    treatment_context: g.treatment_context
-  }));
-
-  // Helper function to get BNF treatments for a diagnosis
-  // Only returns data if we have real BNF prescribing guidance (not AI-generated fallbacks)
-  const getTreatmentsForDiagnosis = (_diagnosis: any) => {
-    // Only use bnf_prescribing_guidance - this contains real data scraped from BNF
-    // Do NOT fall back to diagnosis.treatments as those are AI-generated descriptions
-    return mappedBnfTreatments;
+  // Helper: Check if diagnosis has new structure (primary_care/surgery/diagnostics)
+  const hasNewStructure = (diag: any) => {
+    return diag.primary_care || diag.surgery || diag.diagnostics;
   };
+
+  // Helper: Convert old format to new format for backward compatibility
+  const convertToNewFormat = (diag: any) => {
+    if (hasNewStructure(diag)) {
+      return diag; // Already new format
+    }
+
+    // Legacy format detected - convert to new format
+    return {
+      ...diag,
+      primary_care: {
+        medications: [],
+        supportive_care: [],
+        clinical_guidance: diag.summary || "Legacy format - treatment details available in the analysis.",
+        when_to_escalate: []
+      }
+    };
+  };
+
+  // Memoize converted diagnoses to prevent repeated conversions on every render
+  const convertedDiagnoses = useMemo(() => {
+    const converted = diagnoses.map((diag: any) => convertToNewFormat(diag));
+
+    // Log once when diagnoses are first converted
+    converted.forEach((diag: any) => {
+      if (hasNewStructure(diag) && diag.primary_care) {
+        console.log('Using new format for:', diag.diagnosis);
+      }
+    });
+
+    return converted;
+  }, [diagnoses]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -47,6 +67,39 @@ export function ReportScreen({ onStartNew, result, patientDetails }: ReportScree
         <h1 className="text-[32px] leading-[38px] text-aneya-navy mb-8">
           Clinical Analysis Report
         </h1>
+
+        {/* Appointment Context Banner */}
+        {appointmentContext && (
+          <div className="mb-6 bg-aneya-teal/10 border-2 border-aneya-teal rounded-[10px] p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5 text-aneya-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <div>
+                  <div className="text-[14px] text-aneya-navy font-medium">
+                    Consultation for: {appointmentContext.patient.name}
+                  </div>
+                  <div className="text-[12px] text-gray-600">
+                    Appointment at {formatTime24(new Date(appointmentContext.scheduled_time))} - {appointmentContext.duration_minutes} min
+                    {appointmentContext.reason && ` • ${appointmentContext.reason}`}
+                  </div>
+                </div>
+              </div>
+              {onSaveConsultation && (
+                <button
+                  onClick={onSaveConsultation}
+                  className="px-6 py-3 bg-aneya-teal hover:bg-aneya-teal/90 text-white rounded-[10px] font-medium text-[14px] transition-colors flex items-center gap-2"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save Consultation
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 1. Patient Details - expandable section */}
         {patientDetails && (
@@ -91,16 +144,25 @@ export function ReportScreen({ onStartNew, result, patientDetails }: ReportScree
                   </div>
                 </div>
 
-                {/* Height and Weight in a row */}
+                {/* Age and Height in a row */}
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[12px] text-gray-600 mb-1">Age</div>
+                    <div className="text-[14px] text-aneya-navy">{patientDetails.age}</div>
+                  </div>
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Height</div>
                     <div className="text-[14px] text-aneya-navy">{patientDetails.height}</div>
                   </div>
+                </div>
+
+                {/* Weight */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Weight</div>
                     <div className="text-[14px] text-aneya-navy">{patientDetails.weight}</div>
                   </div>
+                  <div></div>
                 </div>
 
                 {/* Current Medications */}
@@ -119,52 +181,89 @@ export function ReportScreen({ onStartNew, result, patientDetails }: ReportScree
           </section>
         )}
 
-        {/* 2. Clinical Diagnoses Section with Treatments */}
-        {diagnoses.length > 0 && (
+        {/* 2. Errors and Warnings Section */}
+        {errors.length > 0 && (
+          <section className="mb-8">
+            <WarningBox>
+              <div className="space-y-3">
+                <h3 className="text-[18px] leading-[24px] text-aneya-navy font-semibold">
+                  Analysis Warnings
+                </h3>
+                <p className="text-[15px] leading-[22px] text-aneya-navy">
+                  The following issues were encountered during analysis. The results below may be incomplete:
+                </p>
+                <ul className="list-disc pl-5 space-y-2">
+                  {errors.map((error, idx) => (
+                    <li key={idx} className="text-[15px] leading-[22px] text-aneya-navy">
+                      {error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </WarningBox>
+          </section>
+        )}
+
+        {/* 3. Clinical Diagnoses Section with Treatments */}
+        {convertedDiagnoses.length > 0 && (
           <section className="mb-8">
             <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Clinical Diagnoses</h2>
 
             {/* Primary Diagnosis */}
-            {diagnoses[0] && (
-              <>
-                <p className="text-[17px] leading-[26px] text-aneya-navy mb-3 font-semibold">Primary Diagnosis:</p>
-                <DiagnosisCard
-                  diagnosisNumber={1}
-                  diagnosis={diagnoses[0].diagnosis || diagnoses[0].name}
-                  confidence={diagnoses[0].confidence}
-                  isPrimary={true}
-                  source={diagnoses[0].source}
-                  url={diagnoses[0].url}
-                  summary={diagnoses[0].summary}
-                  treatments={getTreatmentsForDiagnosis(diagnoses[0])}
-                />
-              </>
-            )}
+            {convertedDiagnoses[0] && (() => {
+              const diag = convertedDiagnoses[0];
+              return (
+                <>
+                  <p className="text-[17px] leading-[26px] text-aneya-navy mb-3 font-semibold">Primary Diagnosis:</p>
+                  <DiagnosisCard
+                    diagnosisNumber={1}
+                    diagnosis={diag.diagnosis || diag.name}
+                    confidence={diag.confidence}
+                    isPrimary={true}
+                    source={diag.source}
+                    url={diag.url}
+                    summary={diag.summary}
+                    primary_care={diag.primary_care}
+                    surgery={diag.surgery}
+                    diagnostics={diag.diagnostics}
+                    follow_up={diag.follow_up}
+                    drugDetails={drugDetails}
+                  />
+                </>
+              );
+            })()}
 
             {/* Alternative Diagnoses */}
-            {diagnoses.length > 1 && (
+            {convertedDiagnoses.length > 1 && (
               <>
                 <p className="text-[17px] leading-[26px] text-aneya-navy mb-3 mt-6 font-semibold">Alternative Diagnoses:</p>
                 <div className="space-y-4">
-                  {diagnoses.slice(1).map((diag: any, idx: number) => (
-                    <DiagnosisCard
-                      key={idx + 1}
-                      diagnosisNumber={idx + 2}
-                      diagnosis={diag.diagnosis || diag.name}
-                      confidence={diag.confidence}
-                      isPrimary={false}
-                      source={diag.source}
-                      url={diag.url}
-                      summary={diag.summary}
-                    />
-                  ))}
+                  {convertedDiagnoses.slice(1).map((diag: any, idx: number) => {
+                    return (
+                      <DiagnosisCard
+                        key={idx + 1}
+                        diagnosisNumber={idx + 2}
+                        diagnosis={diag.diagnosis || diag.name}
+                        confidence={diag.confidence}
+                        isPrimary={false}
+                        source={diag.source}
+                        url={diag.url}
+                        summary={diag.summary}
+                        primary_care={diag.primary_care}
+                        surgery={diag.surgery}
+                        diagnostics={diag.diagnostics}
+                        follow_up={diag.follow_up}
+                        drugDetails={drugDetails}
+                      />
+                    );
+                  })}
                 </div>
               </>
             )}
           </section>
         )}
 
-        {/* 3. Resources Consulted Section */}
+        {/* 4. Resources Consulted Section */}
         {(niceGuidelines.length > 0 || cksTopics.length > 0 || bnfSummaries.length > 0) && (
           <section className="mb-8">
             <h2 className="text-[26px] leading-[32px] text-aneya-navy mb-4">Resources Consulted</h2>
@@ -236,7 +335,7 @@ export function ReportScreen({ onStartNew, result, patientDetails }: ReportScree
           </section>
         )}
 
-        {/* 4. Clinical Disclaimer */}
+        {/* 5. Clinical Disclaimer */}
         <section className="mb-8">
           <WarningBox>
             <div className="space-y-2">
@@ -251,7 +350,7 @@ export function ReportScreen({ onStartNew, result, patientDetails }: ReportScree
           </WarningBox>
         </section>
 
-        {/* 5. Start New Analysis Button */}
+        {/* 6. Start New Analysis Button */}
         <div className="pt-6">
           <PrimaryButton onClick={onStartNew} fullWidth>
             Start New Analysis

@@ -4,8 +4,16 @@ import { ProgressScreen } from './components/ProgressScreen';
 import { AnalysisComplete } from './components/AnalysisComplete';
 import { ReportScreen } from './components/ReportScreen';
 import { InvalidInputScreen } from './components/InvalidInputScreen';
+import { LoginScreen } from './components/LoginScreen';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TabNavigation } from './components/TabNavigation';
+import { AppointmentsTab } from './components/AppointmentsTab';
+import { PatientsTab } from './components/PatientsTab';
+import { PatientDetailView } from './components/PatientDetailView';
+import { Patient, AppointmentWithPatient } from './types/database';
+import { useConsultations } from './hooks/useConsultations';
 
-type Screen = 'input' | 'progress' | 'complete' | 'report' | 'invalid';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -36,14 +44,54 @@ interface StreamEvent {
   timestamp: number;
 }
 
-export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('input');
+function MainApp() {
+  const { user, loading, signOut } = useAuth();
+  const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [currentPatientDetails, setCurrentPatientDetails] = useState<PatientDetails | null>(null);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
   const [invalidInputMessage, setInvalidInputMessage] = useState<string>('');
+  const [analysisErrors, setAnalysisErrors] = useState<string[]>([]);
+  // NEW: State for async drug loading
+  const [drugDetails, setDrugDetails] = useState<Record<string, any>>({});
+  // NEW: State for transcripts
+  const [consultationText, setConsultationText] = useState<string>(''); // Used for analysis (summary or transcript)
+  const [consultationTranscript, setConsultationTranscript] = useState<string>(''); // Full transcript
+  const [consultationSummary, setConsultationSummary] = useState<string>(''); // Summary
+  const [originalTranscript, setOriginalTranscript] = useState<string>('');
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<string>('');
 
-  const handleAnalyze = async (consultation: string, patientDetails: PatientDetails) => {
+  // Appointment system state
+  const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments');
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithPatient | null>(null);
+  const { saveConsultation } = useConsultations();
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-aneya-cream flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+          <p className="text-aneya-navy">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen if not authenticated
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  const handleAnalyze = async (
+    consultation: string,
+    patientDetails: PatientDetails,
+    originalTranscriptParam?: string,
+    detectedLanguageParam?: string,
+    transcriptParam?: string,
+    summaryParam?: string
+  ) => {
     // Validate consultation is not empty or whitespace-only
     if (!consultation.trim()) {
       alert('Please enter a clinical consultation before submitting.\n\nThe consultation text cannot be empty.');
@@ -53,6 +101,13 @@ export default function App() {
     setAnalysisResult(null); // Clear previous results
     setCurrentPatientDetails(patientDetails); // Store patient details for report
     setStreamEvents([]); // Clear previous stream events
+    setAnalysisErrors([]); // Clear previous errors
+    // Store transcripts for later save
+    setConsultationText(consultation); // This is what gets analyzed (summary or transcript)
+    setConsultationTranscript(transcriptParam || consultation); // Full transcript
+    setConsultationSummary(summaryParam || ''); // Summary if available
+    setOriginalTranscript(originalTranscriptParam || '');
+    setTranscriptionLanguage(detectedLanguageParam || '');
 
     try {
       // Check if backend is available first
@@ -84,9 +139,6 @@ export default function App() {
         );
         return; // Don't proceed with analysis
       }
-
-      // Backend is available, proceed to progress screen
-      setCurrentScreen('progress');
 
       // Get user's IP address for geolocation
       let userIp = undefined;
@@ -121,6 +173,9 @@ export default function App() {
         console.error('Backend error:', errorText);
         throw new Error(`Analysis failed: ${response.status}`);
       }
+
+      // Successfully started analysis, now proceed to progress screen
+      setCurrentScreen('progress');
 
       // Read the SSE stream
       const reader = response.body!.getReader();
@@ -157,7 +212,7 @@ export default function App() {
               console.log(`SSE Event: ${eventType}`, data);
 
               // Add event to state for real-time display
-              setStreamEvents(prev => [...prev, {
+              setStreamEvents((prev: StreamEvent[]) => [...prev, {
                 type: eventType,
                 data: data,
                 timestamp: Date.now()
@@ -168,6 +223,28 @@ export default function App() {
                 console.log('📍 Location detected:', data.country);
               } else if (eventType === 'guideline_search') {
                 console.log('🔍 Searching:', data.source);
+              } else if (eventType === 'diagnoses') {
+                // NEW: Diagnoses available - show report immediately!
+                console.log('✅ Diagnoses ready:', data.diagnoses.length, 'diagnoses');
+                console.log('⏳ Drugs pending:', data.drugs_pending.length, 'drugs');
+                setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
+                setCurrentScreen('report');
+              } else if (eventType === 'drug_update') {
+                // NEW: Individual drug details arrived
+                const source = data.source || 'unknown';
+                console.log(`Drug ${data.drug_name}: ${data.status} (source: ${source})`);
+
+                if (data.status === 'complete' && data.details) {
+                  // Log if LLM was used
+                  if (source === 'llm') {
+                    console.log(`  AI-generated drug information for ${data.drug_name}`);
+                  }
+
+                  setDrugDetails(prev => ({
+                    ...prev,
+                    [data.drug_name]: data.details
+                  }));
+                }
               } else if (eventType === 'bnf_drug') {
                 console.log(`💊 Drug ${data.medication}: ${data.status}`);
               } else if (eventType === 'complete') {
@@ -178,7 +255,22 @@ export default function App() {
                   setCurrentScreen('invalid');
                   return;
                 }
-                throw new Error(data.message);
+                // Handle critical API errors (credits, auth, max_tokens) - show immediately
+                if (data.type === 'anthropic_credits' || data.type === 'anthropic_api') {
+                  console.error('❌ Critical API error:', data.message);
+                  alert(`API Error: ${data.message}`);
+                  setCurrentScreen('input');
+                  return;
+                }
+                // Handle max_tokens warning - collect as error but allow analysis to continue
+                if (data.type === 'max_tokens') {
+                  console.warn('⚠️ Claude max_tokens warning:', data.message);
+                  setAnalysisErrors((prev: string[]) => [...prev, data.message]);
+                  // Don't return - allow analysis to continue with whatever was generated
+                }
+                // Collect other errors but don't throw - allow analysis to complete
+                console.error('Error during analysis:', data.message);
+                setAnalysisErrors(prev => [...prev, data.message]);
               }
             } catch (e) {
               console.error('Error parsing event data:', e);
@@ -188,8 +280,30 @@ export default function App() {
       }
 
       if (finalResult) {
-        setAnalysisResult(finalResult);
-        setCurrentScreen('complete');
+        setAnalysisResult((prev: any) => ({ ...(prev || {}), ...finalResult }));
+
+        // Extract drug details from bnf_summaries if available
+        if (finalResult.bnf_summaries && Array.isArray(finalResult.bnf_summaries)) {
+          const extractedDrugDetails: Record<string, any> = {};
+          for (const drugData of finalResult.bnf_summaries) {
+            // Handle both BNF and DrugBank formats
+            const drugName = drugData.medication || drugData.name || drugData.drug_name;
+            if (drugName) {
+              extractedDrugDetails[drugName] = {
+                url: drugData.url || drugData.link,
+                bnf_data: drugData.bnf_url ? drugData : undefined,
+                drugbank_data: drugData.drugbank_id ? drugData : undefined
+              };
+            }
+          }
+          setDrugDetails(extractedDrugDetails);
+          console.log(`💊 Loaded ${Object.keys(extractedDrugDetails).length} drug details from analysis result`);
+        }
+
+        // Only transition to 'complete' if we're not already showing the report
+        if (currentScreen !== 'report') {
+          setCurrentScreen('complete');
+        }
       }
     } catch (error) {
       console.error('Analysis error:', error);
@@ -203,24 +317,243 @@ export default function App() {
   };
 
   const handleStartNew = () => {
-    setCurrentScreen('input');
+    setCurrentScreen('appointments');
+    setActiveTab('appointments');
     setAnalysisResult(null);
     setCurrentPatientDetails(null);
+    setSelectedAppointment(null);
+    setSelectedPatient(null);
+    setConsultationText('');
+    setOriginalTranscript('');
+    setTranscriptionLanguage('');
+  };
+
+  const handleStartConsultationFromAppointment = async (appointment: AppointmentWithPatient) => {
+    setSelectedAppointment(appointment);
+    setSelectedPatient(appointment.patient);
+
+    // Pre-fill patient details from patient record
+    setCurrentPatientDetails({
+      name: appointment.patient.name,
+      sex: appointment.patient.sex,
+      age: appointment.patient.date_of_birth
+        ? `${new Date().getFullYear() - new Date(appointment.patient.date_of_birth).getFullYear()} years`
+        : '',
+      height: appointment.patient.height_cm ? `${appointment.patient.height_cm} cm` : '',
+      weight: appointment.patient.weight_kg ? `${appointment.patient.weight_kg} kg` : '',
+      currentMedications: appointment.patient.current_medications || '',
+      currentConditions: appointment.patient.current_conditions || '',
+    });
+
+    // Update appointment status to in_progress
+    try {
+      await fetch(`${API_URL}/api/appointments/${appointment.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'in_progress' })
+      });
+    } catch (error) {
+      console.error('Failed to update appointment status:', error);
+    }
+
+    setCurrentScreen('input');
+  };
+
+  const handleSaveConsultation = async () => {
+    if (!selectedPatient || !analysisResult) {
+      console.error('Missing patient or analysis result');
+      return;
+    }
+
+    try {
+      // Format consultation_text with both transcript and summary
+      let formattedConsultationText = '';
+
+      if (consultationTranscript) {
+        formattedConsultationText += `Consultation Transcript:\n${consultationTranscript}`;
+      }
+
+      if (consultationSummary) {
+        if (formattedConsultationText) formattedConsultationText += '\n\n';
+        formattedConsultationText += `Consultation Summary:\n${consultationSummary}`;
+      }
+
+      // Fallback to consultationText if neither transcript nor summary is set
+      if (!formattedConsultationText) {
+        formattedConsultationText = consultationText;
+      }
+
+      const consultationData = {
+        appointment_id: selectedAppointment?.id || null,
+        patient_id: selectedPatient.id,
+        consultation_text: formattedConsultationText,
+        original_transcript: originalTranscript || null,
+        transcription_language: transcriptionLanguage || null,
+        patient_snapshot: currentPatientDetails,
+        analysis_result: analysisResult,
+        diagnoses: analysisResult.diagnoses || [],
+        guidelines_found: analysisResult.guidelines_found || [],
+      };
+
+      await saveConsultation(consultationData);
+
+      // Return to appointments
+      setCurrentScreen('appointments');
+      setActiveTab('appointments');
+      setSelectedAppointment(null);
+      setSelectedPatient(null);
+      setAnalysisResult(null);
+      setCurrentPatientDetails(null);
+      setConsultationText('');
+      setOriginalTranscript('');
+      setTranscriptionLanguage('');
+    } catch (error) {
+      console.error('Failed to save consultation:', error);
+      alert('Failed to save consultation. Please try again.');
+    }
+  };
+
+  const handleSaveConsultationOnly = async (transcript: string, summary: string, patientDetails: PatientDetails) => {
+    if (!selectedPatient) {
+      alert('Please select a patient first');
+      return;
+    }
+
+    try {
+      // Format consultation_text with both transcript and summary
+      let formattedConsultationText = '';
+
+      if (transcript) {
+        formattedConsultationText += `Consultation Transcript:\n${transcript}`;
+      }
+
+      if (summary) {
+        if (formattedConsultationText) formattedConsultationText += '\n\n';
+        formattedConsultationText += `Consultation Summary:\n${summary}`;
+      }
+
+      const consultationData = {
+        appointment_id: selectedAppointment?.id || null,
+        patient_id: selectedPatient.id,
+        consultation_text: formattedConsultationText,
+        original_transcript: originalTranscript || null,
+        transcription_language: transcriptionLanguage || null,
+        patient_snapshot: patientDetails,
+        analysis_result: null,
+        diagnoses: [],
+        guidelines_found: [],
+      };
+
+      await saveConsultation(consultationData);
+
+      alert('Consultation saved successfully!');
+
+      // Return to appointments
+      setCurrentScreen('appointments');
+      setActiveTab('appointments');
+      setSelectedAppointment(null);
+      setSelectedPatient(null);
+      setCurrentPatientDetails(null);
+      setConsultationText('');
+      setConsultationTranscript('');
+      setConsultationSummary('');
+      setOriginalTranscript('');
+      setTranscriptionLanguage('');
+    } catch (error) {
+      console.error('Failed to save consultation:', error);
+      alert('Failed to save consultation. Please try again.');
+    }
+  };
+
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setCurrentScreen('patient-detail');
+  };
+
+  const handleBackToPatients = () => {
+    setSelectedPatient(null);
+    setCurrentScreen('patients');
   };
 
   return (
     <div className="min-h-screen bg-aneya-cream">
       {/* Header */}
       <header className="bg-aneya-navy py-4 px-6 border-b border-aneya-teal sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex items-center">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-40" />
+          <div className="flex items-center gap-4">
+            <span className="text-white text-sm">{user.email}</span>
+            <button
+              onClick={() => signOut()}
+              className="bg-aneya-teal hover:bg-aneya-teal/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
 
+      {/* Tab Navigation - only show on appointments/patients screens */}
+      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail') && (
+        <TabNavigation
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab);
+            setCurrentScreen(tab);
+          }}
+        />
+      )}
+
       {/* Main Content */}
       <main>
+        {currentScreen === 'appointments' && (
+          <AppointmentsTab onStartConsultation={handleStartConsultationFromAppointment} />
+        )}
+
+        {currentScreen === 'patients' && (
+          <PatientsTab onSelectPatient={handleSelectPatient} />
+        )}
+
+        {currentScreen === 'patient-detail' && selectedPatient && (
+          <PatientDetailView
+            patient={selectedPatient}
+            onBack={handleBackToPatients}
+            onEditPatient={() => {
+              // TODO: Implement patient editing
+              console.log('Edit patient:', selectedPatient.id);
+            }}
+            onStartConsultation={(patient) => {
+              // Create a temporary appointment-like object for consultation
+              const tempAppointment: AppointmentWithPatient = {
+                id: '',
+                patient_id: patient.id,
+                scheduled_time: new Date().toISOString(),
+                duration_minutes: 30,
+                status: 'scheduled',
+                appointment_type: 'general',
+                reason: null,
+                notes: null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_by: user!.id,
+                consultation_id: null,
+                cancelled_at: null,
+                cancellation_reason: null,
+                patient: patient
+              };
+              handleStartConsultationFromAppointment(tempAppointment);
+            }}
+          />
+        )}
+
         {currentScreen === 'input' && (
-          <InputScreen onAnalyze={handleAnalyze} />
+          <InputScreen
+            onAnalyze={handleAnalyze}
+            onSaveConsultation={handleSaveConsultationOnly}
+            onBack={() => setCurrentScreen('appointments')}
+            preFilledPatient={selectedPatient || undefined}
+            appointmentContext={selectedAppointment || undefined}
+          />
         )}
 
         {currentScreen === 'progress' && (
@@ -246,9 +579,21 @@ export default function App() {
             onStartNew={handleStartNew}
             result={analysisResult}
             patientDetails={currentPatientDetails}
+            errors={analysisErrors}
+            drugDetails={drugDetails}
+            appointmentContext={selectedAppointment || undefined}
+            onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
           />
         )}
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
