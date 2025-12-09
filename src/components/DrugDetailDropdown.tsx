@@ -93,20 +93,8 @@ export function DrugDetailDropdown({ drugName, details, onExpand }: DrugDetailDr
           {/* Loaded state */}
           {isLoaded && (
             <div className="space-y-4">
-              {/* Source Attribution Badge - Show for LLM-generated data */}
-              {bnfData?.source === 'llm' && (
-                <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
-                  <span className="text-xs font-medium text-amber-800">
-                    ⚠️ AI-Generated Information
-                  </span>
-                  <span className="text-xs text-amber-600">
-                    Source: Claude 4 AI (not verified by BNF)
-                  </span>
-                </div>
-              )}
-
-              {/* Source Link - Only show for BNF data */}
-              {bnfData?.source === 'bnf' && details.url && (
+              {/* Source Link - BNF */}
+              {bnfData && details.url && (
                 <div>
                   <a
                     href={details.url}
@@ -120,8 +108,8 @@ export function DrugDetailDropdown({ drugName, details, onExpand }: DrugDetailDr
                 </div>
               )}
 
-              {/* DrugBank link - for non-LLM DrugBank data */}
-              {drugbankData && !bnfData?.source && details.url && (
+              {/* DrugBank link - fallback for international */}
+              {drugbankData && !bnfData && details.url && (
                 <div>
                   <a
                     href={details.url}
