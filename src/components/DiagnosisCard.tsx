@@ -169,16 +169,13 @@ export function DiagnosisCard({
                 <div className="mb-4">
                   <h5 className="text-[15px] font-semibold text-aneya-navy mb-2">Medications</h5>
                   <div className="space-y-2">
-                    {primary_care.medications.map((drug, idx) => {
-                      const drugName = typeof drug === 'string' ? drug : drug.drug_name || String(drug);
-                      return (
+                    {primary_care.medications.map((drugName, idx) => (
                         <DrugDetailDropdown
                           key={idx}
                           drugName={drugName}
                           details={drugDetails[drugName]}
                         />
-                      );
-                    })}
+                    ))}
                   </div>
                 </div>
               )}
@@ -257,16 +254,13 @@ export function DiagnosisCard({
                   <div className="mb-3">
                     <strong className="text-[14px] text-aneya-navy">Medications:</strong>
                     <div className="space-y-2 mt-2">
-                      {surgery.phases.preoperative.medications.map((drug, idx) => {
-                        const drugName = typeof drug === 'string' ? drug : drug.drug_name || String(drug);
-                        return (
+                      {surgery.phases.preoperative.medications.map((drugName, idx) => (
                           <DrugDetailDropdown
                             key={idx}
                             drugName={drugName}
                             details={drugDetails[drugName]}
                           />
-                        );
-                      })}
+                      ))}
                     </div>
                   </div>
                 )}
@@ -338,16 +332,13 @@ export function DiagnosisCard({
                   <div className="mb-3">
                     <strong className="text-[14px] text-aneya-navy">Medications:</strong>
                     <div className="space-y-2 mt-2">
-                      {surgery.phases.postoperative.medications.map((drug, idx) => {
-                        const drugName = typeof drug === 'string' ? drug : drug.drug_name || String(drug);
-                        return (
+                      {surgery.phases.postoperative.medications.map((drugName, idx) => (
                           <DrugDetailDropdown
                             key={idx}
                             drugName={drugName}
                             details={drugDetails[drugName]}
                           />
-                        );
-                      })}
+                      ))}
                     </div>
                   </div>
                 )}

@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data: _data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
