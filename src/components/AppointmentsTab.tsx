@@ -159,8 +159,8 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
   }
 
   return (
-    <div className="min-h-screen bg-aneya-cream">
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-aneya-cream overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-[24px] sm:text-[32px] text-aneya-navy mb-2">
@@ -188,8 +188,8 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
         </div>
 
         {/* Two-column layout: Appointments on left, Calendar on right */}
-        {/* On mobile: stack vertically with calendar first, on desktop: side by side */}
-        <div className="flex flex-col-reverse lg:flex-row gap-6 items-start">
+        {/* On mobile: stack vertically with appointments first, calendar below */}
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Left column: Appointments List */}
           <div className="flex-1 w-full">
             {appointments.length === 0 ? (

@@ -9,10 +9,11 @@ interface PatientsTabProps {
 }
 
 export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
-  const { patients, loading, createPatient, updatePatient, error } = usePatients();
+  const { patients, loading, createPatient, updatePatient, deletePatient, error } = usePatients();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | undefined>(undefined);
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
 
   const filteredPatients = patients.filter((patient) =>
     patient.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -46,6 +47,22 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
     setEditingPatient(undefined);
   };
 
+  const handleDeletePatient = async (e: React.MouseEvent, patient: Patient) => {
+    e.stopPropagation(); // Prevent row click from triggering
+
+    if (!confirm(`Are you sure you want to delete ${patient.name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingPatientId(patient.id);
+    const success = await deletePatient(patient.id);
+    setDeletingPatientId(null);
+
+    if (!success) {
+      alert('Failed to delete patient. Please check the console for details.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-aneya-cream flex items-center justify-center">
@@ -58,8 +75,8 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
   }
 
   return (
-    <div className="min-h-screen bg-aneya-cream">
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-aneya-cream overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-[14px]">
@@ -162,12 +179,21 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                         {calculateAge(patient.date_of_birth)} • {patient.sex}
                       </p>
                     </div>
-                    <button
-                      onClick={(e) => handleEditPatient(e, patient)}
-                      className="px-3 py-1.5 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => handleEditPatient(e, patient)}
+                        className="px-3 py-1.5 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => handleDeletePatient(e, patient)}
+                        disabled={deletingPatientId === patient.id}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded-lg font-medium text-[12px] hover:bg-red-600 transition-colors disabled:opacity-50"
+                      >
+                        {deletingPatientId === patient.id ? '...' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[13px]">
                     <div>
@@ -259,12 +285,21 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                         }
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={(e) => handleEditPatient(e, patient)}
-                          className="px-4 py-2 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => handleEditPatient(e, patient)}
+                            className="px-4 py-2 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => handleDeletePatient(e, patient)}
+                            disabled={deletingPatientId === patient.id}
+                            className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-[12px] hover:bg-red-600 transition-colors disabled:opacity-50"
+                          >
+                            {deletingPatientId === patient.id ? '...' : 'Delete'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
