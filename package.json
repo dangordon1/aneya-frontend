@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.86.2",
     "@types/react-calendar": "^3.9.0",
+    "firebase": "^12.6.0",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-calendar": "^6.0.0",
