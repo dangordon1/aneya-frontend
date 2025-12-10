@@ -110,9 +110,6 @@ export function LoginScreen() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/aneya-logo.png" alt="aneya" className="h-32 mx-auto mb-4" />
-          <h1 className="font-serif text-3xl text-aneya-navy mb-2">
-            Clinical Decision Support
-          </h1>
           <p className="text-aneya-navy/70">
             {isSignUp ? 'Create your account' : 'Sign in to continue'}
           </p>
