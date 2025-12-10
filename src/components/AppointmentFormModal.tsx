@@ -139,13 +139,13 @@ export function AppointmentFormModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-[20px] p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-[28px] text-aneya-navy mb-6">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8">
+      <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-y-auto">
+        <h2 className="text-[24px] sm:text-[28px] text-aneya-navy mb-4 sm:mb-6">
           {appointment ? 'Edit Appointment' : 'Create New Appointment'}
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           {/* Patient Selection */}
           <div>
             <label htmlFor="patient" className="block mb-1 text-[12px] text-gray-600">
@@ -170,7 +170,7 @@ export function AppointmentFormModal({
           </div>
 
           {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="date" className="block mb-1 text-[12px] text-gray-600">
                 Date <span className="text-red-500">*</span>
@@ -212,7 +212,7 @@ export function AppointmentFormModal({
           </div>
 
           {/* Duration and Type */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="duration" className="block mb-1 text-[12px] text-gray-600">
                 Duration
@@ -279,19 +279,19 @@ export function AppointmentFormModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+          <div className="flex gap-3 mt-4 sm:mt-6 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-[10px] font-medium text-[14px] hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 border-2 border-gray-300 text-gray-700 rounded-[10px] font-medium text-[14px] hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="flex-1 px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : 'Save'}
             </button>
