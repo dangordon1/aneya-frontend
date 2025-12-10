@@ -14,6 +14,7 @@ interface UsePatientsReturn {
   error: string | null;
   createPatient: (input: CreatePatientInput) => Promise<Patient | null>;
   updatePatient: (id: string, input: UpdatePatientInput) => Promise<Patient | null>;
+  deletePatient: (id: string) => Promise<boolean>;
   refetch: () => Promise<void>;
 }
 
@@ -159,12 +160,43 @@ export function usePatients(): UsePatientsReturn {
     [user]
   );
 
+  const deletePatient = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!user) {
+        setError('User not authenticated');
+        return false;
+      }
+
+      try {
+        setError(null);
+
+        const { error: deleteError } = await supabase
+          .from('patients')
+          .delete()
+          .eq('id', id);
+
+        if (deleteError) throw deleteError;
+
+        // Remove from local state
+        setPatients((prev) => prev.filter((p) => p.id !== id));
+
+        return true;
+      } catch (err) {
+        console.error('Error deleting patient:', err);
+        setError(err instanceof Error ? err.message : 'Failed to delete patient');
+        return false;
+      }
+    },
+    [user]
+  );
+
   return {
     patients,
     loading,
     error,
     createPatient,
     updatePatient,
+    deletePatient,
     refetch: fetchPatients,
   };
 }

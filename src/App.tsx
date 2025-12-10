@@ -66,6 +66,7 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithPatient | null>(null);
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0); // Used to force refresh appointments
   const { saveConsultation } = useConsultations();
 
   // Show loading state while checking auth
@@ -408,6 +409,9 @@ function MainApp() {
 
       await saveConsultation(consultationData);
 
+      // Increment refresh key to force AppointmentsTab to refetch
+      setAppointmentsRefreshKey(prev => prev + 1);
+
       // Return to appointments
       setCurrentScreen('appointments');
       setActiveTab('appointments');
@@ -457,6 +461,9 @@ function MainApp() {
 
       await saveConsultation(consultationData);
 
+      // Increment refresh key to force AppointmentsTab to refetch
+      setAppointmentsRefreshKey(prev => prev + 1);
+
       alert('Consultation saved successfully!');
 
       // Return to appointments
@@ -489,9 +496,9 @@ function MainApp() {
   return (
     <div className="min-h-screen bg-aneya-cream">
       {/* Header */}
-      <header className="bg-aneya-navy py-4 px-6 border-b border-aneya-teal sticky top-0 z-30">
+      <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <img src="/aneya-logo.png" alt="aneya" className="h-40" />
+          <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
           <div className="flex items-center gap-4">
             <span className="text-white text-sm">{user.email}</span>
             <button
@@ -518,7 +525,7 @@ function MainApp() {
       {/* Main Content */}
       <main>
         {currentScreen === 'appointments' && (
-          <AppointmentsTab onStartConsultation={handleStartConsultationFromAppointment} />
+          <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} />
         )}
 
         {currentScreen === 'patients' && (
