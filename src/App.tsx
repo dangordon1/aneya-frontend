@@ -449,6 +449,59 @@ function MainApp() {
         console.warn('Could not detect IP address:', error);
       }
 
+      // Check if consultation needs summarization first (no summary_data)
+      let textForAnalysis = textToAnalyze;
+      if (!consultation.summary_data) {
+        console.log('Consultation needs summarization first, calling /api/summarize...');
+        setStreamEvents(prev => [...prev, {
+          type: 'summarizing',
+          data: { message: 'Summarizing consultation transcript...' },
+          timestamp: Date.now()
+        }]);
+
+        const summarizeResponse = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            transcript: textToAnalyze,
+            patient_name: patientDetails.name,
+            user_ip: userIp
+          }),
+        });
+
+        if (!summarizeResponse.ok) {
+          console.warn('Summarization failed, proceeding with raw transcript');
+        } else {
+          const summaryResult = await summarizeResponse.json();
+          console.log('Summarization complete:', summaryResult);
+
+          // Update the consultation with summary data
+          if (summaryResult.consultation_data?.summary_data) {
+            try {
+              const { supabase } = await import('./lib/supabase');
+              await supabase
+                .from('consultations')
+                .update({
+                  summary_data: summaryResult.consultation_data.summary_data,
+                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze
+                })
+                .eq('id', consultation.id);
+              console.log('Consultation updated with summary data');
+            } catch (updateErr) {
+              console.warn('Failed to save summary data:', updateErr);
+            }
+          }
+
+          // Use the summarized text for analysis if available
+          if (summaryResult.summary) {
+            textForAnalysis = summaryResult.summary;
+            setConsultationSummary(summaryResult.summary);
+          }
+        }
+      }
+
       // Use streaming endpoint for real-time updates
       const response = await fetch(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
@@ -456,7 +509,7 @@ function MainApp() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          consultation: textToAnalyze,
+          consultation: textForAnalysis,
           patient_name: patientDetails.name,
           patient_height: patientDetails.height,
           patient_weight: patientDetails.weight,
@@ -616,6 +669,59 @@ function MainApp() {
         console.warn('Could not detect IP address:', error);
       }
 
+      // Check if consultation needs summarization first (no summary_data)
+      let textForAnalysis = textToAnalyze;
+      if (!consultation.summary_data) {
+        console.log('Consultation needs summarization first, calling /api/summarize...');
+        setStreamEvents(prev => [...prev, {
+          type: 'summarizing',
+          data: { message: 'Summarizing consultation transcript...' },
+          timestamp: Date.now()
+        }]);
+
+        const summarizeResponse = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            transcript: textToAnalyze,
+            patient_name: patientDetails.name,
+            user_ip: userIp
+          }),
+        });
+
+        if (!summarizeResponse.ok) {
+          console.warn('Summarization failed, proceeding with raw transcript');
+        } else {
+          const summaryResult = await summarizeResponse.json();
+          console.log('Summarization complete:', summaryResult);
+
+          // Update the consultation with summary data
+          if (summaryResult.consultation_data?.summary_data) {
+            try {
+              const { supabase } = await import('./lib/supabase');
+              await supabase
+                .from('consultations')
+                .update({
+                  summary_data: summaryResult.consultation_data.summary_data,
+                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze
+                })
+                .eq('id', consultation.id);
+              console.log('Consultation updated with summary data');
+            } catch (updateErr) {
+              console.warn('Failed to save summary data:', updateErr);
+            }
+          }
+
+          // Use the summarized text for analysis if available
+          if (summaryResult.summary) {
+            textForAnalysis = summaryResult.summary;
+            setConsultationSummary(summaryResult.summary);
+          }
+        }
+      }
+
       // Use streaming endpoint for real-time updates
       const response = await fetch(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
@@ -623,7 +729,7 @@ function MainApp() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          consultation: textToAnalyze,
+          consultation: textForAnalysis,
           patient_name: patientDetails.name,
           patient_height: patientDetails.height,
           patient_weight: patientDetails.weight,
