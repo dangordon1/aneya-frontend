@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Patient } from '../types/database';
+import { Patient, Consultation } from '../types/database';
 import { useConsultations } from '../hooks/useConsultations';
 import { usePatients } from '../hooks/usePatients';
 import { ConsultationHistoryCard } from './ConsultationHistoryCard';
@@ -11,6 +11,7 @@ interface PatientDetailViewProps {
   onBack: () => void;
   onEditPatient: (patient: Patient) => void;
   onStartConsultation: (patient: Patient) => void;
+  onAnalyzeConsultation?: (consultation: Consultation) => void;
 }
 
 export function PatientDetailView({
@@ -18,8 +19,9 @@ export function PatientDetailView({
   onBack,
   onEditPatient,
   onStartConsultation,
+  onAnalyzeConsultation,
 }: PatientDetailViewProps) {
-  const { consultations, loading: consultationsLoading } = useConsultations(patient.id);
+  const { consultations, loading: consultationsLoading, deleteConsultation } = useConsultations(patient.id);
   const { updatePatient } = usePatients();
 
   const [isConsultationsExpanded, setIsConsultationsExpanded] = useState(true);
@@ -270,6 +272,8 @@ export function PatientDetailView({
                   <ConsultationHistoryCard
                     key={consultation.id}
                     consultation={consultation}
+                    onDelete={deleteConsultation}
+                    onAnalyze={onAnalyzeConsultation}
                   />
                 ))
               )}

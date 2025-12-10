@@ -12,9 +12,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface AppointmentsTabProps {
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
+  onAnalyzeConsultation?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
 }
 
-export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
+export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: AppointmentsTabProps) {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, createAppointment, cancelAppointment } =
@@ -66,15 +67,16 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
       try {
         // TIME: Fetch completed and cancelled appointments
         const appointmentsStart = performance.now();
+        console.log('🔍 Fetching past appointments for user:', user.id);
         const { data: appointments, error: appointmentsError } = await supabase
           .from('appointments')
           .select('*, patient:patients(*)')
-          .eq('created_by', user.id)
           .in('status', ['completed', 'cancelled'])
           .order('scheduled_time', { ascending: false })
           .limit(10);
         const appointmentsEnd = performance.now();
         console.log(`⏱️ Past appointments query: ${(appointmentsEnd - appointmentsStart).toFixed(0)}ms`);
+        console.log('📋 Past appointments found:', appointments?.length || 0, appointments);
 
         if (appointmentsError) {
           console.error('Error fetching past appointments:', appointmentsError);
@@ -279,29 +281,34 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
         />
 
         {/* Past Appointments Section */}
-        {pastAppointments.length > 0 && (
-          <div className="mt-12 border-t border-gray-300 pt-8">
-            <h2 className="text-[24px] text-aneya-navy mb-6 font-semibold">
-              Past Appointments
-            </h2>
+        <div className="mt-12 border-t border-gray-300 pt-8">
+          <h2 className="text-[24px] text-aneya-navy mb-6 font-semibold">
+            Past Appointments
+          </h2>
 
-            {pastAppointmentsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pastAppointments.map((appointment) => (
-                  <PastAppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    consultation={consultationsMap[appointment.id] || null}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          {pastAppointmentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pastAppointments.length === 0 ? (
+            <div className="bg-gray-50 rounded-[16px] p-8 text-center border border-gray-200">
+              <p className="text-[14px] text-gray-600">
+                No completed or cancelled appointments yet
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pastAppointments.map((appointment) => (
+                <PastAppointmentCard
+                  key={appointment.id}
+                  appointment={appointment}
+                  consultation={consultationsMap[appointment.id] || null}
+                  onAnalyze={onAnalyzeConsultation}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
