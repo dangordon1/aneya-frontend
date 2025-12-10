@@ -69,57 +69,107 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
         return null;
       }
 
-      try {
-        setError(null);
+      // Helper to check if error is retryable (network issues)
+      const isRetryableError = (err: unknown): boolean => {
+        const message = err instanceof Error ? err.message : String(err);
+        const errorObj = err as { code?: string; message?: string };
+        return (
+          message.includes('Load failed') ||
+          message.includes('network') ||
+          message.includes('connection') ||
+          message.includes('TypeError: Load failed') ||
+          errorObj?.code === ''
+        );
+      };
 
-        const insertData = {
-          ...input,
-          performed_by: user.id,
-        };
-        console.log('Saving consultation with data:', insertData);
+      // Helper to sleep
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-        const { data, error: saveError } = await supabase
-          .from('consultations')
-          .insert(insertData)
-          .select()
-          .single();
+      const insertData = {
+        ...input,
+        performed_by: user.id,
+      };
 
-        if (saveError) {
-          console.error('Supabase save error:', saveError);
-          throw saveError;
-        }
+      const maxAttempts = 3;
+      let lastError: unknown = null;
 
-        if (!data) {
-          throw new Error('No data returned from save');
-        }
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          setError(null);
+          console.log(`Saving consultation (attempt ${attempt}/${maxAttempts}):`, insertData);
 
-        // If this consultation is linked to an appointment, update the appointment status
-        if (input.appointment_id) {
-          console.log('Updating appointment status to completed:', input.appointment_id);
-          const { error: updateError } = await supabase
-            .from('appointments')
-            .update({
-              status: 'completed',
-              consultation_id: data.id
-            })
-            .eq('id', input.appointment_id);
+          const { data, error: saveError } = await supabase
+            .from('consultations')
+            .insert(insertData)
+            .select()
+            .single();
 
-          if (updateError) {
-            console.error('Error updating appointment status:', updateError);
-            // Don't fail the consultation save if appointment update fails
-          } else {
-            console.log('Appointment marked as completed');
+          if (saveError) {
+            console.error('Supabase save error:', saveError);
+            // Check if this is a retryable error
+            if (isRetryableError(saveError) && attempt < maxAttempts) {
+              const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000);
+              console.warn(`Network error, retrying in ${delay}ms...`);
+              await sleep(delay);
+              continue;
+            }
+            throw saveError;
           }
+
+          if (!data) {
+            throw new Error('No data returned from save');
+          }
+
+          // If this consultation is linked to an appointment, update the appointment status
+          if (input.appointment_id) {
+            console.log('Updating appointment status to completed:', input.appointment_id);
+            // Also retry the appointment update
+            for (let updateAttempt = 1; updateAttempt <= maxAttempts; updateAttempt++) {
+              const { error: updateError } = await supabase
+                .from('appointments')
+                .update({
+                  status: 'completed',
+                  consultation_id: data.id
+                })
+                .eq('id', input.appointment_id);
+
+              if (updateError) {
+                if (isRetryableError(updateError) && updateAttempt < maxAttempts) {
+                  const delay = Math.min(500 * Math.pow(2, updateAttempt - 1), 5000);
+                  console.warn(`Network error updating appointment, retrying in ${delay}ms...`);
+                  await sleep(delay);
+                  continue;
+                }
+                console.error('Error updating appointment status:', updateError);
+                // Don't fail the consultation save if appointment update fails
+              } else {
+                console.log('Appointment marked as completed');
+              }
+              break;
+            }
+          }
+
+          setConsultations((prev) => [data, ...prev]);
+          console.log('Consultation saved successfully');
+          return data;
+        } catch (err) {
+          lastError = err;
+          if (isRetryableError(err) && attempt < maxAttempts) {
+            const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000);
+            console.warn(`Network error (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms...`, err);
+            await sleep(delay);
+            continue;
+          }
+          console.error('Error saving consultation:', err);
+          setError(err instanceof Error ? err.message : 'Failed to save consultation');
+          return null;
         }
-
-        setConsultations((prev) => [data, ...prev]);
-
-        return data;
-      } catch (err) {
-        console.error('Error saving consultation:', err);
-        setError(err instanceof Error ? err.message : 'Failed to save consultation');
-        return null;
       }
+
+      // All retries exhausted
+      console.error('All retry attempts failed:', lastError);
+      setError('Network connection lost. Please check your connection and try again.');
+      return null;
     },
     [user]
   );
