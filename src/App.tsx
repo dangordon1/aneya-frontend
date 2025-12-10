@@ -12,6 +12,7 @@ import { PatientsTab } from './components/PatientsTab';
 import { PatientDetailView } from './components/PatientDetailView';
 import { Patient, AppointmentWithPatient } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid';
 
@@ -178,7 +179,17 @@ function MainApp() {
       setCurrentScreen('progress');
 
       // Read the SSE stream
-      const reader = response.body!.getReader();
+      // Check if response.body is available (Safari compatibility)
+      if (!response.body) {
+        console.error('ReadableStream not supported - falling back to text read');
+        const text = await response.text();
+        console.log('Response text:', text);
+        alert('Your browser may not support real-time streaming. Please try using Chrome or Firefox.');
+        setCurrentScreen('input');
+        return;
+      }
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let finalResult = null;
@@ -592,8 +603,10 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

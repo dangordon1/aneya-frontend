@@ -163,7 +163,7 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[32px] text-aneya-navy mb-2">
+          <h1 className="text-[24px] sm:text-[32px] text-aneya-navy mb-2">
             {formatDateDisplay(selectedDate)}
           </h1>
           <button
@@ -188,9 +188,10 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
         </div>
 
         {/* Two-column layout: Appointments on left, Calendar on right */}
-        <div className="flex gap-6 items-start">
+        {/* On mobile: stack vertically with calendar first, on desktop: side by side */}
+        <div className="flex flex-col-reverse lg:flex-row gap-6 items-start">
           {/* Left column: Appointments List */}
-          <div className="flex-1">
+          <div className="flex-1 w-full">
             {appointments.length === 0 ? (
           <div className="bg-white rounded-[16px] p-12 text-center border-2 border-gray-200">
             <svg
@@ -239,7 +240,7 @@ export function AppointmentsTab({ onStartConsultation }: AppointmentsTabProps) {
           </div>
 
           {/* Right column: Calendar */}
-          <div className="w-[350px] flex-shrink-0">
+          <div className="w-full lg:w-[350px] flex-shrink-0">
             <CompactCalendar
               appointments={appointments}
               selectedDate={selectedDate}

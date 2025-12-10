@@ -67,8 +67,8 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
             </p>
           </div>
         )}
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="text-[32px] text-aneya-navy">Patients</h1>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-[24px] sm:text-[32px] text-aneya-navy">Patients</h1>
           <button
             onClick={() => setIsModalOpen(true)}
             className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors flex items-center gap-2"
@@ -146,76 +146,132 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-[16px] border-2 border-aneya-teal overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-aneya-teal bg-opacity-10 border-b border-aneya-teal">
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Name
-                  </th>
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Age
-                  </th>
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Sex
-                  </th>
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Last Visit
-                  </th>
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Upcoming Appointments
-                  </th>
-                  <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPatients.map((patient) => (
-                  <tr
-                    key={patient.id}
-                    onClick={() => onSelectPatient(patient)}
-                    className="border-b border-gray-100 hover:bg-aneya-teal hover:bg-opacity-5 cursor-pointer transition-colors"
-                  >
-                    <td className="px-6 py-4 text-[14px] text-aneya-navy font-medium">
-                      {patient.name}
-                    </td>
-                    <td className="px-6 py-4 text-[14px] text-aneya-navy">
-                      {calculateAge(patient.date_of_birth)}
-                    </td>
-                    <td className="px-6 py-4 text-[14px] text-aneya-navy">{patient.sex}</td>
-                    <td className="px-6 py-4 text-[14px] text-aneya-navy">
-                      {patient.last_visit
-                        ? formatDateUK(patient.last_visit.scheduled_time)
-                        : <span className="text-gray-500 italic">No visits</span>
-                      }
-                    </td>
-                    <td className="px-6 py-4 text-[14px] text-aneya-navy">
-                      {patient.next_appointment
-                        ? (
-                          <div className="flex flex-col">
-                            <span>{formatDateUK(patient.next_appointment.scheduled_time)}</span>
-                            <span className="text-[12px] text-gray-500">
-                              {formatTime24(patient.next_appointment.scheduled_time)}
-                            </span>
-                          </div>
-                        )
-                        : <span className="text-gray-500 italic">None</span>
-                      }
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={(e) => handleEditPatient(e, patient)}
-                        className="px-4 py-2 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
-                      >
-                        Edit
-                      </button>
-                    </td>
+          <>
+            {/* Mobile Card View */}
+            <div className="block lg:hidden space-y-4">
+              {filteredPatients.map((patient) => (
+                <div
+                  key={patient.id}
+                  onClick={() => onSelectPatient(patient)}
+                  className="bg-white rounded-[16px] border-2 border-aneya-teal p-4 cursor-pointer hover:bg-aneya-teal hover:bg-opacity-5 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="text-[16px] font-semibold text-aneya-navy">{patient.name}</h3>
+                      <p className="text-[14px] text-gray-600">
+                        {calculateAge(patient.date_of_birth)} • {patient.sex}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => handleEditPatient(e, patient)}
+                      className="px-3 py-1.5 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[13px]">
+                    <div>
+                      <span className="text-gray-500">Last Visit:</span>
+                      <p className="text-aneya-navy">
+                        {patient.last_visit
+                          ? formatDateUK(patient.last_visit.scheduled_time)
+                          : <span className="text-gray-400 italic">No visits</span>
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Next Appt:</span>
+                      <p className="text-aneya-navy">
+                        {patient.next_appointment
+                          ? (
+                            <>
+                              {formatDateUK(patient.next_appointment.scheduled_time)}
+                              <span className="text-[11px] text-gray-500 ml-1">
+                                {formatTime24(patient.next_appointment.scheduled_time)}
+                              </span>
+                            </>
+                          )
+                          : <span className="text-gray-400 italic">None</span>
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden lg:block bg-white rounded-[16px] border-2 border-aneya-teal overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-aneya-teal bg-opacity-10 border-b border-aneya-teal">
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Name
+                    </th>
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Age
+                    </th>
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Sex
+                    </th>
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Last Visit
+                    </th>
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Upcoming Appointments
+                    </th>
+                    <th className="px-6 py-4 text-left text-[14px] font-semibold text-aneya-navy">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredPatients.map((patient) => (
+                    <tr
+                      key={patient.id}
+                      onClick={() => onSelectPatient(patient)}
+                      className="border-b border-gray-100 hover:bg-aneya-teal hover:bg-opacity-5 cursor-pointer transition-colors"
+                    >
+                      <td className="px-6 py-4 text-[14px] text-aneya-navy font-medium">
+                        {patient.name}
+                      </td>
+                      <td className="px-6 py-4 text-[14px] text-aneya-navy">
+                        {calculateAge(patient.date_of_birth)}
+                      </td>
+                      <td className="px-6 py-4 text-[14px] text-aneya-navy">{patient.sex}</td>
+                      <td className="px-6 py-4 text-[14px] text-aneya-navy">
+                        {patient.last_visit
+                          ? formatDateUK(patient.last_visit.scheduled_time)
+                          : <span className="text-gray-500 italic">No visits</span>
+                        }
+                      </td>
+                      <td className="px-6 py-4 text-[14px] text-aneya-navy">
+                        {patient.next_appointment
+                          ? (
+                            <div className="flex flex-col">
+                              <span>{formatDateUK(patient.next_appointment.scheduled_time)}</span>
+                              <span className="text-[12px] text-gray-500">
+                                {formatTime24(patient.next_appointment.scheduled_time)}
+                              </span>
+                            </div>
+                          )
+                          : <span className="text-gray-500 italic">None</span>
+                        }
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={(e) => handleEditPatient(e, patient)}
+                          className="px-4 py-2 bg-aneya-teal text-white rounded-lg font-medium text-[12px] hover:bg-opacity-90 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <PatientFormModal
