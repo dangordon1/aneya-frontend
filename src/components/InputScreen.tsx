@@ -582,17 +582,31 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
     console.log('🎙️ Streaming recording stopped');
   };
 
-  // Helper: Download audio blob for testing
-  const downloadAudioBlob = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    console.log(`💾 Audio saved: ${a.download}`);
+  // Helper: Upload audio blob to GCS
+  const uploadAudioToGCS = async (blob: Blob) => {
+    try {
+      console.log(`📤 Uploading audio to GCS (${(blob.size / 1024).toFixed(2)} KB)...`);
+
+      const formData = new FormData();
+      formData.append('audio', blob, `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`);
+
+      const response = await fetch(`${API_URL}/api/upload-audio`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Audio uploaded to GCS: ${data.gcs_uri}`);
+      return data;
+    } catch (error) {
+      console.error('❌ Audio upload error:', error);
+      // Non-blocking - don't interrupt the main flow
+      return null;
+    }
   };
 
   // NEW: Process speaker diarization
@@ -605,8 +619,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
       console.log(`📊 Audio blob size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
 
-      // Save recording for testing
-      downloadAudioBlob(audioBlob);
+      // Upload recording to GCS for storage
+      uploadAudioToGCS(audioBlob);
 
       // Send to backend for diarization
       const formData = new FormData();
