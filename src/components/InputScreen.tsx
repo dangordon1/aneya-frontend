@@ -768,8 +768,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
 
   return (
     <div className="min-h-screen bg-aneya-cream">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-4 mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="flex items-center gap-4 mb-6 sm:mb-8">
           {onBack && (
             <button
               onClick={onBack}
@@ -792,7 +792,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
               <span className="text-[14px] font-medium">Back</span>
             </button>
           )}
-          <h1 className="text-[32px] leading-[38px] text-aneya-navy">Clinical Decision Support</h1>
+          <h1 className="text-[24px] sm:text-[32px] leading-[30px] sm:leading-[38px] text-aneya-navy">Clinical Decision Support</h1>
         </div>
 
         {/* Appointment Context Banner */}
@@ -970,14 +970,14 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
 
         {/* Recording UI - embedded, slides down consultation */}
         {isRecording && (
-          <div className="mb-6 bg-white border-2 border-aneya-teal rounded-[10px] p-6">
-            <div className="flex items-center justify-between">
+          <div className="mb-6 bg-white border-2 border-aneya-teal rounded-[10px] p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               {/* Left: Recording indicator */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {/* Animated mic icon */}
                 <div className={`relative ${!isPaused ? 'animate-pulse' : ''}`}>
-                  <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
-                    <svg className={`h-6 w-6 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
+                  <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
+                    <svg className={`h-5 w-5 sm:h-6 sm:w-6 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                     </svg>
                   </div>
@@ -989,46 +989,46 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
 
                 {/* Timer and status */}
                 <div>
-                  <div className="text-[28px] font-mono text-aneya-navy">
+                  <div className="text-[24px] sm:text-[28px] font-mono text-aneya-navy">
                     {formatTime(recordingTime)}
                   </div>
-                  <div className={`text-[12px] ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
-                    {isPaused ? 'Paused' : `Streaming to ElevenLabs${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
+                  <div className={`text-[11px] sm:text-[12px] ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
+                    {isPaused ? 'Paused' : `Streaming${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
                   </div>
                 </div>
               </div>
 
-              {/* Right: Control buttons */}
-              <div className="flex items-center gap-3">
+              {/* Right: Control buttons - stack on mobile */}
+              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto">
                 {/* Cancel button */}
                 <button
                   onClick={cancelRecording}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-[14px]"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
                 >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  Cancel
+                  <span className="hidden xs:inline sm:inline">Cancel</span>
                 </button>
 
                 {/* Pause/Resume button */}
                 <button
                   onClick={isPaused ? resumeRecording : pauseRecording}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-[14px]"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
                 >
                   {isPaused ? (
                     <>
-                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                       </svg>
-                      Resume
+                      <span className="hidden xs:inline sm:inline">Resume</span>
                     </>
                   ) : (
                     <>
-                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
-                      Pause
+                      <span className="hidden xs:inline sm:inline">Pause</span>
                     </>
                   )}
                 </button>
@@ -1036,12 +1036,12 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
                 {/* Stop button */}
                 <button
                   onClick={stopRecording}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-[14px]"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
                 >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                     <rect x="6" y="6" width="8" height="8" rx="1" />
                   </svg>
-                  Stop
+                  <span className="hidden xs:inline sm:inline">Stop</span>
                 </button>
               </div>
             </div>
@@ -1058,15 +1058,15 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
 
         {/* Consultation summary */}
         <div>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <label htmlFor="consultation" className="text-[20px] leading-[26px] text-aneya-navy font-serif">
               aneya consultation summary:
             </label>
 
             {!isRecording && (
-              <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
+              <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                  <label className="flex items-center gap-2 cursor-pointer order-2 sm:order-1">
                     <input
                       type="checkbox"
                       checked={shouldTranslateToEnglish}
@@ -1080,8 +1080,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
                     onClick={startRecording}
                     disabled={isConnectingToElevenLabs}
                     className={`
-                      flex items-center gap-2 px-4 py-2 rounded-[10px] font-medium text-[14px]
-                      transition-all duration-200
+                      flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-[10px] font-medium text-[14px]
+                      transition-all duration-200 w-full sm:w-auto order-1 sm:order-2
                       ${isConnectingToElevenLabs
                         ? 'bg-gray-400 text-white cursor-not-allowed'
                         : 'bg-aneya-navy hover:bg-aneya-navy-hover text-white'
@@ -1106,7 +1106,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
                     )}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-500 max-w-xs text-right leading-tight italic">
+                <p className="text-[11px] text-gray-500 max-w-xs text-left sm:text-right leading-tight italic">
                   By clicking this, you confirm that both the clinician and the patient have consented to be recorded for medical records.
                 </p>
               </div>
