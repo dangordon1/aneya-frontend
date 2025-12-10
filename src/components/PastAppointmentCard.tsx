@@ -158,7 +158,7 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
           </div>
 
           {/* AI Diagnosis or Analyse Button */}
-          {hasAiAnalysis ? (
+          {hasAiAnalysis && consultation.diagnoses && consultation.diagnoses.length > 0 ? (
             <div className="bg-green-50 rounded-[12px] p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Brain className="w-4 h-4 text-aneya-navy" />

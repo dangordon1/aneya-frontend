@@ -5,7 +5,6 @@ import {
   Consultation,
   CreateConsultationInput,
 } from '../types/database';
-import { withSupabaseRetry } from '../utils/retry';
 
 interface UseConsultationsReturn {
   consultations: Consultation[];
@@ -77,18 +76,16 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
           ...input,
           performed_by: user.id,
         };
-        console.log('📝 Saving consultation with data:', insertData);
+        console.log('Saving consultation with data:', insertData);
 
-        const { data, error: saveError } = await withSupabaseRetry(() =>
-          supabase
-            .from('consultations')
-            .insert(insertData)
-            .select()
-            .single()
-        );
+        const { data, error: saveError } = await supabase
+          .from('consultations')
+          .insert(insertData)
+          .select()
+          .single();
 
         if (saveError) {
-          console.error('❌ Supabase save error:', saveError);
+          console.error('Supabase save error:', saveError);
           throw saveError;
         }
 
@@ -98,22 +95,20 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
 
         // If this consultation is linked to an appointment, update the appointment status
         if (input.appointment_id) {
-          console.log('🔄 Updating appointment status to completed:', input.appointment_id);
-          const { error: updateError } = await withSupabaseRetry(() =>
-            supabase
-              .from('appointments')
-              .update({
-                status: 'completed',
-                consultation_id: data.id
-              })
-              .eq('id', input.appointment_id)
-          );
+          console.log('Updating appointment status to completed:', input.appointment_id);
+          const { error: updateError } = await supabase
+            .from('appointments')
+            .update({
+              status: 'completed',
+              consultation_id: data.id
+            })
+            .eq('id', input.appointment_id);
 
           if (updateError) {
-            console.error('❌ Error updating appointment status:', updateError);
+            console.error('Error updating appointment status:', updateError);
             // Don't fail the consultation save if appointment update fails
           } else {
-            console.log('✅ Appointment marked as completed');
+            console.log('Appointment marked as completed');
           }
         }
 

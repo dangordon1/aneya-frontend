@@ -378,17 +378,10 @@ function MainApp() {
     age: patient.date_of_birth
       ? `${new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()} years`
       : '',
-    height: patient.height_cm?.toString() || patient.height?.toString() || '',
-    weight: patient.weight_kg?.toString() || patient.weight?.toString() || '',
-    currentMedications: Array.isArray(patient.current_medications)
-      ? patient.current_medications.join(', ')
-      : (patient.current_medications || ''),
-    currentConditions: Array.isArray(patient.medical_conditions)
-      ? patient.medical_conditions.join(', ')
-      : (patient.current_conditions || ''),
-    allergies: Array.isArray(patient.allergies)
-      ? patient.allergies.join(', ')
-      : (patient.allergies || '')
+    height: patient.height_cm?.toString() || '',
+    weight: patient.weight_kg?.toString() || '',
+    currentMedications: patient.current_medications || '',
+    currentConditions: patient.current_conditions || ''
   });
 
   // Handler for analyzing past consultations that weren't analyzed yet
@@ -751,8 +744,9 @@ function MainApp() {
       }
 
       // Extract summary_data from consultationSummary if available
-      const summaryData = typeof consultationSummary === 'object' && consultationSummary?.consultation_data?.summary_data
-        ? consultationSummary.consultation_data.summary_data
+      const summaryObj = consultationSummary as any;
+      const summaryData = typeof consultationSummary === 'object' && summaryObj?.consultation_data?.summary_data
+        ? summaryObj.consultation_data.summary_data
         : null;
 
       const consultationData = {
@@ -792,7 +786,7 @@ function MainApp() {
       setAnalysisResult(null);
       setCurrentPatientDetails(null);
       setConsultationText('');
-      setConsultationSummary(null);
+      setConsultationSummary('');
       setOriginalTranscript('');
       setTranscriptionLanguage('');
     } catch (error) {
@@ -866,7 +860,7 @@ function MainApp() {
       setCurrentPatientDetails(null);
       setConsultationText('');
       setConsultationTranscript('');
-      setConsultationSummary(null);
+      setConsultationSummary('');
       setOriginalTranscript('');
       setTranscriptionLanguage('');
     } catch (error) {

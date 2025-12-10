@@ -15,6 +15,23 @@
   --aneya-text-disabled: #8fa9be;
 }
 
+/* iOS Safari viewport height fix */
+@supports (-webkit-touch-callout: none) {
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* Fallback for all mobile browsers */
+html {
+  height: -webkit-fill-available;
+}
+
+body {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -25,6 +42,9 @@ body {
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
   background-color: var(--aneya-cream);
   color: var(--aneya-navy);
+  /* iOS Safari fixes */
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
 }
 
 /*  aneya Health Typography - Headings use serif */
