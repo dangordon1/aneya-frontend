@@ -30,16 +30,18 @@ export function AppointmentFormModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  // Generate time slots from 08:00 to 18:00 in 15-minute intervals
+  // Generate time slots from 07:00 to 22:00 in 15-minute intervals
   const generateTimeSlots = () => {
     const slots: string[] = [];
-    for (let hour = 8; hour < 18; hour++) {
+    for (let hour = 7; hour < 22; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
         const h = hour.toString().padStart(2, '0');
         const m = minute.toString().padStart(2, '0');
         slots.push(`${h}:${m}`);
       }
     }
+    // Add 22:00 as the final slot
+    slots.push('22:00');
     return slots;
   };
 
