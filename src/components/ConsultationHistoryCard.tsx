@@ -1,14 +1,38 @@
 import { useState } from 'react';
 import { Consultation } from '../types/database';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Brain } from 'lucide-react';
 import { formatDateUK, formatTime24, formatDuration } from '../utils/dateHelpers';
 
 interface ConsultationHistoryCardProps {
   consultation: Consultation;
+  onDelete?: (consultationId: string) => Promise<boolean>;
+  onAnalyze?: (consultation: Consultation) => void;
 }
 
-export function ConsultationHistoryCard({ consultation }: ConsultationHistoryCardProps) {
+export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze }: ConsultationHistoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Check if consultation has been analyzed
+  const hasAiAnalysis = consultation.diagnoses && consultation.diagnoses.length > 0;
+  const canAnalyze = !hasAiAnalysis && onAnalyze;
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card expansion
+
+    if (!onDelete) return;
+
+    if (!confirm('Are you sure you want to delete this consultation? This action cannot be undone.')) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await onDelete(consultation.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const date = new Date(consultation.created_at);
   const formattedDate = formatDateUK(date);
@@ -40,7 +64,7 @@ export function ConsultationHistoryCard({ consultation }: ConsultationHistoryCar
   };
 
   return (
-    <div className="bg-white rounded-[16px] border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-[16px] border-2 border-aneya-teal overflow-hidden hover:shadow-md transition-shadow">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-4 flex items-start justify-between hover:bg-gray-50 transition-colors"
@@ -120,9 +144,43 @@ export function ConsultationHistoryCard({ consultation }: ConsultationHistoryCar
             </div>
           )}
 
-          <button className="w-full mt-2 px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors">
-            View Full Report
-          </button>
+          {/* AI Analysis Not Performed Section */}
+          {canAnalyze && (
+            <div className="bg-amber-50 rounded-[12px] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-4 h-4 text-amber-600" />
+                <h5 className="text-[14px] text-amber-800 font-semibold">
+                  AI Analysis Not Yet Performed
+                </h5>
+              </div>
+              <p className="text-[13px] text-amber-700 mb-3">
+                This consultation has been saved but hasn't been analyzed by AI yet.
+              </p>
+              <button
+                onClick={() => onAnalyze(consultation)}
+                className="w-full px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
+              >
+                <Brain className="w-4 h-4" />
+                Analyse Consultation
+              </button>
+            </div>
+          )}
+
+          <div className="flex gap-3 mt-2">
+            <button className="flex-1 px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors">
+              View Full Report
+            </button>
+            {onDelete && (
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-500 text-white rounded-[10px] text-[14px] font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

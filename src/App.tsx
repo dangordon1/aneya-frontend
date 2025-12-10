@@ -10,7 +10,7 @@ import { TabNavigation } from './components/TabNavigation';
 import { AppointmentsTab } from './components/AppointmentsTab';
 import { PatientsTab } from './components/PatientsTab';
 import { PatientDetailView } from './components/PatientDetailView';
-import { Patient, AppointmentWithPatient } from './types/database';
+import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -371,6 +371,357 @@ function MainApp() {
     setCurrentScreen('input');
   };
 
+  // Helper to build patient details from a Patient object
+  const buildPatientDetails = (patient: Patient): PatientDetails => ({
+    name: patient.name,
+    sex: patient.sex,
+    age: patient.date_of_birth
+      ? `${new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()} years`
+      : '',
+    height: patient.height_cm?.toString() || patient.height?.toString() || '',
+    weight: patient.weight_kg?.toString() || patient.weight?.toString() || '',
+    currentMedications: Array.isArray(patient.current_medications)
+      ? patient.current_medications.join(', ')
+      : (patient.current_medications || ''),
+    currentConditions: Array.isArray(patient.medical_conditions)
+      ? patient.medical_conditions.join(', ')
+      : (patient.current_conditions || ''),
+    allergies: Array.isArray(patient.allergies)
+      ? patient.allergies.join(', ')
+      : (patient.allergies || '')
+  });
+
+  // Handler for analyzing past consultations that weren't analyzed yet
+  const handleAnalyzePastConsultation = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
+    // Set up state with consultation data
+    setSelectedAppointment(appointment);
+    setSelectedPatient(appointment.patient);
+
+    // Build patient details from patient record
+    const patientDetails = buildPatientDetails(appointment.patient);
+
+    // Get the text to analyze - prefer original_transcript, fallback to consultation_text
+    const textToAnalyze = consultation.original_transcript || consultation.consultation_text || '';
+
+    if (!textToAnalyze.trim()) {
+      alert('This consultation has no transcript to analyze.');
+      return;
+    }
+
+    // Store consultation ID for updating after analysis
+    setConsultationText(textToAnalyze);
+    setConsultationTranscript(textToAnalyze);
+    setOriginalTranscript(consultation.original_transcript || '');
+    setTranscriptionLanguage(consultation.transcription_language || '');
+    setCurrentPatientDetails(patientDetails);
+
+    // Clear previous state
+    setAnalysisResult(null);
+    setStreamEvents([]);
+    setAnalysisErrors([]);
+    setDrugDetails({});
+
+    // Navigate to progress screen
+    setCurrentScreen('progress');
+
+    // Call the analyze endpoint
+    try {
+      // Check if backend is available first
+      try {
+        const healthResponse = await fetch(`${API_URL}/api/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (!healthResponse.ok) {
+          throw new Error('Backend health check failed');
+        }
+      } catch (healthError) {
+        console.error('Backend unavailable:', healthError);
+        alert(
+          'Unable to connect to the Aneya backend server.\n\n' +
+          'Please ensure the API server is running.'
+        );
+        setCurrentScreen('appointments');
+        return;
+      }
+
+      // Get user's IP address for geolocation
+      let userIp = undefined;
+      try {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        userIp = ipData.ip;
+      } catch (error) {
+        console.warn('Could not detect IP address:', error);
+      }
+
+      // Use streaming endpoint for real-time updates
+      const response = await fetch(`${API_URL}/api/analyze-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          consultation: textToAnalyze,
+          patient_name: patientDetails.name,
+          patient_height: patientDetails.height,
+          patient_weight: patientDetails.weight,
+          current_medications: patientDetails.currentMedications,
+          current_conditions: patientDetails.currentConditions,
+          user_ip: userIp
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Analysis failed: ${response.status} ${errorText}`);
+      }
+
+      // Process the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to get response reader');
+      }
+
+      let buffer = '';
+      let finalResult: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+              setStreamEvents(prev => [...prev, {
+                type: eventData.type,
+                data: eventData,
+                timestamp: Date.now()
+              }]);
+
+              if (eventData.type === 'complete') {
+                finalResult = eventData.data;
+              } else if (eventData.type === 'error') {
+                setAnalysisErrors(prev => [...prev, eventData.error]);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for incomplete data
+            }
+          }
+        }
+      }
+
+      if (finalResult) {
+        setAnalysisResult(finalResult);
+        setCurrentScreen('complete');
+
+        // Update the consultation in Supabase with the analysis results
+        try {
+          const { supabase } = await import('./lib/supabase');
+          const { error } = await supabase
+            .from('consultations')
+            .update({
+              analysis_result: finalResult,
+              diagnoses: finalResult.diagnoses || [],
+              guidelines_found: finalResult.guidelines_found || []
+            })
+            .eq('id', consultation.id);
+
+          if (error) {
+            console.error('Failed to update consultation with analysis:', error);
+          } else {
+            console.log('✅ Consultation updated with analysis results');
+            // Refresh appointments to show updated data
+            setAppointmentsRefreshKey(prev => prev + 1);
+          }
+        } catch (updateError) {
+          console.error('Error updating consultation:', updateError);
+        }
+      } else {
+        throw new Error('Analysis completed but no results received');
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
+      setAnalysisErrors(prev => [...prev, String(error)]);
+      alert(`Analysis failed: ${error}`);
+      setCurrentScreen('appointments');
+    }
+  };
+
+  // Handler for analyzing consultations from PatientDetailView (uses selectedPatient from state)
+  const handleAnalyzeConsultationFromPatientView = async (consultation: Consultation) => {
+    if (!selectedPatient) {
+      alert('No patient selected');
+      return;
+    }
+
+    // Build patient details from selected patient
+    const patientDetails = buildPatientDetails(selectedPatient);
+
+    // Get the text to analyze
+    const textToAnalyze = consultation.original_transcript || consultation.consultation_text || '';
+
+    if (!textToAnalyze.trim()) {
+      alert('This consultation has no transcript to analyze.');
+      return;
+    }
+
+    // Set up state
+    setConsultationText(textToAnalyze);
+    setConsultationTranscript(textToAnalyze);
+    setOriginalTranscript(consultation.original_transcript || '');
+    setTranscriptionLanguage(consultation.transcription_language || '');
+    setCurrentPatientDetails(patientDetails);
+
+    // Clear previous state
+    setAnalysisResult(null);
+    setStreamEvents([]);
+    setAnalysisErrors([]);
+    setDrugDetails({});
+
+    // Navigate to progress screen
+    setCurrentScreen('progress');
+
+    // Call the analyze endpoint
+    try {
+      // Check if backend is available first
+      try {
+        const healthResponse = await fetch(`${API_URL}/api/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (!healthResponse.ok) {
+          throw new Error('Backend health check failed');
+        }
+      } catch (healthError) {
+        console.error('Backend unavailable:', healthError);
+        alert(
+          'Unable to connect to the Aneya backend server.\n\n' +
+          'Please ensure the API server is running.'
+        );
+        setCurrentScreen('patient-detail');
+        return;
+      }
+
+      // Get user's IP address for geolocation
+      let userIp = undefined;
+      try {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        userIp = ipData.ip;
+      } catch (error) {
+        console.warn('Could not detect IP address:', error);
+      }
+
+      // Use streaming endpoint for real-time updates
+      const response = await fetch(`${API_URL}/api/analyze-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          consultation: textToAnalyze,
+          patient_name: patientDetails.name,
+          patient_height: patientDetails.height,
+          patient_weight: patientDetails.weight,
+          current_medications: patientDetails.currentMedications,
+          current_conditions: patientDetails.currentConditions,
+          user_ip: userIp
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Analysis failed: ${response.status} ${errorText}`);
+      }
+
+      // Process the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to get response reader');
+      }
+
+      let buffer = '';
+      let finalResult: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+              setStreamEvents(prev => [...prev, {
+                type: eventData.type,
+                data: eventData,
+                timestamp: Date.now()
+              }]);
+
+              if (eventData.type === 'complete') {
+                finalResult = eventData.data;
+              } else if (eventData.type === 'error') {
+                setAnalysisErrors(prev => [...prev, eventData.error]);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for incomplete data
+            }
+          }
+        }
+      }
+
+      if (finalResult) {
+        setAnalysisResult(finalResult);
+        setCurrentScreen('complete');
+
+        // Update the consultation in Supabase with the analysis results
+        try {
+          const { supabase } = await import('./lib/supabase');
+          const { error } = await supabase
+            .from('consultations')
+            .update({
+              analysis_result: finalResult,
+              diagnoses: finalResult.diagnoses || [],
+              guidelines_found: finalResult.guidelines_found || []
+            })
+            .eq('id', consultation.id);
+
+          if (error) {
+            console.error('Failed to update consultation with analysis:', error);
+          } else {
+            console.log('✅ Consultation updated with analysis results');
+          }
+        } catch (updateError) {
+          console.error('Error updating consultation:', updateError);
+        }
+      } else {
+        throw new Error('Analysis completed but no results received');
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
+      setAnalysisErrors(prev => [...prev, String(error)]);
+      alert(`Analysis failed: ${error}`);
+      setCurrentScreen('patient-detail');
+    }
+  };
+
   const handleSaveConsultation = async () => {
     if (!selectedPatient || !analysisResult) {
       console.error('Missing patient or analysis result');
@@ -387,13 +738,22 @@ function MainApp() {
 
       if (consultationSummary) {
         if (formattedConsultationText) formattedConsultationText += '\n\n';
-        formattedConsultationText += `Consultation Summary:\n${consultationSummary}`;
+        // Handle case where consultationSummary might be an object
+        const summaryText = typeof consultationSummary === 'string'
+          ? consultationSummary
+          : (consultationSummary as any)?.summary || JSON.stringify(consultationSummary);
+        formattedConsultationText += `Consultation Summary:\n${summaryText}`;
       }
 
       // Fallback to consultationText if neither transcript nor summary is set
       if (!formattedConsultationText) {
         formattedConsultationText = consultationText;
       }
+
+      // Extract summary_data from consultationSummary if available
+      const summaryData = typeof consultationSummary === 'object' && consultationSummary?.consultation_data?.summary_data
+        ? consultationSummary.consultation_data.summary_data
+        : null;
 
       const consultationData = {
         appointment_id: selectedAppointment?.id || null,
@@ -402,12 +762,24 @@ function MainApp() {
         original_transcript: originalTranscript || null,
         transcription_language: transcriptionLanguage || null,
         patient_snapshot: currentPatientDetails,
+        // AI Analysis fields - populated after analyze
         analysis_result: analysisResult,
         diagnoses: analysisResult.diagnoses || [],
         guidelines_found: analysisResult.guidelines_found || [],
+        // Metadata
+        consultation_duration_seconds: null, // Could be calculated from recording time
+        location_detected: null,
+        backend_api_version: '1.0.0',
+        // Full summary data for reference
+        summary_data: summaryData,
       };
 
-      await saveConsultation(consultationData);
+      const savedConsultation = await saveConsultation(consultationData);
+
+      if (!savedConsultation) {
+        alert('Failed to save consultation. Please check your connection and try again.');
+        return;
+      }
 
       // Increment refresh key to force AppointmentsTab to refetch
       setAppointmentsRefreshKey(prev => prev + 1);
@@ -420,6 +792,7 @@ function MainApp() {
       setAnalysisResult(null);
       setCurrentPatientDetails(null);
       setConsultationText('');
+      setConsultationSummary(null);
       setOriginalTranscript('');
       setTranscriptionLanguage('');
     } catch (error) {
@@ -428,38 +801,57 @@ function MainApp() {
     }
   };
 
-  const handleSaveConsultationOnly = async (transcript: string, summary: string, patientDetails: PatientDetails) => {
+  const handleSaveConsultationOnly = async (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => {
     if (!selectedPatient) {
       alert('Please select a patient first');
       return;
     }
 
     try {
+      // Use unified consultation_data format from summarize API if available
+      const apiConsultationData = summaryResponse?.consultation_data;
+
+      // Extract summary text for display
+      const summaryText = typeof summaryResponse === 'string'
+        ? summaryResponse
+        : summaryResponse?.summary || '';
+
       // Format consultation_text with both transcript and summary
       let formattedConsultationText = '';
-
       if (transcript) {
         formattedConsultationText += `Consultation Transcript:\n${transcript}`;
       }
-
-      if (summary) {
+      if (summaryText) {
         if (formattedConsultationText) formattedConsultationText += '\n\n';
-        formattedConsultationText += `Consultation Summary:\n${summary}`;
+        formattedConsultationText += `Consultation Summary:\n${summaryText}`;
       }
 
+      // Build consultation data using unified format from API, with fallbacks
       const consultationData = {
         appointment_id: selectedAppointment?.id || null,
         patient_id: selectedPatient.id,
-        consultation_text: formattedConsultationText,
-        original_transcript: originalTranscript || null,
-        transcription_language: transcriptionLanguage || null,
+        consultation_text: formattedConsultationText || apiConsultationData?.consultation_text || transcript,
+        original_transcript: apiConsultationData?.original_transcript || originalTranscript || transcript || null,
+        transcription_language: apiConsultationData?.transcription_language || transcriptionLanguage || null,
         patient_snapshot: patientDetails,
+        // AI Analysis fields - explicitly null/empty until analyze is called
         analysis_result: null,
         diagnoses: [],
         guidelines_found: [],
+        // Metadata from API
+        consultation_duration_seconds: apiConsultationData?.consultation_duration_seconds || null,
+        location_detected: apiConsultationData?.location_detected || null,
+        backend_api_version: apiConsultationData?.backend_api_version || '1.0.0',
+        // Full summary data for reference
+        summary_data: apiConsultationData?.summary_data || null,
       };
 
-      await saveConsultation(consultationData);
+      const savedConsultation = await saveConsultation(consultationData);
+
+      if (!savedConsultation) {
+        alert('Failed to save consultation. Please check your connection and try again.');
+        return;
+      }
 
       // Increment refresh key to force AppointmentsTab to refetch
       setAppointmentsRefreshKey(prev => prev + 1);
@@ -474,7 +866,7 @@ function MainApp() {
       setCurrentPatientDetails(null);
       setConsultationText('');
       setConsultationTranscript('');
-      setConsultationSummary('');
+      setConsultationSummary(null);
       setOriginalTranscript('');
       setTranscriptionLanguage('');
     } catch (error) {
@@ -499,15 +891,12 @@ function MainApp() {
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
-          <div className="flex items-center gap-4">
-            <span className="text-white text-sm">{user.email}</span>
-            <button
+          <button
               onClick={() => signOut()}
               className="bg-aneya-teal hover:bg-aneya-teal/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Sign Out
             </button>
-          </div>
         </div>
       </header>
 
@@ -525,7 +914,7 @@ function MainApp() {
       {/* Main Content */}
       <main>
         {currentScreen === 'appointments' && (
-          <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} />
+          <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} onAnalyzeConsultation={handleAnalyzePastConsultation} />
         )}
 
         {currentScreen === 'patients' && (
@@ -561,6 +950,7 @@ function MainApp() {
               };
               handleStartConsultationFromAppointment(tempAppointment);
             }}
+            onAnalyzeConsultation={handleAnalyzeConsultationFromPatientView}
           />
         )}
 

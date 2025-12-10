@@ -24,7 +24,7 @@ interface InputScreenProps {
     transcript?: string,
     summary?: string
   ) => void;
-  onSaveConsultation?: (transcript: string, summary: string, patientDetails: PatientDetails) => Promise<void>;
+  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => Promise<void>;
   onBack?: () => void;
   preFilledPatient?: Patient;
   appointmentContext?: AppointmentWithPatient;

@@ -6,6 +6,7 @@ import {
   CreateAppointmentInput,
   UpdateAppointmentInput,
 } from '../types/database';
+import { withSupabaseRetry } from '../utils/retry';
 
 interface UseAppointmentsReturn {
   appointments: AppointmentWithPatient[];
@@ -86,21 +87,25 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
       try {
         setError(null);
 
-        const { data, error: createError } = await supabase
-          .from('appointments')
-          .insert({
-            ...input,
-            status: 'scheduled',
-            created_by: user.id,
-          })
-          .select('*, patient:patients(*)')
-          .single();
+        const { data, error: createError } = await withSupabaseRetry(() =>
+          supabase
+            .from('appointments')
+            .insert({
+              ...input,
+              status: 'scheduled',
+              created_by: user.id,
+            })
+            .select('*, patient:patients(*)')
+            .single()
+        );
 
         if (createError) throw createError;
 
-        setAppointments((prev) => [...prev, data].sort((a, b) =>
-          new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime()
-        ));
+        if (data) {
+          setAppointments((prev) => [...prev, data].sort((a, b) =>
+            new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime()
+          ));
+        }
 
         return data;
       } catch (err) {

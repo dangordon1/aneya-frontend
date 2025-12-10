@@ -7,6 +7,7 @@ import {
   CreatePatientInput,
   UpdatePatientInput,
 } from '../types/database';
+import { withSupabaseRetry } from '../utils/retry';
 
 interface UsePatientsReturn {
   patients: PatientWithAppointments[];
@@ -101,16 +102,19 @@ export function usePatients(): UsePatientsReturn {
       try {
         setError(null);
 
-        const { data, error: createError } = await supabase
-          .from('patients')
-          .insert({
-            ...input,
-            created_by: user.id,
-          })
-          .select()
-          .single();
+        const { data, error: createError } = await withSupabaseRetry(() =>
+          supabase
+            .from('patients')
+            .insert({
+              ...input,
+              created_by: user.id,
+            })
+            .select()
+            .single()
+        );
 
         if (createError) throw createError;
+        if (!data) throw new Error('No data returned from create');
 
         // Add to local state
         setPatients((prev) => [data, ...prev]);

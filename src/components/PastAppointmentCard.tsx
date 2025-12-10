@@ -6,10 +6,15 @@ import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 interface PastAppointmentCardProps {
   appointment: AppointmentWithPatient;
   consultation: Consultation | null;
+  onAnalyze?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
 }
 
-export function PastAppointmentCard({ appointment, consultation }: PastAppointmentCardProps) {
+export function PastAppointmentCard({ appointment, consultation, onAnalyze }: PastAppointmentCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Check if consultation has been analyzed (has AI diagnosis)
+  const hasAiAnalysis = consultation?.diagnoses && consultation.diagnoses.length > 0;
+  const canAnalyze = consultation && !hasAiAnalysis && onAnalyze;
 
   const date = new Date(appointment.scheduled_time);
   const formattedDate = formatDateUK(date);
@@ -152,8 +157,8 @@ export function PastAppointmentCard({ appointment, consultation }: PastAppointme
             )}
           </div>
 
-          {/* AI Diagnosis */}
-          {consultation.diagnoses && consultation.diagnoses.length > 0 && (
+          {/* AI Diagnosis or Analyse Button */}
+          {hasAiAnalysis ? (
             <div className="bg-green-50 rounded-[12px] p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Brain className="w-4 h-4 text-aneya-navy" />
@@ -216,7 +221,27 @@ export function PastAppointmentCard({ appointment, consultation }: PastAppointme
                 </div>
               )}
             </div>
-          )}
+          ) : canAnalyze ? (
+            <div className="bg-amber-50 rounded-[12px] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="w-4 h-4 text-amber-600" />
+                <h5 className="text-[14px] text-amber-800 font-semibold">
+                  AI Analysis Not Yet Performed
+                </h5>
+              </div>
+              <p className="text-[13px] text-amber-700 mb-3">
+                This consultation has been saved but hasn't been analyzed by AI yet.
+                Click the button below to run AI-assisted diagnosis.
+              </p>
+              <button
+                onClick={() => onAnalyze(appointment, consultation)}
+                className="w-full px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
+              >
+                <Brain className="w-4 h-4" />
+                Analyse Consultation
+              </button>
+            </div>
+          ) : null}
 
           {/* Guidelines Referenced */}
           {consultation.guidelines_found && consultation.guidelines_found.length > 0 && (
