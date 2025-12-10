@@ -7,7 +7,7 @@ export interface RetryOptions {
   initialDelayMs?: number;
   maxDelayMs?: number;
   backoffMultiplier?: number;
-  retryCondition?: (error: any) => boolean;
+  shouldRetry?: (error: unknown) => boolean;
 }
 
 const DEFAULT_OPTIONS: Required<RetryOptions> = {
@@ -15,12 +15,16 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   initialDelayMs: 500,
   maxDelayMs: 5000,
   backoffMultiplier: 2,
-  retryCondition: (error: any) => {
-    // Retry on network errors or specific Supabase errors
-    if (error?.message?.includes('Load failed')) return true;
-    if (error?.message?.includes('network')) return true;
-    if (error?.message?.includes('connection')) return true;
-    if (error?.code === '') return true; // Empty error code often indicates network issue
+  shouldRetry: (error: unknown) => {
+    // Check if it's a network error that should be retried
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorObj = error as { code?: string; message?: string };
+
+    if (errorMessage.includes('Load failed')) return true;
+    if (errorMessage.includes('network')) return true;
+    if (errorMessage.includes('connection')) return true;
+    if (errorMessage.includes('TypeError: Load failed')) return true;
+    if (errorObj?.code === '') return true; // Empty error code often indicates network issue
     return false;
   }
 };
@@ -32,27 +36,36 @@ const sleep = (ms: number): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Execute an async operation with retry logic
- * @param operation The async function to execute
- * @param options Configuration options for retry behavior
- * @returns The result of the operation
+ * Execute an async Supabase query with retry logic
+ * Works with Supabase query builders that return { data, error }
  */
-export async function withRetry<T>(
-  operation: () => Promise<T>,
+export async function withSupabaseRetry<T>(
+  queryFn: () => PromiseLike<{ data: T; error: unknown }>,
   options: RetryOptions = {}
-): Promise<T> {
+): Promise<{ data: T; error: unknown }> {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  let lastError: any;
+  let lastError: unknown;
   let delay = config.initialDelayMs;
 
   for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
     try {
-      return await operation();
+      const result = await queryFn();
+
+      // If there's a retryable error in the result, throw to trigger retry
+      if (result.error && config.shouldRetry(result.error)) {
+        throw result.error;
+      }
+
+      return result;
     } catch (error) {
       lastError = error;
 
       // Check if we should retry
-      if (attempt === config.maxAttempts || !config.retryCondition(error)) {
+      if (attempt === config.maxAttempts || !config.shouldRetry(error)) {
+        // Return with error if it was a Supabase error object
+        if (error && typeof error === 'object' && 'message' in error) {
+          return { data: null as T, error };
+        }
         throw error;
       }
 
@@ -66,36 +79,5 @@ export async function withRetry<T>(
     }
   }
 
-  throw lastError;
-}
-
-/**
- * Wrapper for Supabase queries with retry logic
- * @param queryBuilder A function that returns a Supabase query builder
- * @returns The query result
- */
-export async function withSupabaseRetry<T>(
-  queryBuilder: () => Promise<{ data: T | null; error: any }>
-): Promise<{ data: T | null; error: any }> {
-  try {
-    const result = await withRetry(async () => {
-      const { data, error } = await queryBuilder();
-
-      // Throw the error so retry logic can catch it
-      if (error && (
-        error.message?.includes('Load failed') ||
-        error.message?.includes('network') ||
-        error.code === ''
-      )) {
-        throw error;
-      }
-
-      return { data, error };
-    });
-
-    return result;
-  } catch (error) {
-    // Final error after all retries exhausted
-    return { data: null, error };
-  }
+  return { data: null as T, error: lastError };
 }
