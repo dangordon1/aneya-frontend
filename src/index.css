@@ -38,6 +38,12 @@ body {
   padding: 0;
 }
 
+html, body {
+  /* Prevent horizontal scrolling on iOS */
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
   background-color: var(--aneya-cream);
@@ -45,6 +51,9 @@ body {
   /* iOS Safari fixes */
   -webkit-overflow-scrolling: touch;
   overflow-x: hidden;
+  /* Prevent iOS bounce causing horizontal overflow */
+  position: relative;
+  width: 100%;
 }
 
 /*  aneya Health Typography - Headings use serif */
