@@ -13,4 +13,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor chunks for better caching
+          'react-vendor': ['react', 'react-dom'],
+          'supabase': ['@supabase/supabase-js'],
+          'ui-icons': ['lucide-react'],
+          'firebase': ['firebase/app', 'firebase/auth'],
+        },
+      },
+    },
+  },
 })
