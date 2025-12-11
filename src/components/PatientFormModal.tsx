@@ -203,37 +203,6 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
             </div>
           </div>
 
-          {/* Contact Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div>
-              <label htmlFor="email" className="block mb-1 text-[12px] text-gray-600">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={formData.email || ''}
-                onChange={(e) => updateField('email', e.target.value)}
-                className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
-                placeholder="patient@example.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="phone" className="block mb-1 text-[12px] text-gray-600">
-                Phone
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                value={formData.phone || ''}
-                onChange={(e) => updateField('phone', e.target.value)}
-                className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
-                placeholder="+44 7700 900000"
-              />
-            </div>
-          </div>
-
           {/* Action Buttons */}
           <div className="flex gap-3 mt-4 sm:mt-6 pt-4 border-t border-gray-200">
             <button
