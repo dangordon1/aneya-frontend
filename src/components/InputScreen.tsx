@@ -92,6 +92,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
   // Real-time transcription state
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isConnectingToElevenLabs, setIsConnectingToElevenLabs] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>(''); // For detailed progress feedback
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
   const [shouldTranslateToEnglish, setShouldTranslateToEnglish] = useState(true); // Default: ON
 
@@ -179,27 +180,64 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
     isAudioInitializedRef.current = false;
   }, []);
 
-  const handleAnalyze = () => {
-    // Extract summary text from structured data or use legacy string
-    const summaryText = consultationSummary
-      ? (typeof consultationSummary === 'string' ? consultationSummary : consultationSummary.summary || '')
-      : '';
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-    // Use summary if available, otherwise fall back to full transcript
-    const textToAnalyze = summaryText.trim() || consultation.trim();
+  const handleAnalyze = async () => {
+    if (!consultation.trim()) {
+      alert('Please enter or record a consultation before analyzing.');
+      return;
+    }
 
-    if (textToAnalyze) {
-      // Pass both the summary/consultation and original transcript
-      // If no translation occurred, originalTranscript will be empty
-      const finalOriginal = originalTranscript.trim() || consultation.trim();
-      onAnalyze(
-        textToAnalyze,
-        patientDetails,
-        shouldTranslateToEnglish && originalTranscript.trim() ? finalOriginal : undefined,
-        detectedLanguage || undefined,
-        consultation.trim(), // Pass full transcript
-        summaryText.trim() // Pass summary text
-      );
+    setIsAnalyzing(true);
+
+    try {
+      // If no summary exists, run summarization first
+      let summaryData = consultationSummary;
+      if (!summaryData) {
+        const response = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: consultation })
+        });
+
+        if (!response.ok) {
+          throw new Error('Summarization failed');
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          summaryData = data;
+          setConsultationSummary(data);
+          console.log('✅ Consultation auto-summarized before analysis');
+        }
+      }
+
+      // Extract summary text from structured data or use legacy string
+      const summaryText = summaryData
+        ? (typeof summaryData === 'string' ? summaryData : summaryData.summary || '')
+        : '';
+
+      // Use summary if available, otherwise fall back to full transcript
+      const textToAnalyze = summaryText.trim() || consultation.trim();
+
+      if (textToAnalyze) {
+        // Pass both the summary/consultation and original transcript
+        // If no translation occurred, originalTranscript will be empty
+        const finalOriginal = originalTranscript.trim() || consultation.trim();
+        onAnalyze(
+          textToAnalyze,
+          patientDetails,
+          shouldTranslateToEnglish && originalTranscript.trim() ? finalOriginal : undefined,
+          detectedLanguage || undefined,
+          consultation.trim(), // Pass full transcript
+          summaryText.trim() // Pass summary text
+        );
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
+      alert('Failed to analyze consultation. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -435,6 +473,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
   const startStreamingRecording = async () => {
     try {
       setIsConnectingToElevenLabs(true);
+      setConnectionStatus('Requesting microphone...');
 
       // Get microphone access - use simpler constraints for better browser compatibility
       console.log('🎤 Requesting microphone access...');
@@ -448,6 +487,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
       });
       audioStreamRef.current = stream;
       console.log('🎤 Microphone ready');
+
+      setConnectionStatus('Connecting to server...');
 
       // Connect to ElevenLabs
       const ws = await connectToElevenLabs();
@@ -514,6 +555,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
 
       isAudioInitializedRef.current = true;
       setIsConnectingToElevenLabs(false);
+      setConnectionStatus('');
       setIsRecording(true);
       setRecordingTime(0);
       startTimer();
@@ -524,6 +566,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
       console.error('Error starting streaming recording:', err);
       console.error('Error details:', err);
       setIsConnectingToElevenLabs(false);
+      setConnectionStatus('');
       cleanupAudio();
 
       if (err instanceof Error) {
@@ -1094,7 +1137,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
-                        Transcribing...
+                        {connectionStatus || 'Connecting...'}
                       </>
                     ) : (
                       <>
@@ -1180,9 +1223,19 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
           <PrimaryButton
             onClick={handleAnalyze}
             fullWidth
-            disabled={isRecording || !consultationSummary}
+            disabled={isRecording || isAnalyzing || !consultation.trim()}
           >
-            Analyse Consultation
+            {isAnalyzing ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                {!consultationSummary ? 'Summarizing & Analyzing...' : 'Analyzing...'}
+              </span>
+            ) : (
+              'Analyse Consultation'
+            )}
           </PrimaryButton>
         </div>
 
