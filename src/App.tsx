@@ -345,7 +345,7 @@ function MainApp() {
     setTranscriptionLanguage('');
   };
 
-  const handleStartConsultationFromAppointment = async (appointment: AppointmentWithPatient) => {
+  const handleStartConsultationFromAppointment = (appointment: AppointmentWithPatient) => {
     setSelectedAppointment(appointment);
     setSelectedPatient(appointment.patient);
 
@@ -362,18 +362,17 @@ function MainApp() {
       currentConditions: appointment.patient.current_conditions || '',
     });
 
-    // Update appointment status to in_progress
-    try {
-      await fetch(`${API_URL}/api/appointments/${appointment.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'in_progress' })
-      });
-    } catch (error) {
-      console.error('Failed to update appointment status:', error);
-    }
-
+    // Navigate immediately - don't wait for status update
     setCurrentScreen('input');
+
+    // Update appointment status to in_progress (fire-and-forget, non-blocking)
+    fetch(`${API_URL}/api/appointments/${appointment.id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'in_progress' })
+    }).catch(error => {
+      console.error('Failed to update appointment status:', error);
+    });
   };
 
   // Helper to build patient details from a Patient object
