@@ -3,6 +3,44 @@
  * Matches Supabase schema
  */
 
+// Supported consultation languages
+// Sarvam AI languages use their codes, others fall back to ElevenLabs
+export type ConsultationLanguage =
+  | 'auto'    // Auto-detect - ElevenLabs (worse for Indian languages)
+  | 'en-IN'   // English (India) - Sarvam
+  | 'hi-IN'   // Hindi - Sarvam
+  | 'bn-IN'   // Bengali - Sarvam
+  | 'gu-IN'   // Gujarati - Sarvam
+  | 'kn-IN'   // Kannada - Sarvam
+  | 'ml-IN'   // Malayalam - Sarvam
+  | 'mr-IN'   // Marathi - Sarvam
+  | 'od-IN'   // Odia - Sarvam
+  | 'pa-IN'   // Punjabi - Sarvam
+  | 'ta-IN'   // Tamil - Sarvam
+  | 'te-IN'   // Telugu - Sarvam
+  | 'other';  // Other languages - ElevenLabs
+
+export const CONSULTATION_LANGUAGES: { code: ConsultationLanguage; name: string; provider: 'sarvam' | 'elevenlabs'; warning?: string }[] = [
+  { code: 'auto', name: 'Auto-detect', provider: 'elevenlabs', warning: 'Reduced accuracy for Indian languages' },
+  { code: 'en-IN', name: 'English (India)', provider: 'sarvam' },
+  { code: 'hi-IN', name: 'Hindi', provider: 'sarvam' },
+  { code: 'bn-IN', name: 'Bengali', provider: 'sarvam' },
+  { code: 'gu-IN', name: 'Gujarati', provider: 'sarvam' },
+  { code: 'kn-IN', name: 'Kannada', provider: 'sarvam' },
+  { code: 'ml-IN', name: 'Malayalam', provider: 'sarvam' },
+  { code: 'mr-IN', name: 'Marathi', provider: 'sarvam' },
+  { code: 'od-IN', name: 'Odia', provider: 'sarvam' },
+  { code: 'pa-IN', name: 'Punjabi', provider: 'sarvam' },
+  { code: 'ta-IN', name: 'Tamil', provider: 'sarvam' },
+  { code: 'te-IN', name: 'Telugu', provider: 'sarvam' },
+  { code: 'other', name: 'Other Language', provider: 'elevenlabs' },
+];
+
+// Helper to check if a language uses Sarvam
+export const isSarvamLanguage = (lang: ConsultationLanguage): boolean => {
+  return lang !== 'other' && lang !== 'auto';
+};
+
 export interface Patient {
   id: string;
   created_at: string;
@@ -17,6 +55,7 @@ export interface Patient {
   allergies: string | null;
   email: string | null;
   phone: string | null;
+  consultation_language: ConsultationLanguage; // Preferred language for consultations
   created_by: string; // UUID of user who created the patient
   archived: boolean;
 }
@@ -126,6 +165,7 @@ export interface CreatePatientInput {
   allergies?: string | null;
   email?: string | null;
   phone?: string | null;
+  consultation_language?: ConsultationLanguage;
 }
 
 export interface UpdatePatientInput {
@@ -139,6 +179,7 @@ export interface UpdatePatientInput {
   allergies?: string | null;
   email?: string | null;
   phone?: string | null;
+  consultation_language?: ConsultationLanguage;
   archived?: boolean;
 }
 
