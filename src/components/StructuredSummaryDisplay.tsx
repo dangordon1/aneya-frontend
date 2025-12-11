@@ -52,11 +52,13 @@ interface SummaryData {
 interface StructuredSummaryDisplayProps {
   summaryData: SummaryData;
   onUpdate: (updatedData: SummaryData) => void;
+  onConfirmFieldSave?: (updatedData: SummaryData) => Promise<void>;
 }
 
 export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> = ({
   summaryData,
-  onUpdate
+  onUpdate,
+  onConfirmFieldSave
 }) => {
   const [expandedSections, setExpandedSections] = useState({
     metadata: false,
@@ -83,6 +85,23 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
     current[path[path.length - 1]] = value;
 
     onUpdate(updated);
+  };
+
+  // Create a callback for confirming field save to DB
+  const createConfirmSaveCallback = (path: string[]) => {
+    if (!onConfirmFieldSave) return undefined;
+
+    return async (value: string) => {
+      const updated = JSON.parse(JSON.stringify(summaryData));
+      let current: any = updated;
+
+      for (let i = 0; i < path.length - 1; i++) {
+        current = current[path[i]];
+      }
+      current[path[path.length - 1]] = value;
+
+      await onConfirmFieldSave(updated);
+    };
   };
 
   const clinical = summaryData.clinical_summary || {};
@@ -167,6 +186,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
             <EditableSection
               value={clinical.chief_complaint || ''}
               onSave={(v) => updateField(['clinical_summary', 'chief_complaint'], v)}
+              onConfirmSave={createConfirmSaveCallback(['clinical_summary', 'chief_complaint'])}
               label="Chief Complaint"
               placeholder="Primary reason for consultation..."
             />
@@ -176,6 +196,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
           <EditableSection
             value={clinical.history_present_illness || ''}
             onSave={(v) => updateField(['clinical_summary', 'history_present_illness'], v)}
+            onConfirmSave={createConfirmSaveCallback(['clinical_summary', 'history_present_illness'])}
             label="History of Present Illness"
             placeholder="Detailed chronological description..."
             multiline
@@ -218,6 +239,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
               <EditableSection
                 value={clinical.physical_examination}
                 onSave={(v) => updateField(['clinical_summary', 'physical_examination'], v)}
+                onConfirmSave={createConfirmSaveCallback(['clinical_summary', 'physical_examination'])}
                 label="Physical Examination"
                 placeholder="Examination findings..."
                 multiline
@@ -258,6 +280,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
               <EditableSection
                 value={clinical.assessment}
                 onSave={(v) => updateField(['clinical_summary', 'assessment'], v)}
+                onConfirmSave={createConfirmSaveCallback(['clinical_summary', 'assessment'])}
                 label="Clinical Assessment"
                 placeholder="Working diagnosis and clinical impression..."
                 multiline

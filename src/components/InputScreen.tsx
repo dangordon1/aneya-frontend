@@ -25,6 +25,8 @@ interface InputScreenProps {
     summary?: string
   ) => void;
   onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => Promise<void>;
+  onUpdateConsultation?: (summaryResponse: any) => Promise<void>;
+  onCloseConsultation?: () => void;
   onBack?: () => void;
   preFilledPatient?: Patient;
   appointmentContext?: AppointmentWithPatient;
@@ -63,7 +65,7 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
   currentConditions: 'Type 2 Diabetes Mellitus, Hypertension',
 };
 
-export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPatient, appointmentContext }: InputScreenProps) {
+export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext }: InputScreenProps) {
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
   const [consultationSummary, setConsultationSummary] = useState<any>(null); // Consultation Summary (structured data from summarize API)
   const [originalTranscript, setOriginalTranscript] = useState(''); // Original language transcript
@@ -212,6 +214,17 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
         }
       }
 
+      // Save consultation before analyzing
+      if (onSaveConsultation && summaryData) {
+        try {
+          await onSaveConsultation(consultation, summaryData, patientDetails);
+          console.log('✅ Consultation saved before analysis');
+        } catch (saveError) {
+          console.error('Failed to save consultation:', saveError);
+          // Continue with analysis even if save fails
+        }
+      }
+
       // Extract summary text from structured data or use legacy string
       const summaryText = summaryData
         ? (typeof summaryData === 'string' ? summaryData : summaryData.summary || '')
@@ -264,6 +277,17 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
         // Store the entire structured response
         setConsultationSummary(data);
         console.log('✅ Consultation summarized');
+
+        // Auto-save the consultation after summarizing
+        if (onSaveConsultation) {
+          try {
+            await onSaveConsultation(consultation, data, patientDetails);
+            console.log('✅ Consultation saved after summarization');
+          } catch (saveError) {
+            console.error('Failed to save consultation:', saveError);
+            // Don't alert - summarization succeeded, just log the save error
+          }
+        }
       } else {
         throw new Error('Invalid response from summarization endpoint');
       }
@@ -1214,6 +1238,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
             <StructuredSummaryDisplay
               summaryData={consultationSummary}
               onUpdate={(updated) => setConsultationSummary(updated)}
+              onConfirmFieldSave={onUpdateConsultation ? async (updated) => {
+                await onUpdateConsultation(updated);
+              } : undefined}
             />
           </div>
         )}
@@ -1239,15 +1266,17 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onBack, preFilledPa
           </PrimaryButton>
         </div>
 
-        {/* Save Consultation button */}
-        {onSaveConsultation && (
+        {/* Close Consultation button - shown after summarization */}
+        {consultationSummary && onCloseConsultation && (
           <div className="mt-3">
             <button
-              onClick={() => onSaveConsultation(consultation, consultationSummary, patientDetails)}
-              disabled={isRecording || !consultation.trim()}
-              className="w-full px-6 py-3 bg-aneya-teal text-white rounded-[10px] font-medium text-[15px] hover:bg-aneya-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onCloseConsultation}
+              className="w-full px-6 py-3 bg-gray-600 text-white rounded-[10px] font-medium text-[15px] hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
             >
-              Save Consultation
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Close Consultation
             </button>
           </div>
         )}

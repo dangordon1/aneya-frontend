@@ -4,6 +4,7 @@ import { Edit2, Check, X } from 'lucide-react';
 interface EditableSectionProps {
   value: string;
   onSave: (newValue: string) => void;
+  onConfirmSave?: (newValue: string) => Promise<void>;
   label: string;
   placeholder?: string;
   multiline?: boolean;
@@ -18,6 +19,7 @@ interface EditableSectionProps {
 export const EditableSection: React.FC<EditableSectionProps> = ({
   value,
   onSave,
+  onConfirmSave,
   label,
   placeholder = 'Click to edit...',
   multiline = false,
@@ -26,6 +28,9 @@ export const EditableSection: React.FC<EditableSectionProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSavingToDb, setIsSavingToDb] = useState(false);
+  const [savedToDb, setSavedToDb] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -59,6 +64,29 @@ export const EditableSection: React.FC<EditableSectionProps> = ({
   const handleSave = () => {
     onSave(editValue);
     setIsEditing(false);
+    // Mark as having unsaved changes if onConfirmSave is available
+    if (onConfirmSave && editValue !== value) {
+      setHasUnsavedChanges(true);
+      setSavedToDb(false);
+    }
+  };
+
+  const handleConfirmSaveToDb = async () => {
+    if (!onConfirmSave) return;
+
+    setIsSavingToDb(true);
+    try {
+      await onConfirmSave(editValue);
+      setHasUnsavedChanges(false);
+      setSavedToDb(true);
+      // Reset the saved indicator after 2 seconds
+      setTimeout(() => setSavedToDb(false), 2000);
+    } catch (error) {
+      console.error('Failed to save to database:', error);
+      alert('Failed to save changes. Please try again.');
+    } finally {
+      setIsSavingToDb(false);
+    }
   };
 
   const handleCancel = () => {
@@ -136,12 +164,48 @@ export const EditableSection: React.FC<EditableSectionProps> = ({
 
   return (
     <div className={`${className}`}>
-      <label className={`block mb-2 text-[14px] font-medium text-aneya-navy ${labelClassName}`}>
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-2">
+        <label className={`text-[14px] font-medium text-aneya-navy ${labelClassName}`}>
+          {label}
+        </label>
+        {/* Confirm save checkbox/button */}
+        {onConfirmSave && (hasUnsavedChanges || savedToDb) && (
+          <div className="flex items-center gap-2">
+            {savedToDb ? (
+              <span className="flex items-center gap-1 text-[12px] text-green-600">
+                <Check className="w-4 h-4" />
+                Saved
+              </span>
+            ) : hasUnsavedChanges ? (
+              <button
+                onClick={handleConfirmSaveToDb}
+                disabled={isSavingToDb}
+                className="flex items-center gap-1 px-2 py-1 text-[12px] bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition-colors disabled:opacity-50"
+              >
+                {isSavingToDb ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3 h-3" />
+                    Confirm change
+                  </>
+                )}
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
       <div
         onClick={() => setIsEditing(true)}
-        className="p-4 bg-white border-2 border-aneya-teal rounded-lg hover:border-aneya-navy transition-colors cursor-pointer group"
+        className={`p-4 bg-white border-2 rounded-lg hover:border-aneya-navy transition-colors cursor-pointer group ${
+          hasUnsavedChanges ? 'border-amber-400' : 'border-aneya-teal'
+        }`}
       >
         <div className="flex items-start justify-between">
           <div className="flex-1 text-[16px] text-aneya-navy whitespace-pre-wrap">
