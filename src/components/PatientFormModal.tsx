@@ -234,21 +234,6 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
             </div>
           </div>
 
-          {/* Allergies */}
-          <div>
-            <label htmlFor="allergies" className="block mb-1 text-[12px] text-gray-600">
-              Allergies
-            </label>
-            <textarea
-              id="allergies"
-              value={formData.allergies || ''}
-              onChange={(e) => updateField('allergies', e.target.value)}
-              rows={2}
-              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy resize-none"
-              placeholder="List known allergies..."
-            />
-          </div>
-
           {/* Action Buttons */}
           <div className="flex gap-3 mt-4 sm:mt-6 pt-4 border-t border-gray-200">
             <button
