@@ -103,8 +103,8 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8">
-      <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8 pt-16 sm:pt-8">
+      <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-5rem)] sm:max-h-[90vh] overflow-y-auto">
         <h2 className="text-[24px] sm:text-[28px] text-aneya-navy mb-4 sm:mb-6">
           {patient ? 'Edit Patient' : 'Create New Patient'}
         </h2>
