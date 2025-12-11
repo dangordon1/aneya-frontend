@@ -1,18 +1,23 @@
-import { useState } from 'react';
-import { InputScreen, PatientDetails } from './components/InputScreen';
-import { ProgressScreen } from './components/ProgressScreen';
-import { AnalysisComplete } from './components/AnalysisComplete';
-import { ReportScreen } from './components/ReportScreen';
-import { InvalidInputScreen } from './components/InvalidInputScreen';
+import { useState, lazy, Suspense } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation } from './components/TabNavigation';
-import { AppointmentsTab } from './components/AppointmentsTab';
-import { PatientsTab } from './components/PatientsTab';
-import { PatientDetailView } from './components/PatientDetailView';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Dynamic imports for code splitting - these components load on demand
+const InputScreen = lazy(() => import('./components/InputScreen').then(m => ({ default: m.InputScreen })));
+const ProgressScreen = lazy(() => import('./components/ProgressScreen').then(m => ({ default: m.ProgressScreen })));
+const AnalysisComplete = lazy(() => import('./components/AnalysisComplete').then(m => ({ default: m.AnalysisComplete })));
+const ReportScreen = lazy(() => import('./components/ReportScreen').then(m => ({ default: m.ReportScreen })));
+const InvalidInputScreen = lazy(() => import('./components/InvalidInputScreen').then(m => ({ default: m.InvalidInputScreen })));
+const AppointmentsTab = lazy(() => import('./components/AppointmentsTab').then(m => ({ default: m.AppointmentsTab })));
+const PatientsTab = lazy(() => import('./components/PatientsTab').then(m => ({ default: m.PatientsTab })));
+const PatientDetailView = lazy(() => import('./components/PatientDetailView').then(m => ({ default: m.PatientDetailView })));
+
+// Import PatientDetails type
+import type { PatientDetails } from './components/InputScreen';
 
 type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid';
 
@@ -1013,86 +1018,95 @@ function MainApp() {
 
       {/* Main Content */}
       <main>
-        {currentScreen === 'appointments' && (
-          <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} onAnalyzeConsultation={handleAnalyzePastConsultation} />
-        )}
+        <Suspense fallback={
+          <div className="min-h-[60vh] flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+              <p className="text-aneya-navy">Loading...</p>
+            </div>
+          </div>
+        }>
+          {currentScreen === 'appointments' && (
+            <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} onAnalyzeConsultation={handleAnalyzePastConsultation} />
+          )}
 
-        {currentScreen === 'patients' && (
-          <PatientsTab onSelectPatient={handleSelectPatient} />
-        )}
+          {currentScreen === 'patients' && (
+            <PatientsTab onSelectPatient={handleSelectPatient} />
+          )}
 
-        {currentScreen === 'patient-detail' && selectedPatient && (
-          <PatientDetailView
-            patient={selectedPatient}
-            onBack={handleBackToPatients}
-            onEditPatient={() => {
-              // TODO: Implement patient editing
-              console.log('Edit patient:', selectedPatient.id);
-            }}
-            onStartConsultation={(patient) => {
-              // Create a temporary appointment-like object for consultation
-              const tempAppointment: AppointmentWithPatient = {
-                id: '',
-                patient_id: patient.id,
-                scheduled_time: new Date().toISOString(),
-                duration_minutes: 30,
-                status: 'scheduled',
-                appointment_type: 'general',
-                reason: null,
-                notes: null,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                created_by: user!.id,
-                consultation_id: null,
-                cancelled_at: null,
-                cancellation_reason: null,
-                patient: patient
-              };
-              handleStartConsultationFromAppointment(tempAppointment);
-            }}
-            onAnalyzeConsultation={handleAnalyzeConsultationFromPatientView}
-          />
-        )}
+          {currentScreen === 'patient-detail' && selectedPatient && (
+            <PatientDetailView
+              patient={selectedPatient}
+              onBack={handleBackToPatients}
+              onEditPatient={() => {
+                // TODO: Implement patient editing
+                console.log('Edit patient:', selectedPatient.id);
+              }}
+              onStartConsultation={(patient) => {
+                // Create a temporary appointment-like object for consultation
+                const tempAppointment: AppointmentWithPatient = {
+                  id: '',
+                  patient_id: patient.id,
+                  scheduled_time: new Date().toISOString(),
+                  duration_minutes: 30,
+                  status: 'scheduled',
+                  appointment_type: 'general',
+                  reason: null,
+                  notes: null,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  created_by: user!.id,
+                  consultation_id: null,
+                  cancelled_at: null,
+                  cancellation_reason: null,
+                  patient: patient
+                };
+                handleStartConsultationFromAppointment(tempAppointment);
+              }}
+              onAnalyzeConsultation={handleAnalyzeConsultationFromPatientView}
+            />
+          )}
 
-        {currentScreen === 'input' && (
-          <InputScreen
-            onAnalyze={handleAnalyze}
-            onSaveConsultation={handleSaveConsultationOnly}
-            onBack={() => setCurrentScreen('appointments')}
-            preFilledPatient={selectedPatient || undefined}
-            appointmentContext={selectedAppointment || undefined}
-          />
-        )}
+          {currentScreen === 'input' && (
+            <InputScreen
+              onAnalyze={handleAnalyze}
+              onSaveConsultation={handleSaveConsultationOnly}
+              onBack={() => setCurrentScreen('appointments')}
+              preFilledPatient={selectedPatient || undefined}
+              appointmentContext={selectedAppointment || undefined}
+            />
+          )}
 
-        {currentScreen === 'progress' && (
-          <ProgressScreen
-            onComplete={() => setCurrentScreen('complete')}
-            streamEvents={streamEvents}
-          />
-        )}
+          {currentScreen === 'progress' && (
+            <ProgressScreen
+              onComplete={() => setCurrentScreen('complete')}
+              streamEvents={streamEvents}
+            />
+          )}
 
-        {currentScreen === 'invalid' && (
-          <InvalidInputScreen
-            errorMessage={invalidInputMessage}
-            onReturnHome={handleStartNew}
-          />
-        )}
+          {currentScreen === 'invalid' && (
+            <InvalidInputScreen
+              errorMessage={invalidInputMessage}
+              onReturnHome={handleStartNew}
+            />
+          )}
 
-        {currentScreen === 'complete' && (
-          <AnalysisComplete onShowReport={handleShowReport} />
-        )}
+          {currentScreen === 'complete' && (
+            <AnalysisComplete onShowReport={handleShowReport} />
+          )}
 
-        {currentScreen === 'report' && analysisResult && (
-          <ReportScreen
-            onStartNew={handleStartNew}
-            result={analysisResult}
-            patientDetails={currentPatientDetails}
-            errors={analysisErrors}
-            drugDetails={drugDetails}
-            appointmentContext={selectedAppointment || undefined}
-            onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
-          />
-        )}
+          {currentScreen === 'report' && analysisResult && (
+            <ReportScreen
+              onStartNew={handleStartNew}
+              result={analysisResult}
+              patientDetails={currentPatientDetails}
+              errors={analysisErrors}
+              drugDetails={drugDetails}
+              appointmentContext={selectedAppointment || undefined}
+              onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
+            />
+          )}
+        </Suspense>
       </main>
     </div>
   );
