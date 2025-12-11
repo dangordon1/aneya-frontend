@@ -172,7 +172,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="height" className="block mb-1 text-[12px] text-gray-600">
-                Height (cm)
+                Height (cm) <span className="text-gray-400">(optional)</span>
               </label>
               <input
                 id="height"
@@ -188,7 +188,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
 
             <div>
               <label htmlFor="weight" className="block mb-1 text-[12px] text-gray-600">
-                Weight (kg)
+                Weight (kg) <span className="text-gray-400">(optional)</span>
               </label>
               <input
                 id="weight"
