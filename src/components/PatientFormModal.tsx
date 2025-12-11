@@ -234,36 +234,6 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
             </div>
           </div>
 
-          {/* Medications */}
-          <div>
-            <label htmlFor="medications" className="block mb-1 text-[12px] text-gray-600">
-              Current Medications
-            </label>
-            <textarea
-              id="medications"
-              value={formData.current_medications || ''}
-              onChange={(e) => updateField('current_medications', e.target.value)}
-              rows={2}
-              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy resize-none"
-              placeholder="List current medications..."
-            />
-          </div>
-
-          {/* Conditions */}
-          <div>
-            <label htmlFor="conditions" className="block mb-1 text-[12px] text-gray-600">
-              Current Conditions
-            </label>
-            <textarea
-              id="conditions"
-              value={formData.current_conditions || ''}
-              onChange={(e) => updateField('current_conditions', e.target.value)}
-              rows={2}
-              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy resize-none"
-              placeholder="List current conditions..."
-            />
-          </div>
-
           {/* Allergies */}
           <div>
             <label htmlFor="allergies" className="block mb-1 text-[12px] text-gray-600">
