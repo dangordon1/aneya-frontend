@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AppointmentWithPatient, Consultation } from '../types/database';
-import { ChevronDown, ChevronUp, FileText, Brain, Activity } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Brain, Activity, Pill, Stethoscope } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 
 interface PastAppointmentCardProps {
@@ -11,6 +11,7 @@ interface PastAppointmentCardProps {
 
 export function PastAppointmentCard({ appointment, consultation, onAnalyze }: PastAppointmentCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
 
   // Check if consultation has been analyzed (has AI diagnosis)
   const hasAiAnalysis = consultation?.diagnoses && consultation.diagnoses.length > 0;
@@ -68,6 +69,56 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
 
   const { transcript, summary } = getTranscriptAndSummary();
 
+  // Extract treatments from summary_data (recommendations given by doctor)
+  const getTreatments = (): string[] | null => {
+    const summaryData = consultation?.summary_data;
+    if (!summaryData) return null;
+
+    const treatmentsList: string[] = [];
+
+    // Get recommendations given during consultation
+    if (summaryData.recommendations_given && summaryData.recommendations_given.length > 0) {
+      treatmentsList.push(...summaryData.recommendations_given);
+    }
+
+    // Get plan from clinical summary
+    if (summaryData.clinical_summary?.plan) {
+      treatmentsList.push(summaryData.clinical_summary.plan);
+    }
+
+    return treatmentsList.length > 0 ? treatmentsList : null;
+  };
+
+  // Extract AI treatments (medications from AI analysis)
+  const getAiTreatments = (): Array<{
+    diagnosis: string;
+    medications: Array<{ name: string; dose?: string; route?: string; frequency?: string; duration?: string } | string>;
+    supportive_care?: string[];
+  }> | null => {
+    if (!consultation?.diagnoses || consultation.diagnoses.length === 0) return null;
+
+    const aiTreatmentsList: Array<{
+      diagnosis: string;
+      medications: Array<{ name: string; dose?: string; route?: string; frequency?: string; duration?: string } | string>;
+      supportive_care?: string[];
+    }> = [];
+
+    consultation.diagnoses.forEach((diag: any) => {
+      if (diag.primary_care?.medications && diag.primary_care.medications.length > 0) {
+        aiTreatmentsList.push({
+          diagnosis: diag.diagnosis || diag.name,
+          medications: diag.primary_care.medications,
+          supportive_care: diag.primary_care.supportive_care
+        });
+      }
+    });
+
+    return aiTreatmentsList.length > 0 ? aiTreatmentsList : null;
+  };
+
+  const treatments = getTreatments();
+  const aiTreatments = getAiTreatments();
+
   return (
     <div className="bg-white rounded-[16px] border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
       <button
@@ -119,22 +170,41 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
 
       {isExpanded && consultation && (
         <div className="px-4 pb-4 border-t border-gray-100 space-y-4 pt-4">
-          {/* Consultation Transcript */}
-          <div className="bg-gray-50 rounded-[12px] p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-4 h-4 text-aneya-navy" />
-              <h5 className="text-[14px] text-aneya-navy font-semibold">
-                Consultation Transcript
-              </h5>
-            </div>
-            {transcript ? (
-              <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
-                {transcript}
-              </p>
-            ) : (
-              <p className="text-[13px] text-gray-500 italic">
-                This will be populated when you stop recording the transcription.
-              </p>
+          {/* Consultation Transcript - Collapsible */}
+          <div className="bg-gray-50 rounded-[12px] overflow-hidden">
+            <button
+              onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
+              className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-aneya-navy" />
+                <h5 className="text-[14px] text-aneya-navy font-semibold">
+                  Consultation Transcript
+                </h5>
+                {transcript && (
+                  <span className="text-[12px] text-gray-500">
+                    ({transcript.split(/\s+/).length} words)
+                  </span>
+                )}
+              </div>
+              {isTranscriptExpanded ? (
+                <ChevronUp className="w-4 h-4 text-aneya-navy" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-aneya-navy" />
+              )}
+            </button>
+            {isTranscriptExpanded && (
+              <div className="px-4 pb-4">
+                {transcript ? (
+                  <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
+                    {transcript}
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-gray-500 italic">
+                    This will be populated when you stop recording the transcription.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -153,6 +223,80 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
             ) : (
               <p className="text-[13px] text-gray-500 italic">
                 This will be populated when you summarize the consultation.
+              </p>
+            )}
+          </div>
+
+          {/* Treatments (from consultation - doctor's recommendations) */}
+          <div className="bg-orange-50 rounded-[12px] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Stethoscope className="w-4 h-4 text-orange-600" />
+              <h5 className="text-[14px] text-orange-800 font-semibold">
+                Treatments
+              </h5>
+            </div>
+            {treatments && treatments.length > 0 ? (
+              <ul className="space-y-2">
+                {treatments.map((treatment, idx) => (
+                  <li key={idx} className="text-[13px] text-gray-700 pl-3 border-l-2 border-orange-300">
+                    {treatment}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-gray-500 italic">
+                No treatments recorded for this consultation.
+              </p>
+            )}
+          </div>
+
+          {/* AI Treatments (medications recommended by AI analysis) */}
+          <div className="bg-teal-50 rounded-[12px] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Pill className="w-4 h-4 text-teal-600" />
+              <h5 className="text-[14px] text-teal-800 font-semibold">
+                AI Treatments
+              </h5>
+            </div>
+            {aiTreatments && aiTreatments.length > 0 ? (
+              <div className="space-y-3">
+                {aiTreatments.map((treatmentGroup, idx) => (
+                  <div key={idx} className="space-y-2">
+                    <p className="text-[12px] font-medium text-teal-700">
+                      For: {treatmentGroup.diagnosis}
+                    </p>
+                    <ul className="space-y-1">
+                      {treatmentGroup.medications.map((med, medIdx) => (
+                        <li key={medIdx} className="text-[13px] text-gray-700 pl-3 border-l-2 border-teal-300">
+                          <span className="font-medium">{typeof med === 'string' ? med : med.name}</span>
+                          {typeof med !== 'string' && (med.dose || med.route || med.frequency || med.duration) && (
+                            <span className="text-[12px] text-gray-600 ml-1">
+                              {[med.dose, med.route, med.frequency, med.duration].filter(Boolean).join(' • ')}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {treatmentGroup.supportive_care && treatmentGroup.supportive_care.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">Supportive Care:</p>
+                        <ul className="space-y-1">
+                          {treatmentGroup.supportive_care.map((care, careIdx) => (
+                            <li key={careIdx} className="text-[12px] text-gray-600 pl-2">
+                              • {care}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-gray-500 italic">
+                {hasAiAnalysis
+                  ? "No specific medication treatments recommended by AI."
+                  : "Run AI analysis to get treatment recommendations."}
               </p>
             )}
           </div>

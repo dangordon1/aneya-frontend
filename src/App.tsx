@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation } from './components/TabNavigation';
+import { LocationSelector } from './components/LocationSelector';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -66,6 +67,8 @@ function MainApp() {
   const [consultationSummary, setConsultationSummary] = useState<string>(''); // Summary
   const [originalTranscript, setOriginalTranscript] = useState<string>('');
   const [transcriptionLanguage, setTranscriptionLanguage] = useState<string>('');
+  // Location override for testing different regional guidelines
+  const [locationOverride, setLocationOverride] = useState<string | null>(null);
 
   // Appointment system state
   const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments');
@@ -171,7 +174,8 @@ function MainApp() {
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
           current_conditions: patientDetails.currentConditions,
-          user_ip: userIp
+          user_ip: userIp,
+          location_override: locationOverride || undefined
         }),
       });
 
@@ -519,7 +523,8 @@ function MainApp() {
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
           current_conditions: patientDetails.currentConditions,
-          user_ip: userIp
+          user_ip: userIp,
+          location_override: locationOverride || undefined
         }),
       });
 
@@ -739,7 +744,8 @@ function MainApp() {
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
           current_conditions: patientDetails.currentConditions,
-          user_ip: userIp
+          user_ip: userIp,
+          location_override: locationOverride || undefined
         }),
       });
 
@@ -995,12 +1001,18 @@ function MainApp() {
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
-          <button
+          <div className="flex items-center gap-3">
+            <LocationSelector
+              selectedLocation={locationOverride}
+              onLocationChange={setLocationOverride}
+            />
+            <button
               onClick={() => signOut()}
               className="bg-aneya-teal hover:bg-aneya-teal/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Sign Out
             </button>
+          </div>
         </div>
       </header>
 
