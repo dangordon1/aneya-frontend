@@ -7,6 +7,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   sendEmailVerification,
+  sendPasswordResetEmail,
   AuthError as FirebaseAuthError
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
@@ -39,6 +40,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
+  resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -213,6 +215,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Send password reset email
+  const resetPassword = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      console.log('✅ Password reset email sent to:', email);
+      return { error: null };
+    } catch (err) {
+      const firebaseError = err as FirebaseAuthError;
+      console.error('❌ Password reset error:', firebaseError.code, firebaseError.message);
+      return { error: mapFirebaseError(firebaseError) };
+    }
+  };
+
   const value = {
     user,
     session,
@@ -222,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithGoogle,
     signOut,
     getIdToken,
+    resetPassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

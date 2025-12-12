@@ -883,7 +883,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     }
   };
 
-  // NEW: Process speaker diarization
+  // NEW: Process speaker diarization (unused for now, will be enabled later)
+  // @ts-ignore - Function will be used when diarization is enabled
   const processDiarization = async () => {
     try {
       setIsDiarizing(true);
