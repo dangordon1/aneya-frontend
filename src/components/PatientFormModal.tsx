@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Patient, CreatePatientInput } from '../types/database';
+import { Patient, CreatePatientInput, ConsultationLanguage, CONSULTATION_LANGUAGES } from '../types/database';
 
 interface PatientFormModalProps {
   isOpen: boolean;
@@ -20,6 +20,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
     allergies: '',
     email: '',
     phone: '',
+    consultation_language: 'en-IN',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,6 +39,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
         allergies: patient.allergies || '',
         email: patient.email || '',
         phone: patient.phone || '',
+        consultation_language: patient.consultation_language || 'en-IN',
       });
     } else {
       setFormData({
@@ -51,6 +53,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
         allergies: '',
         email: '',
         phone: '',
+        consultation_language: 'en-IN',
       });
     }
     setErrors({});
@@ -201,6 +204,37 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
                 placeholder="e.g., 70"
               />
             </div>
+          </div>
+
+          {/* Consultation Language */}
+          <div>
+            <label htmlFor="consultation_language" className="block mb-1 text-[12px] text-gray-600">
+              Consultation Language
+            </label>
+            <select
+              id="consultation_language"
+              value={formData.consultation_language || 'en-IN'}
+              onChange={(e) => updateField('consultation_language', e.target.value as ConsultationLanguage)}
+              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
+            >
+              {CONSULTATION_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.name}
+                </option>
+              ))}
+            </select>
+            {formData.consultation_language === 'auto' ? (
+              <p className="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Reduced accuracy for Indian languages
+              </p>
+            ) : (
+              <p className="text-[11px] text-gray-500 mt-1">
+                Select the language used during consultations with this patient
+              </p>
+            )}
           </div>
 
           {/* Action Buttons */}
