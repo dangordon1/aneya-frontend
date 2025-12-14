@@ -19,7 +19,7 @@ interface UsePatientsReturn {
 }
 
 export function usePatients(): UsePatientsReturn {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function usePatients(): UsePatientsReturn {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('patients')
         .select(`
           *,
@@ -46,9 +46,15 @@ export function usePatients(): UsePatientsReturn {
             appointment_type
           )
         `)
-        .eq('created_by', user.id)
         .eq('archived', false)
         .order('created_at', { ascending: false });
+
+      // Admins can see all patients, non-admins only see their own
+      if (!isAdmin) {
+        query = query.eq('created_by', user.id);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -85,7 +91,7 @@ export function usePatients(): UsePatientsReturn {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     fetchPatients();
@@ -136,11 +142,17 @@ export function usePatients(): UsePatientsReturn {
       try {
         setError(null);
 
-        const { data, error: updateError } = await supabase
+        let query = supabase
           .from('patients')
           .update(input)
-          .eq('id', id)
-          .eq('created_by', user.id)
+          .eq('id', id);
+
+        // Admins can update any patient, non-admins only their own
+        if (!isAdmin) {
+          query = query.eq('created_by', user.id);
+        }
+
+        const { data, error: updateError } = await query
           .select()
           .single();
 
@@ -158,7 +170,7 @@ export function usePatients(): UsePatientsReturn {
         return null;
       }
     },
-    [user]
+    [user, isAdmin]
   );
 
   const deletePatient = useCallback(

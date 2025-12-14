@@ -11,6 +11,7 @@ import {
   AuthError as FirebaseAuthError
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 // Compatible User interface (maps Firebase user to expected shape)
 interface User {
@@ -35,6 +36,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string) => Promise<{ error: AuthError | null; session: Session | null }>;
   signInWithGoogle: () => Promise<{ error: AuthError | null }>;
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const sessionStart = performance.now();
@@ -101,16 +104,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             user: mappedUser
           });
 
+          // Check if user is admin
+          try {
+            const { data: userRole, error: roleError } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', firebaseUser.uid)
+              .single();
+
+            if (!roleError && userRole) {
+              const adminStatus = userRole.role === 'admin' || userRole.role === 'superadmin';
+              setIsAdmin(adminStatus);
+              console.log('👑 User role:', userRole.role, adminStatus ? '(admin)' : '');
+            } else {
+              setIsAdmin(false);
+            }
+          } catch (roleErr) {
+            console.log('ℹ️ No admin role found for user');
+            setIsAdmin(false);
+          }
+
           console.log('✅ User authenticated:', firebaseUser.email);
           console.log('📧 Email verified:', firebaseUser.emailVerified);
         } catch (err) {
           console.error('❌ Error getting auth token:', err);
           setUser(null);
           setSession(null);
+          setIsAdmin(false);
         }
       } else {
         setUser(null);
         setSession(null);
+        setIsAdmin(false);
         console.log('👤 No user signed in');
       }
 
@@ -232,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
+    isAdmin,
     signIn,
     signUp,
     signInWithGoogle,

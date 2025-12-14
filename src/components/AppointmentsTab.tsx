@@ -16,7 +16,7 @@ interface AppointmentsTabProps {
 }
 
 export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: AppointmentsTabProps) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, createAppointment, cancelAppointment } =
     useAppointments(selectedDate.toISOString().split('T')[0]);
@@ -66,14 +66,23 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
 
       try {
         // TIME: Fetch completed and cancelled appointments
+        // Admins see all appointments, regular users only see their own
         const appointmentsStart = performance.now();
-        console.log('🔍 Fetching past appointments for user:', user.id);
-        const { data: appointments, error: appointmentsError } = await supabase
+        console.log('🔍 Fetching past appointments for user:', user.id, isAdmin ? '(admin - all appointments)' : '(own appointments only)');
+
+        let query = supabase
           .from('appointments')
           .select('*, patient:patients(*)')
           .in('status', ['completed', 'cancelled'])
           .order('scheduled_time', { ascending: false })
-          .limit(10);
+          .limit(isAdmin ? 50 : 10); // Admins see more appointments
+
+        // Non-admins only see their own appointments
+        if (!isAdmin) {
+          query = query.eq('user_id', user.id);
+        }
+
+        const { data: appointments, error: appointmentsError } = await query;
         const appointmentsEnd = performance.now();
         console.log(`⏱️ Past appointments query: ${(appointmentsEnd - appointmentsStart).toFixed(0)}ms`);
         console.log('📋 Past appointments found:', appointments?.length || 0, appointments);
@@ -128,7 +137,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
 
       return () => clearTimeout(timer);
     }
-  }, [user, loading]); // Also depend on loading state
+  }, [user, loading, isAdmin]); // Also depend on loading state and admin status
 
   const formatDateDisplay = (date: Date) => {
     const today = new Date();

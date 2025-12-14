@@ -4,6 +4,7 @@ import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LAN
 import { formatTime24 } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
+import { LocationSelector } from './LocationSelector';
 
 export interface PatientDetails {
   name: string;
@@ -30,6 +31,8 @@ interface InputScreenProps {
   onBack?: () => void;
   preFilledPatient?: Patient;
   appointmentContext?: AppointmentWithPatient;
+  locationOverride?: string | null;
+  onLocationChange?: (location: string | null) => void;
 }
 
 const EXAMPLE_CONSULTATION = `Patient presents with a 3-day history of productive cough with green sputum, fever (38.5°C), and shortness of breath. They report feeling generally unwell with fatigue and reduced appetite. Past medical history includes type 2 diabetes mellitus (well controlled on metformin) and hypertension (on ramipril). No known drug allergies. Non-smoker. On examination: respiratory rate 22/min, oxygen saturation 94% on air, crackles heard in right lower zone on auscultation.`;
@@ -66,7 +69,7 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
   currentConditions: 'Type 2 Diabetes Mellitus, Hypertension',
 };
 
-export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext }: InputScreenProps) {
+export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
   const [consultationSummary, setConsultationSummary] = useState<any>(null); // Consultation Summary (structured data from summarize API)
   const [originalTranscript, setOriginalTranscript] = useState(''); // Original language transcript
@@ -1528,6 +1531,16 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               </svg>
               Close Consultation
             </button>
+          </div>
+        )}
+
+        {/* Location Override Selector - subtle at bottom */}
+        {onLocationChange && (
+          <div className="mt-8 pt-4 border-t border-gray-200 flex justify-end">
+            <LocationSelector
+              selectedLocation={locationOverride ?? null}
+              onLocationChange={onLocationChange}
+            />
           </div>
         )}
       </div>

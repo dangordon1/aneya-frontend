@@ -18,7 +18,7 @@ interface UseAppointmentsReturn {
 }
 
 export function useAppointments(initialDate?: string): UseAppointmentsReturn {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentWithPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +38,13 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         let query = supabase
           .from('appointments')
           .select('*, patient:patients(*)')
-          .eq('created_by', user.id)
           .in('status', ['scheduled', 'in_progress']) // Only fetch active appointments
           .order('scheduled_time', { ascending: true });
+
+        // Admins can see all appointments, non-admins only see their own
+        if (!isAdmin) {
+          query = query.eq('created_by', user.id);
+        }
 
         if (date) {
           const startOfDay = new Date(date);
@@ -69,7 +73,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         setLoading(false);
       }
     },
-    [user]
+    [user, isAdmin]
   );
 
   useEffect(() => {
@@ -124,11 +128,17 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
       try {
         setError(null);
 
-        const { data, error: updateError } = await supabase
+        let query = supabase
           .from('appointments')
           .update(input)
-          .eq('id', id)
-          .eq('created_by', user.id)
+          .eq('id', id);
+
+        // Admins can update any appointment, non-admins only their own
+        if (!isAdmin) {
+          query = query.eq('created_by', user.id);
+        }
+
+        const { data, error: updateError } = await query
           .select('*, patient:patients(*)')
           .single();
 
@@ -145,7 +155,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         return null;
       }
     },
-    [user]
+    [user, isAdmin]
   );
 
   const cancelAppointment = useCallback(
@@ -158,15 +168,21 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
       try {
         setError(null);
 
-        const { data, error: cancelError } = await supabase
+        let query = supabase
           .from('appointments')
           .update({
             status: 'cancelled',
             cancelled_at: new Date().toISOString(),
             cancellation_reason: reason || null,
           })
-          .eq('id', id)
-          .eq('created_by', user.id)
+          .eq('id', id);
+
+        // Admins can cancel any appointment, non-admins only their own
+        if (!isAdmin) {
+          query = query.eq('created_by', user.id);
+        }
+
+        const { data, error: cancelError } = await query
           .select('*, patient:patients(*)')
           .single();
 
@@ -183,7 +199,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         return null;
       }
     },
-    [user]
+    [user, isAdmin]
   );
 
   return {
