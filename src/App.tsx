@@ -349,6 +349,13 @@ function MainApp() {
     setTranscriptionLanguage('');
   };
 
+  // Go back to input screen to re-analyze (keeps consultation data)
+  const handleReanalyze = () => {
+    setCurrentScreen('input');
+    // Keep consultationText, patientDetails, etc. - just clear the result
+    setAnalysisResult(null);
+  };
+
   const handleStartConsultationFromAppointment = (appointment: AppointmentWithPatient) => {
     setSelectedAppointment(appointment);
     setSelectedPatient(appointment.patient);
@@ -1085,6 +1092,8 @@ function MainApp() {
               onBack={() => setCurrentScreen('appointments')}
               preFilledPatient={selectedPatient || undefined}
               appointmentContext={selectedAppointment || undefined}
+              locationOverride={locationOverride}
+              onLocationChange={setLocationOverride}
             />
           )}
 
@@ -1109,6 +1118,7 @@ function MainApp() {
           {currentScreen === 'report' && analysisResult && (
             <ReportScreen
               onStartNew={handleStartNew}
+              onReanalyze={handleReanalyze}
               result={analysisResult}
               patientDetails={currentPatientDetails}
               errors={analysisErrors}

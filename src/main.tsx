@@ -12,6 +12,7 @@ if (import.meta.env.VITE_POSTHOG_KEY) {
     capture_pageview: true,
     capture_pageleave: true,
     autocapture: true,
+    capture_exceptions: true,
     session_recording: {
       recordCrossOriginIframes: true,
     },

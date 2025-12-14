@@ -9,6 +9,7 @@ import { formatTime24 } from '../utils/dateHelpers';
 
 interface ReportScreenProps {
   onStartNew: () => void;
+  onReanalyze?: () => void;
   result: any;
   patientDetails: PatientDetails | null;
   errors?: string[];
@@ -17,7 +18,7 @@ interface ReportScreenProps {
   onSaveConsultation?: () => void;
 }
 
-export function ReportScreen({ onStartNew, result, patientDetails, errors = [], drugDetails = {}, appointmentContext, onSaveConsultation }: ReportScreenProps) {
+export function ReportScreen({ onStartNew, onReanalyze, result, patientDetails, errors = [], drugDetails = {}, appointmentContext, onSaveConsultation }: ReportScreenProps) {
   const [isPatientDetailsExpanded, setIsPatientDetailsExpanded] = useState(false);
   const diagnoses = result.diagnoses || [];
   const niceGuidelines = result.guidelines_found || [];
@@ -350,8 +351,19 @@ export function ReportScreen({ onStartNew, result, patientDetails, errors = [], 
           </WarningBox>
         </section>
 
-        {/* 6. Start New Analysis Button */}
-        <div className="pt-6">
+        {/* 6. Action Buttons */}
+        <div className="pt-6 space-y-3">
+          {onReanalyze && (
+            <button
+              onClick={onReanalyze}
+              className="w-full px-6 py-3 bg-aneya-navy/10 text-aneya-navy rounded-[10px] font-medium text-[15px] hover:bg-aneya-navy/20 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Re-analyze Consultation
+            </button>
+          )}
           <PrimaryButton onClick={onStartNew} fullWidth>
             Start New Analysis
           </PrimaryButton>

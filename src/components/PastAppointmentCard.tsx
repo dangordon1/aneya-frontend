@@ -69,6 +69,16 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
 
   const { transcript, summary } = getTranscriptAndSummary();
 
+  // Helper to safely convert any value to a displayable string
+  const safeString = (value: any): string => {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.map(safeString).join(', ');
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+
   // Extract treatments from summary_data (recommendations given by doctor)
   const getTreatments = (): string[] | null => {
     const summaryData = consultation?.summary_data;
@@ -77,13 +87,52 @@ export function PastAppointmentCard({ appointment, consultation, onAnalyze }: Pa
     const treatmentsList: string[] = [];
 
     // Get recommendations given during consultation
-    if (summaryData.recommendations_given && summaryData.recommendations_given.length > 0) {
-      treatmentsList.push(...summaryData.recommendations_given);
+    // Handle both old format (string[]) and new format (object with categorized recommendations)
+    if (summaryData.recommendations_given) {
+      if (Array.isArray(summaryData.recommendations_given)) {
+        // Old format: string array - ensure each item is a string
+        summaryData.recommendations_given.forEach((item: any) => {
+          treatmentsList.push(safeString(item));
+        });
+      } else if (typeof summaryData.recommendations_given === 'object') {
+        // New format: object with follow_up, diagnostic, therapeutic, patient_education
+        const recs = summaryData.recommendations_given as Record<string, any>;
+        if (recs.therapeutic && Array.isArray(recs.therapeutic)) {
+          recs.therapeutic.forEach((t: any) => treatmentsList.push(`[Therapeutic] ${safeString(t)}`));
+        }
+        if (recs.diagnostic && Array.isArray(recs.diagnostic)) {
+          recs.diagnostic.forEach((d: any) => treatmentsList.push(`[Diagnostic] ${safeString(d)}`));
+        }
+        if (recs.follow_up && Array.isArray(recs.follow_up)) {
+          recs.follow_up.forEach((f: any) => treatmentsList.push(`[Follow-up] ${safeString(f)}`));
+        }
+        if (recs.patient_education && Array.isArray(recs.patient_education)) {
+          recs.patient_education.forEach((p: any) => treatmentsList.push(`[Patient Education] ${safeString(p)}`));
+        }
+      }
     }
 
-    // Get plan from clinical summary
+    // Get plan from clinical summary - could be string or object
     if (summaryData.clinical_summary?.plan) {
-      treatmentsList.push(summaryData.clinical_summary.plan);
+      const plan = summaryData.clinical_summary.plan;
+      if (typeof plan === 'string') {
+        treatmentsList.push(plan);
+      } else if (typeof plan === 'object') {
+        // Plan might have the same structure as recommendations_given
+        const planObj = plan as Record<string, any>;
+        if (planObj.therapeutic && Array.isArray(planObj.therapeutic)) {
+          planObj.therapeutic.forEach((t: any) => treatmentsList.push(`[Plan - Therapeutic] ${safeString(t)}`));
+        }
+        if (planObj.diagnostic && Array.isArray(planObj.diagnostic)) {
+          planObj.diagnostic.forEach((d: any) => treatmentsList.push(`[Plan - Diagnostic] ${safeString(d)}`));
+        }
+        if (planObj.follow_up && Array.isArray(planObj.follow_up)) {
+          planObj.follow_up.forEach((f: any) => treatmentsList.push(`[Plan - Follow-up] ${safeString(f)}`));
+        }
+        if (planObj.patient_education && Array.isArray(planObj.patient_education)) {
+          planObj.patient_education.forEach((p: any) => treatmentsList.push(`[Plan - Patient Education] ${safeString(p)}`));
+        }
+      }
     }
 
     return treatmentsList.length > 0 ? treatmentsList : null;
