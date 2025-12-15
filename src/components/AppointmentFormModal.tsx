@@ -8,6 +8,7 @@ interface AppointmentFormModalProps {
   patients: Patient[];
   appointment?: Appointment;
   preFilledDate?: Date;
+  onCreatePatient?: () => void;
 }
 
 export function AppointmentFormModal({
@@ -16,7 +17,8 @@ export function AppointmentFormModal({
   onSave,
   patients,
   appointment,
-  preFilledDate
+  preFilledDate,
+  onCreatePatient
 }: AppointmentFormModalProps) {
   const [formData, setFormData] = useState<CreateAppointmentInput>({
     patient_id: '',
@@ -138,6 +140,9 @@ export function AppointmentFormModal({
 
   if (!isOpen) return null;
 
+  // Check if there are no patients (and not editing an existing appointment)
+  const hasNoPatients = patients.length === 0 && !appointment;
+
   return (
     <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8">
       <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-y-auto">
@@ -145,6 +150,62 @@ export function AppointmentFormModal({
           {appointment ? 'Edit Appointment' : 'Create New Appointment'}
         </h2>
 
+        {/* No patients message */}
+        {hasNoPatients ? (
+          <div className="text-center py-8">
+            <svg
+              className="h-16 w-16 mx-auto mb-4 text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <h3 className="text-[18px] text-aneya-navy mb-2 font-medium">No patients yet</h3>
+            <p className="text-[14px] text-gray-600 mb-6">
+              You need to create a patient before you can schedule an appointment.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-[10px] font-medium text-[14px] hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              {onCreatePatient && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onCreatePatient();
+                  }}
+                  className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors flex items-center gap-2"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Create Patient
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           {/* Patient Selection */}
           <div>
@@ -297,6 +358,7 @@ export function AppointmentFormModal({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

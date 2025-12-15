@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAppointments } from '../hooks/useAppointments';
 import { usePatients } from '../hooks/usePatients';
-import { AppointmentWithPatient, Consultation } from '../types/database';
+import { AppointmentWithPatient, Consultation, CreatePatientInput } from '../types/database';
 import { AppointmentCard } from './AppointmentCard';
 import { AppointmentFormModal } from './AppointmentFormModal';
+import { PatientFormModal } from './PatientFormModal';
 import { CompactCalendar } from './CompactCalendar';
 import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
@@ -20,9 +21,10 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, createAppointment, cancelAppointment } =
     useAppointments(selectedDate.toISOString().split('T')[0]);
-  const { patients } = usePatients();
+  const { patients, createPatient } = usePatients();
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
@@ -54,6 +56,15 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const handleCreateFromCalendar = (date: Date) => {
     setPreFilledDate(date);
     setIsFormModalOpen(true);
+  };
+
+  const handleCreatePatient = async (patientData: CreatePatientInput) => {
+    const newPatient = await createPatient(patientData);
+    if (newPatient) {
+      setIsPatientModalOpen(false);
+      // Reopen the appointment form after patient is created
+      setIsFormModalOpen(true);
+    }
   };
 
   // Fetch past appointments (completed or cancelled) - NON-BLOCKING
@@ -273,6 +284,13 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           patients={patients}
           appointment={editingAppointment || undefined}
           preFilledDate={preFilledDate || undefined}
+          onCreatePatient={() => setIsPatientModalOpen(true)}
+        />
+
+        <PatientFormModal
+          isOpen={isPatientModalOpen}
+          onClose={() => setIsPatientModalOpen(false)}
+          onSave={handleCreatePatient}
         />
 
         <FullCalendarModal
