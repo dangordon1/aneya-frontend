@@ -248,9 +248,10 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
           )}
 
           {/* Objective - Investigations */}
-          {(clinical.investigations_reviewed?.length || clinical.investigations_ordered?.length) && (
+          {((Array.isArray(clinical.investigations_reviewed) && clinical.investigations_reviewed.length > 0) ||
+            (Array.isArray(clinical.investigations_ordered) && clinical.investigations_ordered.length > 0)) && (
             <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-lg space-y-3">
-              {clinical.investigations_reviewed && clinical.investigations_reviewed.length > 0 && (
+              {Array.isArray(clinical.investigations_reviewed) && clinical.investigations_reviewed.length > 0 && (
                 <div>
                   <h6 className="text-[14px] font-medium text-aneya-navy mb-2">Investigations Reviewed:</h6>
                   <ul className="list-disc pl-5 space-y-1">
@@ -260,7 +261,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
                   </ul>
                 </div>
               )}
-              {clinical.investigations_ordered && clinical.investigations_ordered.length > 0 && (
+              {Array.isArray(clinical.investigations_ordered) && clinical.investigations_ordered.length > 0 && (
                 <div>
                   <h6 className="text-[14px] font-medium text-aneya-navy mb-2">Investigations Ordered:</h6>
                   <ul className="list-disc pl-5 space-y-1">
@@ -304,7 +305,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
               </button>
               {expandedSections.plan && (
                 <div className="p-4 space-y-4 bg-white">
-                  {clinical.plan.diagnostic && clinical.plan.diagnostic.length > 0 && (
+                  {Array.isArray(clinical.plan.diagnostic) && clinical.plan.diagnostic.length > 0 && (
                     <div>
                       <h6 className="text-[14px] font-medium text-aneya-navy mb-2">Diagnostic:</h6>
                       <ul className="list-disc pl-5 space-y-1">
@@ -314,7 +315,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
                       </ul>
                     </div>
                   )}
-                  {clinical.plan.therapeutic && clinical.plan.therapeutic.length > 0 && (
+                  {Array.isArray(clinical.plan.therapeutic) && clinical.plan.therapeutic.length > 0 && (
                     <div>
                       <h6 className="text-[14px] font-medium text-aneya-navy mb-2">Therapeutic:</h6>
                       <ul className="list-disc pl-5 space-y-1">
@@ -324,7 +325,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
                       </ul>
                     </div>
                   )}
-                  {clinical.plan.patient_education && clinical.plan.patient_education.length > 0 && (
+                  {Array.isArray(clinical.plan.patient_education) && clinical.plan.patient_education.length > 0 && (
                     <div>
                       <h6 className="text-[14px] font-medium text-aneya-navy mb-2">Patient Education:</h6>
                       <ul className="list-disc pl-5 space-y-1">
@@ -348,7 +349,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
       </div>
 
       {/* Timeline Section - Collapsible */}
-      {timeline.length > 0 && (
+      {Array.isArray(timeline) && timeline.length > 0 && (
         <div className="border-2 border-amber-200 rounded-lg overflow-hidden">
           <button
             onClick={() => toggleSection('timeline')}
@@ -387,7 +388,9 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
       )}
 
       {/* Key Information Section - Collapsible */}
-      {(keyConcerns.length > 0 || recommendations.length > 0 || context.special_populations) && (
+      {((Array.isArray(keyConcerns) && keyConcerns.length > 0) ||
+        (Array.isArray(recommendations) && recommendations.length > 0) ||
+        context.special_populations) && (
         <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
           <button
             onClick={() => toggleSection('keyInfo')}
@@ -406,7 +409,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
 
           {expandedSections.keyInfo && (
             <div className="p-4 bg-white space-y-4">
-              {keyConcerns.length > 0 && (
+              {Array.isArray(keyConcerns) && keyConcerns.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <AlertCircle className="w-4 h-4 text-orange-500" />
@@ -420,7 +423,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
                 </div>
               )}
 
-              {recommendations.length > 0 && (
+              {Array.isArray(recommendations) && recommendations.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
