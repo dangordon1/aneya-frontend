@@ -11,11 +11,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const InputScreen = lazy(() => import('./components/InputScreen').then(m => ({ default: m.InputScreen })));
 const ProgressScreen = lazy(() => import('./components/ProgressScreen').then(m => ({ default: m.ProgressScreen })));
 const AnalysisComplete = lazy(() => import('./components/AnalysisComplete').then(m => ({ default: m.AnalysisComplete })));
-const ReportScreen = lazy(() => import('./components/ReportScreen').then(m => ({ default: m.ReportScreen })));
+const ReportScreen = lazy(() => import('./components/ReportScreenV2').then(m => ({ default: m.ReportScreenV2 })));
 const InvalidInputScreen = lazy(() => import('./components/InvalidInputScreen').then(m => ({ default: m.InvalidInputScreen })));
 const AppointmentsTab = lazy(() => import('./components/AppointmentsTab').then(m => ({ default: m.AppointmentsTab })));
 const PatientsTab = lazy(() => import('./components/PatientsTab').then(m => ({ default: m.PatientsTab })));
 const PatientDetailView = lazy(() => import('./components/PatientDetailView').then(m => ({ default: m.PatientDetailView })));
+const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
@@ -347,13 +348,6 @@ function MainApp() {
     setConsultationText('');
     setOriginalTranscript('');
     setTranscriptionLanguage('');
-  };
-
-  // Go back to input screen to re-analyze (keeps consultation data)
-  const handleReanalyze = () => {
-    setCurrentScreen('input');
-    // Keep consultationText, patientDetails, etc. - just clear the result
-    setAnalysisResult(null);
   };
 
   const handleStartConsultationFromAppointment = (appointment: AppointmentWithPatient) => {
@@ -1129,7 +1123,6 @@ function MainApp() {
           {currentScreen === 'report' && analysisResult && (
             <ReportScreen
               onStartNew={handleStartNew}
-              onReanalyze={handleReanalyze}
               result={analysisResult}
               patientDetails={currentPatientDetails}
               errors={analysisErrors}
@@ -1145,6 +1138,19 @@ function MainApp() {
 }
 
 export default function App() {
+  // Simple route detection for design test page (dev only)
+  const isDesignTest = window.location.pathname === '/design-test';
+
+  if (isDesignTest) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading design test...</div>}>
+          <DesignTestPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <AuthProvider>

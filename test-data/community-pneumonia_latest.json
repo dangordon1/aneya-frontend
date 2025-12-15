@@ -1,0 +1,123 @@
+{
+  "diagnoses": [
+    {
+      "diagnosis": "Community-acquired pneumonia (CAP) with features of COPD exacerbation",
+      "confidence": "high",
+      "source": "NICE NG114 (Chronic obstructive pulmonary disease acute exacerbation: antimicrobial prescribing) and NICE ES37 (Antimicrobial prescribing: delafloxacin for community-acquired pneumonia)",
+      "url": "https://www.nice.org.uk/guidance/ng114",
+      "primary_care": {
+        "medications": [
+          {
+            "drug_name": "Amoxicillin",
+            "variations": [
+              "Amoxicillin",
+              "Amoxicillin trihydrate",
+              "Amoxicillin sodium"
+            ]
+          },
+          {
+            "drug_name": "Doxycycline",
+            "variations": [
+              "Doxycycline",
+              "Doxycycline hyclate",
+              "Doxycycline monohydrate"
+            ]
+          },
+          {
+            "drug_name": "Clarithromycin",
+            "variations": [
+              "Clarithromycin"
+            ]
+          },
+          {
+            "drug_name": "Paracetamol",
+            "variations": [
+              "Paracetamol",
+              "Acetaminophen"
+            ]
+          },
+          {
+            "drug_name": "Ibuprofen",
+            "variations": [
+              "Ibuprofen"
+            ]
+          },
+          {
+            "drug_name": "Salbutamol",
+            "variations": [
+              "Salbutamol",
+              "Albuterol",
+              "Salbutamol sulfate"
+            ]
+          }
+        ],
+        "supportive_care": [
+          "Oxygen therapy to maintain SpO2 >90%",
+          "Adequate hydration and fluid intake",
+          "Bed rest during acute phase",
+          "Chest physiotherapy to assist sputum clearance",
+          "Breathing exercises (pursed-lip breathing)",
+          "Monitor and record vital signs including SpO2, RR, temperature"
+        ],
+        "clinical_guidance": "CURB-65 score of 2 indicates low-intermediate risk but patient requires hospital assessment given SpO2 92%, RR 26, fever 38.8\u00b0C, and pleuritic chest pain. For antibiotic selection: Consider amoxicillin 500mg three times daily for 5-7 days (standard CAP), or doxycycline 100mg twice daily, or clarithromycin if allergy to beta-lactams. Continue existing COPD medications (Tiotropium). Ensure diabetes management continues (Metformin monitoring). Monitor fever, sputum characteristics, respiratory status hourly initially.",
+        "when_to_escalate": [
+          "SpO2 persistently <90% despite oxygen therapy",
+          "Respiratory rate >30 breaths per minute",
+          "Systolic BP <90 mmHg or signs of hypotension",
+          "Confusion or altered mental status",
+          "Severe chest pain or signs of pleural effusion",
+          "No clinical improvement after 48 hours of antibiotics",
+          "Worsening breathlessness",
+          "Coughing up blood (haemoptysis)",
+          "Signs of sepsis (tachycardia >120, fever, tachypnoea)",
+          "Acute kidney injury or urine output concerns"
+        ]
+      },
+      "diagnostics": {
+        "required": [
+          "Chest X-ray (PA and lateral) - to confirm pneumonia, assess extent, and exclude complications",
+          "Full blood count (FBC) - assess white cell count, infection severity",
+          "Urea and electrolytes - assess renal function (completes CURB-65 assessment)",
+          "C-reactive protein (CRP) or procalcitonin - assess inflammatory response",
+          "Blood cultures (if hospitalized) - identify causative organism",
+          "Sputum culture and microscopy - guide antibiotic selection",
+          "Arterial or venous blood gas - assess oxygenation and CO2 retention (important in COPD)",
+          "ECG - assess for cardiac complications given age and comorbidities"
+        ],
+        "monitoring": [
+          "SpO2 continuous monitoring - target >90%",
+          "Daily temperature recordings",
+          "Respiratory rate monitoring - expect to trend downward with treatment",
+          "Sputum colour and volume - expect clearing within 48-72 hours",
+          "Repeat chest X-ray at 4-6 weeks if consolidation present (to exclude malignancy in smokers)"
+        ],
+        "referral_criteria": [
+          "Referral to hospital medicine/respiratory specialist if deterioration despite antibiotics",
+          "Intensive care referral if respiratory failure develops (SpO2 <90% despite oxygen, RR >30, CO2 retention)",
+          "Infectious disease consultation if atypical organisms suspected or immunocompromised",
+          "Consider pulmonology review for COPD optimization given recurrent infections"
+        ]
+      },
+      "follow_up": {
+        "timeframe": "Review at 48-72 hours to assess treatment response. If hospitalized, daily assessment. Community follow-up at 1 week post-discharge.",
+        "monitoring": [
+          "Clinical improvement in cough, sputum production, fever, breathlessness",
+          "Vital sign normalization (fever resolution, respiratory rate reduction to <20)",
+          "SpO2 improvement to baseline or >94%",
+          "Chest auscultation findings - crackles should resolve within 48-72 hours",
+          "Symptom severity using CAP severity scales",
+          "Tolerance of oral intake and hydration status",
+          "Blood glucose management in view of infection stress (diabetes comorbidity)"
+        ],
+        "referral_criteria": [
+          "No improvement or worsening within 48-72 hours despite appropriate antibiotics - consider changing antibiotic class or investigating for complications (pleural effusion, empyema, sepsis)",
+          "Development of complications - refer to hospital immediately",
+          "Severe immunosuppression or atypical presentation - specialist review needed",
+          "After recovery: Consider COPD action plan review and pulmonary rehabilitation referral"
+        ]
+      }
+    }
+  ],
+  "summary": "\nCLINICAL DECISION SUPPORT REPORT\n\nDIAGNOSES (1):\n\n- Community-acquired pneumonia (CAP) with features of COPD exacerbation (high confidence)",
+  "bnf_prescribing_guidance": []
+}
