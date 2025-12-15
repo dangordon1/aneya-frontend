@@ -1442,7 +1442,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               id="consultation"
               value={consultation}
               onChange={(e) => setConsultation(e.target.value)}
-              placeholder={EXAMPLE_CONSULTATION}
               disabled={isRecording}
               className={`w-full h-[150px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy ${isRecording ? 'bg-gray-50' : ''
                 }`}
