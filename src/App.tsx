@@ -62,6 +62,7 @@ function MainApp() {
   const [analysisErrors, setAnalysisErrors] = useState<string[]>([]);
   // NEW: State for async drug loading
   const [drugDetails, setDrugDetails] = useState<Record<string, any>>({});
+  const [drugsPending, setDrugsPending] = useState<string[]>([]);
   // NEW: State for transcripts
   const [consultationText, setConsultationText] = useState<string>(''); // Used for analysis (summary or transcript)
   const [consultationTranscript, setConsultationTranscript] = useState<string>(''); // Full transcript
@@ -248,13 +249,18 @@ function MainApp() {
               } else if (eventType === 'diagnoses') {
                 // NEW: Diagnoses available - show report immediately!
                 console.log('✅ Diagnoses ready:', data.diagnoses.length, 'diagnoses');
-                console.log('⏳ Drugs pending:', data.drugs_pending.length, 'drugs');
+                console.log('⏳ Drugs pending:', data.drugs_pending?.length || 0, 'drugs');
                 setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
+                // Track pending drugs for loading state
+                setDrugsPending(data.drugs_pending || []);
                 setCurrentScreen('report');
               } else if (eventType === 'drug_update') {
                 // NEW: Individual drug details arrived
                 const source = data.source || 'unknown';
                 console.log(`Drug ${data.drug_name}: ${data.status} (source: ${source})`);
+
+                // Remove from pending list regardless of status
+                setDrugsPending(prev => prev.filter(d => d !== data.drug_name));
 
                 if (data.status === 'complete' && data.details) {
                   // Log if LLM was used
@@ -1007,23 +1013,15 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-aneya-cream">
+    <div className="min-h-screen bg-aneya-cream pb-16">
       {/* Header */}
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
-          <div className="flex items-center gap-3">
-            <LocationSelector
-              selectedLocation={locationOverride}
-              onLocationChange={setLocationOverride}
-            />
-            <button
-              onClick={() => signOut()}
-              className="bg-aneya-teal hover:bg-aneya-teal/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Sign Out
-            </button>
-          </div>
+          <LocationSelector
+            selectedLocation={locationOverride}
+            onLocationChange={setLocationOverride}
+          />
         </div>
       </header>
 
@@ -1127,12 +1125,25 @@ function MainApp() {
               patientDetails={currentPatientDetails}
               errors={analysisErrors}
               drugDetails={drugDetails}
+              drugsPending={drugsPending}
               appointmentContext={selectedAppointment || undefined}
               onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
             />
           )}
         </Suspense>
       </main>
+
+      {/* Footer with Sign Out button */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-aneya-navy py-3 px-4 border-t border-aneya-teal z-30">
+        <div className="max-w-7xl mx-auto flex justify-center">
+          <button
+            onClick={() => signOut()}
+            className="bg-aneya-teal hover:bg-aneya-teal/90 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }
