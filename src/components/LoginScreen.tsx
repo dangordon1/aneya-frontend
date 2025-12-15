@@ -153,12 +153,12 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-aneya-cream flex items-center justify-center px-4">
+    <div className="min-h-screen bg-aneya-navy flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/aneya-logo.png" alt="aneya" className="h-32 mx-auto mb-4" />
-          <p className="text-aneya-navy/70">
+          <p className="text-white/80">
             {isForgotPassword
               ? 'Reset your password'
               : isSignUp
