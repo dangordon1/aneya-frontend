@@ -973,23 +973,33 @@ function MainApp() {
       // Increment refresh key to force AppointmentsTab to refetch
       setAppointmentsRefreshKey(prev => prev + 1);
 
-      alert('Consultation saved successfully!');
+      console.log('✅ Consultation saved successfully');
 
-      // Return to appointments
-      setCurrentScreen('appointments');
-      setActiveTab('appointments');
-      setSelectedAppointment(null);
-      setSelectedPatient(null);
-      setCurrentPatientDetails(null);
-      setConsultationText('');
-      setConsultationTranscript('');
-      setConsultationSummary('');
-      setOriginalTranscript('');
-      setTranscriptionLanguage('');
+      // Store updated state for later close
+      setConsultationTranscript(transcript);
+      setConsultationSummary(summaryResponse);
     } catch (error) {
       console.error('Failed to save consultation:', error);
       alert('Failed to save consultation. Please try again.');
     }
+  };
+
+  // Handler to close consultation and return to appointments
+  const handleCloseConsultation = () => {
+    // Increment refresh key to force AppointmentsTab to refetch
+    setAppointmentsRefreshKey(prev => prev + 1);
+
+    // Return to appointments
+    setCurrentScreen('appointments');
+    setActiveTab('appointments');
+    setSelectedAppointment(null);
+    setSelectedPatient(null);
+    setCurrentPatientDetails(null);
+    setConsultationText('');
+    setConsultationTranscript('');
+    setConsultationSummary('');
+    setOriginalTranscript('');
+    setTranscriptionLanguage('');
   };
 
   const handleSelectPatient = (patient: Patient) => {
@@ -1089,6 +1099,7 @@ function MainApp() {
             <InputScreen
               onAnalyze={handleAnalyze}
               onSaveConsultation={handleSaveConsultationOnly}
+              onCloseConsultation={handleCloseConsultation}
               onBack={() => setCurrentScreen('appointments')}
               preFilledPatient={selectedPatient || undefined}
               appointmentContext={selectedAppointment || undefined}
