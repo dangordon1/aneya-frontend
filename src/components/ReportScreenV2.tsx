@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronRight,
-  Save
+  Save,
+  Loader2
 } from 'lucide-react';
 
 interface ReportScreenV2Props {
@@ -34,6 +35,7 @@ interface ReportScreenV2Props {
   patientDetails: PatientDetails | null;
   errors?: string[];
   drugDetails?: Record<string, any>;
+  drugsPending?: string[];
   appointmentContext?: AppointmentWithPatient;
   onSaveConsultation?: () => void;
 }
@@ -44,6 +46,7 @@ export function ReportScreenV2({
   patientDetails,
   errors = [],
   drugDetails = {},
+  drugsPending = [],
   appointmentContext,
   onSaveConsultation
 }: ReportScreenV2Props) {
@@ -189,6 +192,7 @@ export function ReportScreenV2({
               isPrimary={idx === 0}
               number={idx + 1}
               drugDetails={drugDetails}
+              drugsPending={drugsPending}
             />
           ))}
 
@@ -306,9 +310,10 @@ interface DiagnosisSectionProps {
   isPrimary: boolean;
   number: number;
   drugDetails: Record<string, any>;
+  drugsPending: string[];
 }
 
-function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails }: DiagnosisSectionProps) {
+function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPending }: DiagnosisSectionProps) {
   const [isOpen, setIsOpen] = useState(isPrimary); // Only primary expanded by default
 
   const diagnosisName = diagnosis.diagnosis || diagnosis.name || 'Unknown Diagnosis';
@@ -372,7 +377,7 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails }: Diagnos
                 icon={<Pill className="w-4 h-4" />}
                 badge={diagnosis.primary_care.medications?.length || 0}
               >
-                <TreatmentContent primaryCare={diagnosis.primary_care} drugDetails={drugDetails} />
+                <TreatmentContent primaryCare={diagnosis.primary_care} drugDetails={drugDetails} drugsPending={drugsPending} />
               </CollapsibleSection>
             )}
 
@@ -428,7 +433,7 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails }: Diagnos
 // Treatment Content
 // ============================================
 
-function TreatmentContent({ primaryCare, drugDetails }: { primaryCare: any; drugDetails: Record<string, any> }) {
+function TreatmentContent({ primaryCare, drugDetails, drugsPending }: { primaryCare: any; drugDetails: Record<string, any>; drugsPending: string[] }) {
   return (
     <div className="space-y-4 text-sm">
       {/* Medications */}
@@ -439,8 +444,9 @@ function TreatmentContent({ primaryCare, drugDetails }: { primaryCare: any; drug
             {primaryCare.medications.map((drug: any, idx: number) => {
               const drugName = typeof drug === 'string' ? drug : drug?.drug_name || String(drug);
               const details = drugDetails[drugName];
+              const isPending = drugsPending.includes(drugName);
               return (
-                <MedicationItem key={idx} drugName={drugName} details={details} />
+                <MedicationItem key={idx} drugName={drugName} details={details} isPending={isPending} />
               );
             })}
           </div>
@@ -477,9 +483,10 @@ function TreatmentContent({ primaryCare, drugDetails }: { primaryCare: any; drug
 // Medication Item (Expandable)
 // ============================================
 
-function MedicationItem({ drugName, details }: { drugName: string; details?: any }) {
+function MedicationItem({ drugName, details, isPending }: { drugName: string; details?: any; isPending?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const hasDetails = details?.bnf_data || details?.drugbank_data;
+  const isLoading = isPending && !hasDetails;
 
   return (
     <div className="border border-aneya-soft-pink rounded-lg overflow-hidden">
@@ -494,7 +501,13 @@ function MedicationItem({ drugName, details }: { drugName: string; details?: any
           } ${!hasDetails ? 'opacity-0' : ''}`}
         />
         <span className="text-aneya-navy">{drugName}</span>
-        {!hasDetails && (
+        {isLoading && (
+          <span className="text-xs text-aneya-teal ml-auto flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Loading BNF data...
+          </span>
+        )}
+        {!isLoading && !hasDetails && (
           <span className="text-xs text-aneya-text-disabled ml-auto">No BNF data</span>
         )}
       </button>
