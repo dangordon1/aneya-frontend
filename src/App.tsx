@@ -1013,7 +1013,7 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-aneya-cream pb-16">
+    <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Header */}
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1037,7 +1037,7 @@ function MainApp() {
       )}
 
       {/* Main Content */}
-      <main>
+      <main className="flex-1">
         <Suspense fallback={
           <div className="min-h-[60vh] flex items-center justify-center">
             <div className="text-center">
@@ -1134,7 +1134,7 @@ function MainApp() {
       </main>
 
       {/* Footer with Sign Out button */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-aneya-navy py-3 px-4 border-t border-aneya-teal z-30">
+      <footer className="bg-aneya-navy py-3 px-4 border-t border-aneya-teal mt-8">
         <div className="max-w-7xl mx-auto flex justify-center">
           <button
             onClick={() => signOut()}
