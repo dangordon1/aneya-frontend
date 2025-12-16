@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation } from './components/TabNavigation';
@@ -6,6 +7,9 @@ import { LocationSelector } from './components/LocationSelector';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Helper function for timestamped logging
+const timestamp = () => new Date().toISOString();
 
 // Dynamic imports for code splitting - these components load on demand
 const InputScreen = lazy(() => import('./components/InputScreen').then(m => ({ default: m.InputScreen })));
@@ -163,8 +167,16 @@ function MainApp() {
         console.warn('Could not detect IP address, backend will auto-detect:', error);
       }
 
-      // Use streaming endpoint for real-time updates
-      const response = await fetch(`${API_URL}/api/analyze-stream`, {
+      // Use fetchEventSource for proper SSE handling (no buffering)
+      // This library handles POST requests with SSE correctly
+      console.log(`[${timestamp()}] Starting SSE connection to ${API_URL}/api/analyze-stream`);
+
+      let finalResult: any = null;
+      let hasError = false;
+      let isComplete = false;
+      const abortController = new AbortController();
+
+      await fetchEventSource(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,6 +184,8 @@ function MainApp() {
         body: JSON.stringify({
           consultation,
           patient_name: patientDetails.name,
+          patient_age: patientDetails.age,
+          patient_sex: patientDetails.sex,
           patient_height: patientDetails.height,
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
@@ -179,135 +193,131 @@ function MainApp() {
           user_ip: userIp,
           location_override: locationOverride || undefined
         }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Backend error:', errorText);
-        throw new Error(`Analysis failed: ${response.status}`);
-      }
-
-      // Successfully started analysis, now proceed to progress screen
-      setCurrentScreen('progress');
-
-      // Read the SSE stream
-      // Check if response.body is available (Safari compatibility)
-      if (!response.body) {
-        console.error('ReadableStream not supported - falling back to text read');
-        const text = await response.text();
-        console.log('Response text:', text);
-        alert('Your browser may not support real-time streaming. Please try using Chrome or Firefox.');
-        setCurrentScreen('input');
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalResult = null;
-
-      while (true) {
-        const {done, value} = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, {stream: true});
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || ''; // Keep incomplete event in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          const eventLines = line.split('\n');
-          let eventType = '';
-          let eventData = '';
-
-          for (const l of eventLines) {
-            if (l.startsWith('event: ')) {
-              eventType = l.substring(7);
-            } else if (l.startsWith('data: ')) {
-              eventData = l.substring(6);
-            }
+        signal: abortController.signal,
+        openWhenHidden: true, // Keep connection open when tab is hidden
+        async onopen(response) {
+          console.log(`[${timestamp()}] SSE connection opened, status: ${response.status}`);
+          if (response.ok) {
+            // Successfully started analysis, now proceed to progress screen
+            setCurrentScreen('progress');
+          } else {
+            const errorText = await response.text();
+            console.error(`[${timestamp()}] Backend error:`, errorText);
+            throw new Error(`Analysis failed: ${response.status}`);
           }
+        },
+        onmessage(ev) {
+          const eventType = ev.event;
+          try {
+            const data = JSON.parse(ev.data);
+            console.log(`[${timestamp()}] SSE Event: ${eventType}`, data);
 
-          if (eventType && eventData) {
-            try {
-              const data = JSON.parse(eventData);
-              console.log(`SSE Event: ${eventType}`, data);
+            // Add event to state for real-time display
+            setStreamEvents((prev: StreamEvent[]) => [...prev, {
+              type: eventType,
+              data: data,
+              timestamp: Date.now()
+            }]);
 
-              // Add event to state for real-time display
-              setStreamEvents((prev: StreamEvent[]) => [...prev, {
-                type: eventType,
-                data: data,
-                timestamp: Date.now()
-              }]);
+            // Handle different event types
+            if (eventType === 'location') {
+              console.log(`[${timestamp()}] 📍 Location detected:`, data.country);
+            } else if (eventType === 'guideline_search') {
+              console.log(`[${timestamp()}] 🔍 Searching:`, data.source);
+            } else if (eventType === 'diagnoses') {
+              // Diagnoses available - show report immediately!
+              console.log(`[${timestamp()}] ✅ Diagnoses ready:`, data.diagnoses.length, 'diagnoses');
+              console.log(`[${timestamp()}] ⏳ Drugs pending:`, data.drugs_pending?.length || 0, 'drugs');
+              setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
+              // Track pending drugs for loading state
+              setDrugsPending(data.drugs_pending || []);
+              setCurrentScreen('report');
+            } else if (eventType === 'drug_update') {
+              // Individual drug details arrived
+              const source = data.source || 'unknown';
+              console.log(`[${timestamp()}] 💊 Drug ${data.drug_name}: ${data.status} (source: ${source})`);
 
-              // Handle different event types
-              if (eventType === 'location') {
-                console.log('📍 Location detected:', data.country);
-              } else if (eventType === 'guideline_search') {
-                console.log('🔍 Searching:', data.source);
-              } else if (eventType === 'diagnoses') {
-                // NEW: Diagnoses available - show report immediately!
-                console.log('✅ Diagnoses ready:', data.diagnoses.length, 'diagnoses');
-                console.log('⏳ Drugs pending:', data.drugs_pending?.length || 0, 'drugs');
-                setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
-                // Track pending drugs for loading state
-                setDrugsPending(data.drugs_pending || []);
-                setCurrentScreen('report');
-              } else if (eventType === 'drug_update') {
-                // NEW: Individual drug details arrived
-                const source = data.source || 'unknown';
-                console.log(`Drug ${data.drug_name}: ${data.status} (source: ${source})`);
+              // Remove from pending list regardless of status
+              setDrugsPending(prev => prev.filter(d => d !== data.drug_name));
 
-                // Remove from pending list regardless of status
-                setDrugsPending(prev => prev.filter(d => d !== data.drug_name));
-
-                if (data.status === 'complete' && data.details) {
-                  // Log if LLM was used
-                  if (source === 'llm') {
-                    console.log(`  AI-generated drug information for ${data.drug_name}`);
-                  }
-
-                  setDrugDetails(prev => ({
-                    ...prev,
-                    [data.drug_name]: data.details
-                  }));
+              if (data.status === 'complete' && data.details) {
+                // Log if LLM was used
+                if (source === 'llm') {
+                  console.log(`[${timestamp()}]   AI-generated drug information for ${data.drug_name}`);
                 }
-              } else if (eventType === 'bnf_drug') {
-                console.log(`💊 Drug ${data.medication}: ${data.status}`);
-              } else if (eventType === 'complete') {
-                finalResult = data;
-              } else if (eventType === 'error') {
-                if (data.type === 'invalid_input') {
-                  setInvalidInputMessage(data.message);
-                  setCurrentScreen('invalid');
-                  return;
-                }
-                // Handle critical API errors (credits, auth, max_tokens) - show immediately
-                if (data.type === 'anthropic_credits' || data.type === 'anthropic_api') {
-                  console.error('❌ Critical API error:', data.message);
-                  alert(`API Error: ${data.message}`);
-                  setCurrentScreen('input');
-                  return;
-                }
-                // Handle max_tokens warning - collect as error but allow analysis to continue
-                if (data.type === 'max_tokens') {
-                  console.warn('⚠️ Claude max_tokens warning:', data.message);
-                  setAnalysisErrors((prev: string[]) => [...prev, data.message]);
-                  // Don't return - allow analysis to continue with whatever was generated
-                }
-                // Collect other errors but don't throw - allow analysis to complete
-                console.error('Error during analysis:', data.message);
-                setAnalysisErrors(prev => [...prev, data.message]);
+
+                setDrugDetails(prev => ({
+                  ...prev,
+                  [data.drug_name]: data.details
+                }));
               }
-            } catch (e) {
-              console.error('Error parsing event data:', e);
+            } else if (eventType === 'bnf_drug') {
+              console.log(`[${timestamp()}] 💊 Drug ${data.medication}: ${data.status}`);
+            } else if (eventType === 'complete') {
+              console.log(`[${timestamp()}] ✅ Analysis complete`);
+              finalResult = data;
+              isComplete = true;
+              // Abort the connection since we're done
+              abortController.abort();
+            } else if (eventType === 'error') {
+              if (data.type === 'invalid_input') {
+                setInvalidInputMessage(data.message);
+                setCurrentScreen('invalid');
+                hasError = true;
+                abortController.abort();
+                return;
+              }
+              // Handle critical API errors (credits, auth, max_tokens) - show immediately
+              if (data.type === 'anthropic_credits' || data.type === 'anthropic_api') {
+                console.error(`[${timestamp()}] ❌ Critical API error:`, data.message);
+                alert(`API Error: ${data.message}`);
+                setCurrentScreen('input');
+                hasError = true;
+                abortController.abort();
+                return;
+              }
+              // Handle max_tokens warning - collect as error but allow analysis to continue
+              if (data.type === 'max_tokens') {
+                console.warn(`[${timestamp()}] ⚠️ Claude max_tokens warning:`, data.message);
+                setAnalysisErrors((prev: string[]) => [...prev, data.message]);
+                // Don't return - allow analysis to continue with whatever was generated
+              }
+              // Collect other errors but don't throw - allow analysis to complete
+              console.error(`[${timestamp()}] Error during analysis:`, data.message);
+              setAnalysisErrors(prev => [...prev, data.message]);
             }
+          } catch (e) {
+            console.error(`[${timestamp()}] Error parsing event data:`, e);
+          }
+        },
+        onerror(err) {
+          // Don't retry if we intentionally aborted or if analysis is complete
+          if (isComplete || abortController.signal.aborted) {
+            console.log(`[${timestamp()}] SSE connection closed (stream complete)`);
+            return; // Return without throwing to prevent retry
+          }
+          console.error(`[${timestamp()}] SSE error:`, err);
+          hasError = true;
+          throw err; // Rethrow to stop retrying
+        },
+        onclose() {
+          console.log(`[${timestamp()}] SSE connection closed`);
+          // Don't retry on close - the stream is finished
+          if (!isComplete && !hasError) {
+            console.log(`[${timestamp()}] Stream closed unexpectedly`);
           }
         }
-      }
+      }).catch((err) => {
+        // Ignore abort errors (expected when we call abortController.abort())
+        if (err.name === 'AbortError' || abortController.signal.aborted) {
+          console.log(`[${timestamp()}] SSE connection aborted (expected)`);
+        } else {
+          throw err;
+        }
+      });
 
-      if (finalResult) {
+      // After stream completes, handle final result
+      if (!hasError && finalResult) {
         setAnalysisResult((prev: any) => ({ ...(prev || {}), ...finalResult }));
 
         // Extract drug details from bnf_summaries if available
@@ -325,16 +335,11 @@ function MainApp() {
             }
           }
           setDrugDetails(extractedDrugDetails);
-          console.log(`💊 Loaded ${Object.keys(extractedDrugDetails).length} drug details from analysis result`);
-        }
-
-        // Only transition to 'complete' if we're not already showing the report
-        if (currentScreen !== 'report') {
-          setCurrentScreen('complete');
+          console.log(`[${timestamp()}] 💊 Loaded ${Object.keys(extractedDrugDetails).length} drug details from analysis result`);
         }
       }
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error(`[${timestamp()}] Analysis error:`, error);
       alert(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the backend is running.`);
       setCurrentScreen('input');
     }
@@ -517,8 +522,15 @@ function MainApp() {
         }
       }
 
-      // Use streaming endpoint for real-time updates
-      const response = await fetch(`${API_URL}/api/analyze-stream`, {
+      // Use fetchEventSource for proper SSE handling (no buffering)
+      console.log(`[${timestamp()}] Starting SSE connection for past consultation analysis`);
+
+      let finalResult: any = null;
+      let hasError = false;
+      let isComplete = false;
+      const abortController = new AbortController();
+
+      await fetchEventSource(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -526,6 +538,8 @@ function MainApp() {
         body: JSON.stringify({
           consultation: textForAnalysis,
           patient_name: patientDetails.name,
+          patient_age: patientDetails.age,
+          patient_sex: patientDetails.sex,
           patient_height: patientDetails.height,
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
@@ -533,58 +547,76 @@ function MainApp() {
           user_ip: userIp,
           location_override: locationOverride || undefined
         }),
+        signal: abortController.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+          console.log(`[${timestamp()}] SSE connection opened, status: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Analysis failed: ${response.status} ${errorText}`);
+          }
+        },
+        onmessage(ev) {
+          const eventType = ev.event;
+          try {
+            const data = JSON.parse(ev.data);
+            console.log(`[${timestamp()}] SSE Event: ${eventType}`, data);
+
+            setStreamEvents(prev => [...prev, {
+              type: eventType,
+              data: data,
+              timestamp: Date.now()
+            }]);
+
+            if (eventType === 'diagnoses') {
+              console.log(`[${timestamp()}] ✅ Diagnoses ready:`, data.diagnoses?.length || 0, 'diagnoses');
+              setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
+              setDrugsPending(data.drugs_pending || []);
+              setCurrentScreen('report');
+            } else if (eventType === 'drug_update') {
+              const source = data.source || 'unknown';
+              console.log(`[${timestamp()}] 💊 Drug ${data.drug_name}: ${data.status} (source: ${source})`);
+              setDrugsPending(prev => prev.filter(d => d !== data.drug_name));
+              if (data.status === 'complete' && data.details) {
+                setDrugDetails(prev => ({
+                  ...prev,
+                  [data.drug_name]: data.details
+                }));
+              }
+            } else if (eventType === 'complete') {
+              console.log(`[${timestamp()}] ✅ Analysis complete`);
+              finalResult = data;
+              isComplete = true;
+              abortController.abort();
+            } else if (eventType === 'error') {
+              console.error(`[${timestamp()}] Error during analysis:`, data.message || data.error);
+              setAnalysisErrors(prev => [...prev, data.message || data.error]);
+            }
+          } catch (e) {
+            console.error(`[${timestamp()}] Error parsing event data:`, e);
+          }
+        },
+        onerror(err) {
+          if (isComplete || abortController.signal.aborted) {
+            return; // Don't retry if complete
+          }
+          console.error(`[${timestamp()}] SSE error:`, err);
+          hasError = true;
+          throw err;
+        },
+        onclose() {
+          console.log(`[${timestamp()}] SSE connection closed`);
+        }
+      }).catch((err) => {
+        if (err.name === 'AbortError' || abortController.signal.aborted) {
+          console.log(`[${timestamp()}] SSE connection aborted (expected)`);
+        } else {
+          throw err;
+        }
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Analysis failed: ${response.status} ${errorText}`);
-      }
-
-      // Process the streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Failed to get response reader');
-      }
-
-      let buffer = '';
-      let finalResult: any = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(line.slice(6));
-              setStreamEvents(prev => [...prev, {
-                type: eventData.type,
-                data: eventData,
-                timestamp: Date.now()
-              }]);
-
-              if (eventData.type === 'complete') {
-                finalResult = eventData.data;
-              } else if (eventData.type === 'error') {
-                setAnalysisErrors(prev => [...prev, eventData.error]);
-              }
-            } catch (e) {
-              // Ignore JSON parse errors for incomplete data
-            }
-          }
-        }
-      }
-
-      if (finalResult) {
-        setAnalysisResult(finalResult);
-        setCurrentScreen('complete');
+      if (!hasError && finalResult) {
+        setAnalysisResult((prev: any) => ({ ...(prev || {}), ...finalResult }));
 
         // Update the consultation in Supabase with the analysis results
         try {
@@ -599,20 +631,18 @@ function MainApp() {
             .eq('id', consultation.id);
 
           if (error) {
-            console.error('Failed to update consultation with analysis:', error);
+            console.error(`[${timestamp()}] Failed to update consultation with analysis:`, error);
           } else {
-            console.log('✅ Consultation updated with analysis results');
+            console.log(`[${timestamp()}] ✅ Consultation updated with analysis results`);
             // Refresh appointments to show updated data
             setAppointmentsRefreshKey(prev => prev + 1);
           }
         } catch (updateError) {
-          console.error('Error updating consultation:', updateError);
+          console.error(`[${timestamp()}] Error updating consultation:`, updateError);
         }
-      } else {
-        throw new Error('Analysis completed but no results received');
       }
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error(`[${timestamp()}] Analysis error:`, error);
       setAnalysisErrors(prev => [...prev, String(error)]);
       alert(`Analysis failed: ${error}`);
       setCurrentScreen('appointments');
@@ -738,8 +768,15 @@ function MainApp() {
         }
       }
 
-      // Use streaming endpoint for real-time updates
-      const response = await fetch(`${API_URL}/api/analyze-stream`, {
+      // Use fetchEventSource for proper SSE handling (no buffering)
+      console.log(`[${timestamp()}] Starting SSE connection for patient view analysis`);
+
+      let finalResult: any = null;
+      let hasError = false;
+      let isComplete = false;
+      const abortController = new AbortController();
+
+      await fetchEventSource(`${API_URL}/api/analyze-stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -747,6 +784,8 @@ function MainApp() {
         body: JSON.stringify({
           consultation: textForAnalysis,
           patient_name: patientDetails.name,
+          patient_age: patientDetails.age,
+          patient_sex: patientDetails.sex,
           patient_height: patientDetails.height,
           patient_weight: patientDetails.weight,
           current_medications: patientDetails.currentMedications,
@@ -754,58 +793,76 @@ function MainApp() {
           user_ip: userIp,
           location_override: locationOverride || undefined
         }),
+        signal: abortController.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+          console.log(`[${timestamp()}] SSE connection opened, status: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Analysis failed: ${response.status} ${errorText}`);
+          }
+        },
+        onmessage(ev) {
+          const eventType = ev.event;
+          try {
+            const data = JSON.parse(ev.data);
+            console.log(`[${timestamp()}] SSE Event: ${eventType}`, data);
+
+            setStreamEvents(prev => [...prev, {
+              type: eventType,
+              data: data,
+              timestamp: Date.now()
+            }]);
+
+            if (eventType === 'diagnoses') {
+              console.log(`[${timestamp()}] ✅ Diagnoses ready:`, data.diagnoses?.length || 0, 'diagnoses');
+              setAnalysisResult((prev: any) => ({ ...prev, diagnoses: data.diagnoses }));
+              setDrugsPending(data.drugs_pending || []);
+              setCurrentScreen('report');
+            } else if (eventType === 'drug_update') {
+              const source = data.source || 'unknown';
+              console.log(`[${timestamp()}] 💊 Drug ${data.drug_name}: ${data.status} (source: ${source})`);
+              setDrugsPending(prev => prev.filter(d => d !== data.drug_name));
+              if (data.status === 'complete' && data.details) {
+                setDrugDetails(prev => ({
+                  ...prev,
+                  [data.drug_name]: data.details
+                }));
+              }
+            } else if (eventType === 'complete') {
+              console.log(`[${timestamp()}] ✅ Analysis complete`);
+              finalResult = data;
+              isComplete = true;
+              abortController.abort();
+            } else if (eventType === 'error') {
+              console.error(`[${timestamp()}] Error during analysis:`, data.message || data.error);
+              setAnalysisErrors(prev => [...prev, data.message || data.error]);
+            }
+          } catch (e) {
+            console.error(`[${timestamp()}] Error parsing event data:`, e);
+          }
+        },
+        onerror(err) {
+          if (isComplete || abortController.signal.aborted) {
+            return; // Don't retry if complete
+          }
+          console.error(`[${timestamp()}] SSE error:`, err);
+          hasError = true;
+          throw err;
+        },
+        onclose() {
+          console.log(`[${timestamp()}] SSE connection closed`);
+        }
+      }).catch((err) => {
+        if (err.name === 'AbortError' || abortController.signal.aborted) {
+          console.log(`[${timestamp()}] SSE connection aborted (expected)`);
+        } else {
+          throw err;
+        }
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Analysis failed: ${response.status} ${errorText}`);
-      }
-
-      // Process the streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Failed to get response reader');
-      }
-
-      let buffer = '';
-      let finalResult: any = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(line.slice(6));
-              setStreamEvents(prev => [...prev, {
-                type: eventData.type,
-                data: eventData,
-                timestamp: Date.now()
-              }]);
-
-              if (eventData.type === 'complete') {
-                finalResult = eventData.data;
-              } else if (eventData.type === 'error') {
-                setAnalysisErrors(prev => [...prev, eventData.error]);
-              }
-            } catch (e) {
-              // Ignore JSON parse errors for incomplete data
-            }
-          }
-        }
-      }
-
-      if (finalResult) {
-        setAnalysisResult(finalResult);
-        setCurrentScreen('complete');
+      if (!hasError && finalResult) {
+        setAnalysisResult((prev: any) => ({ ...(prev || {}), ...finalResult }));
 
         // Update the consultation in Supabase with the analysis results
         try {
@@ -820,18 +877,16 @@ function MainApp() {
             .eq('id', consultation.id);
 
           if (error) {
-            console.error('Failed to update consultation with analysis:', error);
+            console.error(`[${timestamp()}] Failed to update consultation with analysis:`, error);
           } else {
-            console.log('✅ Consultation updated with analysis results');
+            console.log(`[${timestamp()}] ✅ Consultation updated with analysis results`);
           }
         } catch (updateError) {
-          console.error('Error updating consultation:', updateError);
+          console.error(`[${timestamp()}] Error updating consultation:`, updateError);
         }
-      } else {
-        throw new Error('Analysis completed but no results received');
       }
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error(`[${timestamp()}] Analysis error:`, error);
       setAnalysisErrors(prev => [...prev, String(error)]);
       alert(`Analysis failed: ${error}`);
       setCurrentScreen('patient-detail');
@@ -1128,6 +1183,7 @@ function MainApp() {
               drugsPending={drugsPending}
               appointmentContext={selectedAppointment || undefined}
               onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
+              location={locationOverride}
             />
           )}
         </Suspense>

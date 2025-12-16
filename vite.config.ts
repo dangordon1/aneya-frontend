@@ -10,6 +10,24 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // SSE/Streaming configuration - disable buffering
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // For SSE endpoints, set headers to prevent buffering
+            if (req.url?.includes('analyze-stream')) {
+              proxyReq.setHeader('Accept', 'text/event-stream');
+              proxyReq.setHeader('Cache-Control', 'no-cache');
+              proxyReq.setHeader('Connection', 'keep-alive');
+            }
+          });
+          proxy.on('proxyRes', (proxyRes, req) => {
+            // Disable buffering for SSE responses
+            if (req.url?.includes('analyze-stream')) {
+              proxyRes.headers['x-accel-buffering'] = 'no';
+              proxyRes.headers['cache-control'] = 'no-cache';
+            }
+          });
+        },
       },
     },
   },
