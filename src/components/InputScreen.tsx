@@ -5,6 +5,7 @@ import { formatTime24 } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { LocationSelector } from './LocationSelector';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface PatientDetails {
   name: string;
@@ -35,7 +36,68 @@ interface InputScreenProps {
   onLocationChange?: (location: string | null) => void;
 }
 
-const EXAMPLE_CONSULTATION = `Patient presents with a 3-day history of productive cough with green sputum, fever (38.5°C), and shortness of breath. They report feeling generally unwell with fatigue and reduced appetite. Past medical history includes type 2 diabetes mellitus (well controlled on metformin) and hypertension (on ramipril). No known drug allergies. Non-smoker. On examination: respiratory rate 22/min, oxygen saturation 94% on air, crackles heard in right lower zone on auscultation.`;
+const SAMPLE_CONSULTATION_TEXT = `Doctor: Good morning, Mr. Thompson. I'm Dr. Patel. What brings you in today?
+
+Patient: Morning, doctor. I've been feeling terrible for about 5 days now. Started with a bad cough and now I can barely breathe when I walk up stairs.
+
+Doctor: I'm sorry to hear that. Tell me more about the cough - is it dry or are you bringing anything up?
+
+Patient: It's productive now. I'm coughing up greenish-yellow phlegm, quite thick. And I've had this fever that comes and goes, been around 38.5 to 39 degrees.
+
+Doctor: Any chest pain?
+
+Patient: Yes, actually. Sharp pain on my right side when I take a deep breath or cough. Makes me not want to breathe deeply.
+
+Doctor: I see. Have you had any night sweats, chills, or shaking?
+
+Patient: Yes, terrible chills and sweating through my sheets at night. My wife made me come in.
+
+Doctor: Smart wife. Any other symptoms - headache, muscle aches, loss of appetite?
+
+Patient: All of the above, really. I've barely eaten in three days. Just exhausted.
+
+Doctor: Let me ask about your background. Do you smoke?
+
+Patient: I used to - quit 10 years ago, but I smoked for about 20 years before that.
+
+Doctor: Any other medical conditions I should know about?
+
+Patient: I have COPD - diagnosed about 5 years ago. I use an inhaler, the blue one, when I need it. And I take medication for high blood pressure.
+
+Doctor: Which blood pressure medication?
+
+Patient: Amlodipine, 5mg I think.
+
+Doctor: Any allergies to medications?
+
+Patient: Yes, I'm allergic to penicillin - I get a rash from it.
+
+Doctor: Important to know. Let me examine you now.
+
+[Physical examination]
+
+Doctor: Right, Mr. Thompson. Your oxygen saturation is 94% on room air, which is a bit lower than we'd like. Temperature is 38.7. I can hear crackles in your right lower lung when I listen, and there's dullness when I tap that area, which suggests some consolidation. Your heart rate is slightly elevated at 98.
+
+Given your history of COPD, the productive cough with purulent sputum, fever, and the examination findings, I'm confident you have community-acquired pneumonia. The pleuritic chest pain and the consolidation on the right side fit with this.
+
+Patient: Is that serious?
+
+Doctor: It can be, but we've caught it at a good stage. Because of your COPD and the penicillin allergy, I'm going to prescribe doxycycline 200mg today, then 100mg daily for 5 days total. It's important you complete the full course.
+
+I also want you to continue your regular inhalers and stay well hydrated. Paracetamol for the fever and pain. If your breathing gets worse, you develop confusion, or the fever doesn't improve in 48-72 hours, I need you to go straight to A&E.
+
+Patient: Should I have an X-ray?
+
+Doctor: I'm going to arrange a chest X-ray to confirm the diagnosis and rule out any complications. Given your COPD history, I want to be thorough.
+
+I'll also arrange some blood tests - full blood count and CRP to check for inflammation levels. You should rest at home, no work for at least a week.
+
+Patient: Thank you, doctor. I appreciate you taking this seriously.
+
+Doctor: Of course. Here's your prescription. The pharmacy is just downstairs. Please book a follow-up appointment for one week's time so we can check your progress. Sooner if you're worried about anything.`;
+
+// Admin email for testing features
+const ADMIN_EMAIL = 'dangordon@live.co.uk';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
@@ -70,6 +132,9 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
 };
 
 export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
   const [consultationSummary, setConsultationSummary] = useState<any>(null); // Consultation Summary (structured data from summarize API)
   const [originalTranscript, setOriginalTranscript] = useState(''); // Original language transcript
@@ -205,10 +270,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // If no summary exists, run summarization first
       let summaryData = consultationSummary;
       if (!summaryData) {
+        // Send both original and translated text for summarization
+        const requestBody: { text: string; original_text?: string } = {
+          text: consultation
+        };
+        if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
+          requestBody.original_text = originalTranscript;
+        }
+
         const response = await fetch(`${API_URL}/api/summarize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: consultation })
+          body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -271,10 +344,21 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     setIsSummarizing(true);
     try {
+      // Send both original and translated text to the backend
+      // If we have an original transcript (non-English), send it for better summarization
+      const requestBody: { text: string; original_text?: string } = {
+        text: consultation  // This is the translated (English) version
+      };
+
+      // If we have original language transcript that's different from the consultation
+      if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
+        requestBody.original_text = originalTranscript;
+      }
+
       const response = await fetch(`${API_URL}/api/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: consultation })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -1435,9 +1519,20 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
           {/* Consultation Transcript */}
           <div>
-            <label htmlFor="consultation" className="block mb-2 text-[14px] font-medium text-aneya-navy">
-              Consultation Transcript
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="consultation" className="text-[14px] font-medium text-aneya-navy">
+                Consultation Transcript
+              </label>
+              {isAdmin && (
+                <button
+                  onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
+                  className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
+                  disabled={isRecording}
+                >
+                  Load Sample Text
+                </button>
+              )}
+            </div>
             <textarea
               id="consultation"
               value={consultation}

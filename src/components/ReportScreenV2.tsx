@@ -38,6 +38,7 @@ interface ReportScreenV2Props {
   drugsPending?: string[];
   appointmentContext?: AppointmentWithPatient;
   onSaveConsultation?: () => void;
+  location?: string | null;  // Country code (e.g., 'GB' for UK)
 }
 
 export function ReportScreenV2({
@@ -48,8 +49,11 @@ export function ReportScreenV2({
   drugDetails = {},
   drugsPending = [],
   appointmentContext,
-  onSaveConsultation
+  onSaveConsultation,
+  location
 }: ReportScreenV2Props) {
+  // Determine if BNF links should be shown (UK only)
+  const isUK = location === 'GB';
   const diagnoses = result.diagnoses || [];
   const niceGuidelines = result.guidelines_found || [];
   const cksTopics = result.cks_topics || [];
@@ -193,6 +197,7 @@ export function ReportScreenV2({
               number={idx + 1}
               drugDetails={drugDetails}
               drugsPending={drugsPending}
+              showBnfLink={isUK}
             />
           ))}
 
@@ -311,9 +316,10 @@ interface DiagnosisSectionProps {
   number: number;
   drugDetails: Record<string, any>;
   drugsPending: string[];
+  showBnfLink?: boolean;
 }
 
-function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPending }: DiagnosisSectionProps) {
+function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPending, showBnfLink = true }: DiagnosisSectionProps) {
   const [isOpen, setIsOpen] = useState(isPrimary); // Only primary expanded by default
 
   const diagnosisName = diagnosis.diagnosis || diagnosis.name || 'Unknown Diagnosis';
@@ -377,7 +383,7 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPend
                 icon={<Pill className="w-4 h-4" />}
                 badge={diagnosis.primary_care.medications?.length || 0}
               >
-                <TreatmentContent primaryCare={diagnosis.primary_care} drugDetails={drugDetails} drugsPending={drugsPending} />
+                <TreatmentContent primaryCare={diagnosis.primary_care} drugDetails={drugDetails} drugsPending={drugsPending} showBnfLink={showBnfLink} />
               </CollapsibleSection>
             )}
 
@@ -433,7 +439,7 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPend
 // Treatment Content
 // ============================================
 
-function TreatmentContent({ primaryCare, drugDetails, drugsPending }: { primaryCare: any; drugDetails: Record<string, any>; drugsPending: string[] }) {
+function TreatmentContent({ primaryCare, drugDetails, drugsPending, showBnfLink = true }: { primaryCare: any; drugDetails: Record<string, any>; drugsPending: string[]; showBnfLink?: boolean }) {
   return (
     <div className="space-y-4 text-sm">
       {/* Medications */}
@@ -446,7 +452,7 @@ function TreatmentContent({ primaryCare, drugDetails, drugsPending }: { primaryC
               const details = drugDetails[drugName];
               const isPending = drugsPending.includes(drugName);
               return (
-                <MedicationItem key={idx} drugName={drugName} details={details} isPending={isPending} />
+                <MedicationItem key={idx} drugName={drugName} details={details} isPending={isPending} showBnfLink={showBnfLink} />
               );
             })}
           </div>
@@ -483,7 +489,7 @@ function TreatmentContent({ primaryCare, drugDetails, drugsPending }: { primaryC
 // Medication Item (Expandable)
 // ============================================
 
-function MedicationItem({ drugName, details, isPending }: { drugName: string; details?: any; isPending?: boolean }) {
+function MedicationItem({ drugName, details, isPending, showBnfLink = true }: { drugName: string; details?: any; isPending?: boolean; showBnfLink?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const hasDetails = details?.bnf_data || details?.drugbank_data;
   const isLoading = isPending && !hasDetails;
@@ -531,7 +537,7 @@ function MedicationItem({ drugName, details, isPending }: { drugName: string; de
               <p className="text-aneya-text-secondary mt-0.5">{details.bnf_data.interactions}</p>
             </div>
           )}
-          {details.url && (
+          {showBnfLink && details.url && (
             <a
               href={details.url}
               target="_blank"
