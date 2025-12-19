@@ -28,6 +28,7 @@ export function MyDoctors({ onBack: _onBack }: Props) {
   }, [showFindDoctor]);
 
   const fetchAllDoctors = async () => {
+    console.log('🔍 Fetching all active doctors...');
     setLoadingDoctors(true);
     try {
       // Fetch all active doctors from the doctors table
@@ -38,10 +39,15 @@ export function MyDoctors({ onBack: _onBack }: Props) {
         .eq('is_active', true)
         .order('name');
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error('❌ Error fetching doctors:', fetchError);
+        throw fetchError;
+      }
+      console.log('✅ Fetched doctors:', data?.length || 0, 'doctors found');
+      console.log('📋 Doctor data:', data);
       setAllDoctors(data || []);
     } catch (err) {
-      console.error('Error fetching doctors:', err);
+      console.error('❌ Error fetching doctors:', err);
     } finally {
       setLoadingDoctors(false);
     }
