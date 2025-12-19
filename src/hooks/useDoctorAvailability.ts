@@ -19,6 +19,7 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Make effectiveDoctorId reactive to doctorProfile changes
   const effectiveDoctorId = doctorId || doctorProfile?.id;
 
   const fetchAvailability = useCallback(async () => {
@@ -83,18 +84,23 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
   }, [fetchAvailability]);
 
   const createAvailability = async (input: CreateAvailabilityInput): Promise<DoctorAvailability | null> => {
-    if (!effectiveDoctorId) {
-      const errorMsg = `No doctor ID available. Doctor Profile: ${doctorProfile ? 'exists' : 'null'}, Effective ID: ${effectiveDoctorId}`;
+    // Get fresh doctor ID at time of call
+    const currentDoctorId = doctorId || doctorProfile?.id;
+
+    if (!currentDoctorId) {
+      const errorMsg = `No doctor ID available. Doctor Profile: ${doctorProfile ? JSON.stringify({ id: doctorProfile.id, name: doctorProfile.name }) : 'null'}, Provided ID: ${doctorId}`;
       console.error(errorMsg);
       setError(errorMsg);
       return null;
     }
 
+    console.log('Creating availability with doctor ID:', currentDoctorId);
+
     try {
       const { data, error: createError } = await supabase
         .from('doctor_availability')
         .insert({
-          doctor_id: effectiveDoctorId,
+          doctor_id: currentDoctorId,
           day_of_week: input.day_of_week,
           start_time: input.start_time,
           end_time: input.end_time,
@@ -105,6 +111,8 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
         .single();
 
       if (createError) throw createError;
+
+      console.log('✅ Availability created successfully:', data);
 
       setAvailability(prev => [...prev, data].sort((a, b) => {
         if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week;
