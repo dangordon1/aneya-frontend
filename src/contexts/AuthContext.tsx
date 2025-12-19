@@ -109,9 +109,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [doctorProfile, setDoctorProfile] = useState<Doctor | null>(null);
   const [patientProfile, setPatientProfile] = useState<Patient | null>(null);
 
+  // Debug: Log when doctorProfile changes
+  useEffect(() => {
+    console.log('🔔 doctorProfile state changed:', doctorProfile ? { id: doctorProfile.id, name: doctorProfile.name } : null);
+  }, [doctorProfile]);
 
   // Function to load doctor profile
   const loadDoctorProfile = async (userId: string): Promise<Doctor | null> => {
+    console.log('🔍 loadDoctorProfile called with userId:', userId);
     try {
       const { data, error } = await supabase
         .from('doctors')
@@ -120,9 +125,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.log('ℹ️ No doctor profile found');
+        console.log('ℹ️ No doctor profile found for userId:', userId, 'error:', error);
         return null;
       }
+      console.log('✅ Doctor profile loaded:', { id: data.id, name: data.name, user_id: data.user_id });
       return data as Doctor;
     } catch (err) {
       console.error('❌ Error loading doctor profile:', err);
@@ -165,8 +171,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Function to specifically refresh doctor profile
   const refreshDoctorProfile = async () => {
+    console.log('🔄 refreshDoctorProfile called, user:', user?.id);
     if (!user) return;
     const doctor = await loadDoctorProfile(user.id);
+    console.log('📝 Refreshing doctorProfile to:', doctor ? { id: doctor.id, name: doctor.name } : null);
     setDoctorProfile(doctor);
   };
 
@@ -207,7 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               // Load appropriate profile based on role
               if (role === 'doctor') {
+                console.log('🔄 Loading doctor profile for role: doctor');
                 const doctor = await loadDoctorProfile(firebaseUser.uid);
+                console.log('📝 Setting doctorProfile to:', doctor ? { id: doctor.id, name: doctor.name } : null);
                 setDoctorProfile(doctor);
                 setPatientProfile(null);
               } else if (role === 'patient') {
@@ -218,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Admin or other roles - they might also be doctors
                 const doctor = await loadDoctorProfile(firebaseUser.uid);
                 if (doctor) {
+                  console.log('📝 Setting doctorProfile for admin/other role to:', { id: doctor.id, name: doctor.name });
                   setDoctorProfile(doctor);
                   setIsDoctor(true);
                 }
