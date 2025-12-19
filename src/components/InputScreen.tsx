@@ -177,6 +177,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [diarizationData, setDiarizationData] = useState<any>(null);
   const [showSpeakerMapping, setShowSpeakerMapping] = useState(false);
 
+  // Recording consent modal state
+  const [showConsentModal, setShowConsentModal] = useState(false);
+
   // Audio recording refs
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -1159,7 +1162,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <span className="text-[14px] font-medium">Back</span>
             </button>
           )}
-          <h1 className="text-[24px] sm:text-[32px] leading-[30px] sm:leading-[38px] text-aneya-navy">Clinical Decision Support</h1>
+          <h1 className="text-[24px] sm:text-[32px] leading-[30px] sm:leading-[38px] text-aneya-navy">Consultation</h1>
         </div>
 
         {/* Appointment Context Banner */}
@@ -1185,10 +1188,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         {/* Patient Details - expandable section */}
         <div className="mb-6">
           <button
-            onClick={() => !isPatientLocked && setIsPatientDetailsExpanded(!isPatientDetailsExpanded)}
-            disabled={isPatientLocked}
-            className={`w-full flex items-center justify-between p-4 bg-white border-2 border-aneya-teal rounded-[10px] transition-colors ${isPatientLocked ? 'cursor-default' : 'hover:border-aneya-navy cursor-pointer'
-              }`}
+            onClick={() => setIsPatientDetailsExpanded(!isPatientDetailsExpanded)}
+            className="w-full flex items-center justify-between p-4 bg-white border-2 border-aneya-teal rounded-[10px] transition-colors hover:border-aneya-navy cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <svg className="h-5 w-5 text-aneya-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1200,22 +1201,15 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <span className="text-[12px] text-gray-500">
                 ({patientDetails.name})
               </span>
-              {isPatientLocked && (
-                <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded">
-                  Locked
-                </span>
-              )}
             </div>
-            {!isPatientLocked && (
-              <svg
-                className={`h-5 w-5 text-aneya-navy transition-transform duration-200 ${isPatientDetailsExpanded ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            )}
+            <svg
+              className={`h-5 w-5 text-aneya-navy transition-transform duration-200 ${isPatientDetailsExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
 
           {/* Expandable content */}
@@ -1434,7 +1428,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
                 {/* Record Consultation Button */}
                 <button
-                  onClick={startRecording}
+                  onClick={() => setShowConsentModal(true)}
                   disabled={isConnectingToTranscription}
                   className={`
                     flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-[10px] font-medium text-[14px]
@@ -1510,9 +1504,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                   )}
                 </div>
 
-                <p className="text-[11px] text-gray-500 max-w-xs text-left sm:text-right leading-tight italic">
-                  By clicking this, you confirm that both the clinician and the patient have consented to be recorded for medical records.
-                </p>
               </div>
             )}
           </div>
@@ -1661,6 +1652,37 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             <p className="text-[14px] text-gray-600">
               Detecting and separating speakers in your recording
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Recording Consent Modal */}
+      {showConsentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[20px] p-6 max-w-md mx-4 border-2 border-aneya-teal shadow-xl">
+            <h3 className="text-[20px] text-aneya-navy font-medium mb-4 text-center">
+              Recording Consent
+            </h3>
+            <p className="text-[14px] text-gray-700 mb-6 text-center leading-relaxed">
+              By clicking confirm, you confirm that both the clinician and the patient have consented to be recorded for medical records.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConsentModal(false)}
+                className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 rounded-[10px] font-medium text-[14px] hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowConsentModal(false);
+                  startRecording();
+                }}
+                className="flex-1 px-4 py-2.5 bg-aneya-teal text-white rounded-[10px] font-medium text-[14px] hover:bg-aneya-teal/90 transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}
