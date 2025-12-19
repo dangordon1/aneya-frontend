@@ -272,24 +272,21 @@ export function useMessages(): UseMessagesReturn {
 
       if (updateError) throw updateError;
 
-      // Update local unread count
-      setConversations(prev =>
-        prev.map(c => {
+      // Update local unread count and recalculate total
+      setConversations(prev => {
+        const updated = prev.map(c => {
           if (selectedConversation && c.id === selectedConversation.id) {
             return { ...c, unread_count: 0 };
           }
           return c;
-        })
-      );
+        });
 
-      // Recalculate total unread
-      const newTotalUnread = conversations.reduce((sum, c) => {
-        if (selectedConversation && c.id === selectedConversation.id) {
-          return sum;
-        }
-        return sum + c.unread_count;
-      }, 0);
-      setUnreadCount(newTotalUnread);
+        // Recalculate total unread from updated conversations
+        const newTotalUnread = updated.reduce((sum, c) => sum + c.unread_count, 0);
+        setUnreadCount(newTotalUnread);
+
+        return updated;
+      });
 
     } catch (err) {
       console.error('Error marking messages as read:', err);
