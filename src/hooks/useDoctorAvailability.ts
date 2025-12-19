@@ -19,6 +19,12 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Debug: Log when hook mounts and when doctorProfile changes
+  useEffect(() => {
+    console.log('🩺 useDoctorAvailability: doctorProfile changed:', doctorProfile ? { id: doctorProfile.id, name: doctorProfile.name } : null);
+    console.log('🩺 useDoctorAvailability: provided doctorId:', doctorId);
+  }, [doctorProfile, doctorId]);
+
   // Make effectiveDoctorId reactive to doctorProfile changes
   const effectiveDoctorId = doctorId || doctorProfile?.id;
 
@@ -85,16 +91,19 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
 
   const createAvailability = async (input: CreateAvailabilityInput): Promise<DoctorAvailability | null> => {
     // Get fresh doctor ID at time of call
+    console.log('🩺 createAvailability: doctorProfile at call time:', doctorProfile ? { id: doctorProfile.id, name: doctorProfile.name } : null);
+    console.log('🩺 createAvailability: provided doctorId:', doctorId);
+
     const currentDoctorId = doctorId || doctorProfile?.id;
 
     if (!currentDoctorId) {
       const errorMsg = `No doctor ID available. Doctor Profile: ${doctorProfile ? JSON.stringify({ id: doctorProfile.id, name: doctorProfile.name }) : 'null'}, Provided ID: ${doctorId}`;
-      console.error(errorMsg);
+      console.error('❌', errorMsg);
       setError(errorMsg);
       return null;
     }
 
-    console.log('Creating availability with doctor ID:', currentDoctorId);
+    console.log('✅ Creating availability with doctor ID:', currentDoctorId);
 
     try {
       const { data, error: createError } = await supabase
