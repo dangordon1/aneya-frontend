@@ -40,6 +40,35 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
         .order('start_time', { ascending: true });
 
       if (fetchError) throw fetchError;
+
+      // If no availability exists and this is the current doctor's profile, create default availability
+      if ((!data || data.length === 0) && doctorProfile && effectiveDoctorId === doctorProfile.id) {
+        console.log('No availability found for doctor, creating default Mon-Fri 9am-5pm schedule...');
+
+        // Create default availability: Mon-Fri 9am-5pm with 15-minute slots
+        const defaultSchedule = [1, 2, 3, 4, 5].map(day => ({
+          doctor_id: effectiveDoctorId,
+          day_of_week: day,
+          start_time: '09:00',
+          end_time: '17:00',
+          slot_duration_minutes: 15,
+          is_active: true
+        }));
+
+        const { data: created, error: createError } = await supabase
+          .from('doctor_availability')
+          .insert(defaultSchedule)
+          .select();
+
+        if (createError) {
+          console.error('Error creating default availability:', createError);
+        } else {
+          console.log('Default availability created successfully');
+          setAvailability(created || []);
+          return;
+        }
+      }
+
       setAvailability(data || []);
     } catch (err) {
       console.error('Error fetching availability:', err);
@@ -47,7 +76,7 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
     } finally {
       setLoading(false);
     }
-  }, [effectiveDoctorId]);
+  }, [effectiveDoctorId, doctorProfile]);
 
   useEffect(() => {
     fetchAvailability();
@@ -55,7 +84,9 @@ export function useDoctorAvailability(doctorId?: string): UseDoctorAvailabilityR
 
   const createAvailability = async (input: CreateAvailabilityInput): Promise<DoctorAvailability | null> => {
     if (!effectiveDoctorId) {
-      setError('No doctor ID available');
+      const errorMsg = `No doctor ID available. Doctor Profile: ${doctorProfile ? 'exists' : 'null'}, Effective ID: ${effectiveDoctorId}`;
+      console.error(errorMsg);
+      setError(errorMsg);
       return null;
     }
 
