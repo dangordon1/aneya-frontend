@@ -35,24 +35,17 @@ export function BookAppointmentWizard({ onBack, onSuccess }: Props) {
     slots,
     loading: loadingSlots,
     fetchSlotsForDate,
-    dateAvailability,
-    loadingDateAvailability,
-    fetchDateAvailability
+    dateAvailability
   } = useAvailableSlots(selectedDoctor?.id || null);
-
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
 
   // Active doctors only
   const activeDoctors = myDoctors.filter(rel => rel.status === 'active').map(rel => rel.doctor);
 
-  // Create a map for quick lookup of date availability
-  const availabilityMap = useMemo(() => {
-    const map = new Map<string, DateAvailability>();
-    dateAvailability.forEach(da => map.set(da.date, da));
-    return map;
+  // Get available dates from dateAvailability
+  const availableDates = useMemo(() => {
+    return dateAvailability
+      .filter((da: DateAvailability) => da.hasAvailability)
+      .map((da: DateAvailability) => da.date);
   }, [dateAvailability]);
 
   useEffect(() => {
