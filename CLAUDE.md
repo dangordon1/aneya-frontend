@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Live URLs:**
 - Frontend: https://aneya.vercel.app
-- Backend: https://aneya-backend-xao3xivzia-nw.a.run.app (europe-west2)
+- Backend: https://aneya-backend-xao3xivzia-el.a.run.app (asia-south1)
 
 ## Architecture
 
