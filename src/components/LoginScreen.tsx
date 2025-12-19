@@ -402,6 +402,12 @@ export function LoginScreen() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit(e as any);
+                      }
+                    }}
                     className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
                     placeholder="••••••••"
                     disabled={loading}
@@ -419,6 +425,12 @@ export function LoginScreen() {
                       type={showPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSubmit(e as any);
+                        }
+                      }}
                       className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
                       placeholder="••••••••"
                       disabled={loading}
