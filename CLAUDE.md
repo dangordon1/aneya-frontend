@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Live URLs:**
 - Frontend: https://aneya.vercel.app
-- Backend: https://aneya-backend-fhnsxp4nua-nw.a.run.app
+- Backend: https://aneya-backend-xao3xivzia-nw.a.run.app (europe-west2)
 
 ## Architecture
 
@@ -97,16 +97,23 @@ npm run preview
 
 ## Deployment
 
-### Frontend to Vercel
+⚠️ **IMPORTANT: All deployments happen automatically via Git push. NEVER deploy manually.**
 
-```bash
-cd frontend
-vercel --prod
-```
+### Frontend (Vercel)
+- **Auto-deploys on push to `main` branch**
+- Vercel is connected to GitHub and triggers builds automatically
+- To deploy: just `git push origin main`
+- Do NOT use `vercel --prod` or manual deployments
 
-### Backend
+### Backend (Google Cloud Run)
+- **Auto-deploys on push to `main` branch** via Cloud Build trigger
+- Cloud Build trigger `push-to-main` watches the `aneya-backend` repo
+- To deploy: just `git push origin main` in the backend repo
+- Do NOT use `gcloud run deploy` or `gcloud builds submit` manually
 
-See the [aneya-backend](https://github.com/dangordon1/aneya-backend) repository for Cloud Run deployment.
+### Environment Variables
+- **Frontend (Vercel)**: Manage via Vercel dashboard or `vercel env` CLI
+- **Backend (Cloud Run)**: Configured in Cloud Build trigger or Cloud Run service settings
 
 ## API Endpoints (Backend)
 
