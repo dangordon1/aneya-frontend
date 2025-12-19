@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppointments } from '../hooks/useAppointments';
 import { usePatients } from '../hooks/usePatients';
 import { AppointmentWithPatient, Consultation, CreatePatientInput } from '../types/database';
@@ -8,6 +8,7 @@ import { PatientFormModal } from './PatientFormModal';
 import { CompactCalendar } from './CompactCalendar';
 import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
+import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -26,6 +27,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
 
@@ -33,6 +35,19 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [pastAppointmentsLoading, setPastAppointmentsLoading] = useState(true);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
+  const [pastAppointmentsSearch, setPastAppointmentsSearch] = useState('');
+
+  // Filter past appointments based on search
+  const filteredPastAppointments = useMemo(() => {
+    if (!pastAppointmentsSearch.trim()) return pastAppointments;
+    const search = pastAppointmentsSearch.toLowerCase();
+    return pastAppointments.filter(apt =>
+      apt.patient.name.toLowerCase().includes(search) ||
+      apt.reason?.toLowerCase().includes(search) ||
+      apt.appointment_type?.toLowerCase().includes(search) ||
+      new Date(apt.scheduled_time).toLocaleDateString('en-GB').includes(search)
+    );
+  }, [pastAppointments, pastAppointmentsSearch]);
 
   const handleCreateAppointment = async (appointmentData: any) => {
     await createAppointment(appointmentData);
@@ -188,25 +203,46 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           <h1 className="text-[24px] sm:text-[32px] text-aneya-navy mb-2">
             {formatDateDisplay(selectedDate)}
           </h1>
-          <button
-            onClick={() => setIsFormModalOpen(true)}
-            className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors flex items-center gap-2"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setIsFormModalOpen(true)}
+              className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors flex items-center gap-2"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Create New Appointment
-          </button>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Create New Appointment
+            </button>
+            <button
+              onClick={() => setIsAvailabilityModalOpen(true)}
+              className="px-6 py-3 bg-white border border-aneya-navy text-aneya-navy rounded-[10px] font-medium text-[14px] hover:bg-gray-50 transition-colors flex items-center gap-2"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Set Availability
+            </button>
+          </div>
         </div>
 
         {/* Two-column layout: Appointments on left, Calendar on right */}
@@ -307,11 +343,60 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           }}
         />
 
+        {isAvailabilityModalOpen && (
+          <DoctorAvailabilitySettings
+            onClose={() => setIsAvailabilityModalOpen(false)}
+          />
+        )}
+
         {/* Past Appointments Section */}
         <div className="mt-12 border-t border-gray-300 pt-8">
-          <h2 className="text-[24px] text-aneya-navy mb-6 font-semibold">
-            Past Appointments
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-[24px] text-aneya-navy font-semibold">
+              Past Appointments
+            </h2>
+            {pastAppointments.length > 0 && (
+              <span className="text-sm text-gray-500">
+                {filteredPastAppointments.length} of {pastAppointments.length}
+              </span>
+            )}
+          </div>
+
+          {/* Search box */}
+          {pastAppointments.length > 0 && (
+            <div className="mb-4 relative">
+              <input
+                type="text"
+                value={pastAppointmentsSearch}
+                onChange={(e) => setPastAppointmentsSearch(e.target.value)}
+                placeholder="Search past appointments by patient name, date, or reason..."
+                className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aneya-teal/50 focus:border-aneya-teal"
+              />
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              {pastAppointmentsSearch && (
+                <button
+                  onClick={() => setPastAppointmentsSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
 
           {pastAppointmentsLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -323,9 +408,15 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                 No completed or cancelled appointments yet
               </p>
             </div>
+          ) : filteredPastAppointments.length === 0 ? (
+            <div className="bg-gray-50 rounded-[16px] p-8 text-center border border-gray-200">
+              <p className="text-[14px] text-gray-600">
+                No appointments match your search
+              </p>
+            </div>
           ) : (
-            <div className="space-y-4">
-              {pastAppointments.map((appointment) => (
+            <div className="max-h-[600px] overflow-y-auto space-y-4 pr-2">
+              {filteredPastAppointments.map((appointment) => (
                 <PastAppointmentCard
                   key={appointment.id}
                   appointment={appointment}

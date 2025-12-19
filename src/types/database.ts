@@ -58,6 +58,7 @@ export interface Patient {
   consultation_language: ConsultationLanguage; // Preferred language for consultations
   created_by: string; // UUID of user who created the patient
   archived: boolean;
+  user_id: string | null; // Firebase UID for patient portal login (null if not linked)
 }
 
 export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
@@ -68,6 +69,7 @@ export interface Appointment {
   created_at: string;
   updated_at: string;
   patient_id: string;
+  doctor_id: string | null; // Reference to doctors table (null for legacy appointments)
   scheduled_time: string; // ISO timestamp
   duration_minutes: number;
   status: AppointmentStatus;
@@ -76,6 +78,7 @@ export interface Appointment {
   notes: string | null;
   consultation_id: string | null;
   created_by: string;
+  booked_by: 'doctor' | 'patient' | null; // Who made the booking
   cancelled_at: string | null;
   cancellation_reason: string | null;
 }
@@ -158,12 +161,12 @@ export interface CreatePatientInput {
   name: string;
   sex: Patient['sex'];
   date_of_birth: string;
+  email: string; // Required - used for patient portal login and messaging
   height_cm?: number | null;
   weight_kg?: number | null;
   current_medications?: string | null;
   current_conditions?: string | null;
   allergies?: string | null;
-  email?: string | null;
   phone?: string | null;
   consultation_language?: ConsultationLanguage;
 }
@@ -185,11 +188,13 @@ export interface UpdatePatientInput {
 
 export interface CreateAppointmentInput {
   patient_id: string;
+  doctor_id?: string | null;
   scheduled_time: string;
   duration_minutes: number;
   appointment_type: AppointmentType;
   reason?: string | null;
   notes?: string | null;
+  booked_by?: 'doctor' | 'patient' | null;
 }
 
 export interface UpdateAppointmentInput {
@@ -215,4 +220,296 @@ export interface CreateConsultationInput {
   location_detected?: string | null;
   backend_api_version?: string | null;
   summary_data?: SummaryData | null; // Full summarization data from /api/summarize
+}
+
+// ============================================
+// User Role Types
+// ============================================
+
+export type UserRole = 'user' | 'admin' | 'superadmin' | 'doctor' | 'patient';
+
+export interface UserRoleRecord {
+  id: string;
+  user_id: string;
+  email: string | null;
+  role: UserRole;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
+// Doctor Types
+// ============================================
+
+export interface Doctor {
+  id: string;
+  user_id: string; // Firebase UID
+  created_at: string;
+  updated_at: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  specialty: string | null;
+  license_number: string | null;
+  clinic_name: string | null;
+  clinic_address: string | null;
+  default_appointment_duration: number;
+  timezone: string;
+  is_active: boolean;
+  allow_patient_messages: boolean; // Whether patients can initiate messages
+}
+
+export interface CreateDoctorInput {
+  name: string;
+  email: string;
+  phone?: string | null;
+  specialty?: string | null;
+  license_number?: string | null;
+  clinic_name?: string | null;
+  clinic_address?: string | null;
+  default_appointment_duration?: number;
+  timezone?: string;
+}
+
+export interface UpdateDoctorInput {
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  specialty?: string | null;
+  license_number?: string | null;
+  clinic_name?: string | null;
+  clinic_address?: string | null;
+  default_appointment_duration?: number;
+  timezone?: string;
+  is_active?: boolean;
+  allow_patient_messages?: boolean;
+}
+
+// ============================================
+// Doctor Availability Types
+// ============================================
+
+export interface DoctorAvailability {
+  id: string;
+  doctor_id: string;
+  created_at: string;
+  updated_at: string;
+  day_of_week: number; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  start_time: string; // HH:mm:ss format from TIME column
+  end_time: string; // HH:mm:ss format from TIME column
+  slot_duration_minutes: number;
+  is_active: boolean;
+}
+
+export interface CreateAvailabilityInput {
+  day_of_week: number;
+  start_time: string; // HH:mm format
+  end_time: string; // HH:mm format
+  slot_duration_minutes?: number;
+}
+
+export interface UpdateAvailabilityInput {
+  start_time?: string;
+  end_time?: string;
+  slot_duration_minutes?: number;
+  is_active?: boolean;
+}
+
+// ============================================
+// Patient-Doctor Relationship Types
+// ============================================
+
+export type PatientDoctorStatus = 'pending' | 'active' | 'inactive' | 'rejected';
+
+export interface PatientDoctor {
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  created_at: string;
+  initiated_by: 'doctor' | 'patient';
+  status: PatientDoctorStatus;
+}
+
+export interface PatientDoctorWithDoctor extends PatientDoctor {
+  doctor: Doctor;
+}
+
+export interface PatientDoctorWithPatient extends PatientDoctor {
+  patient: Patient;
+}
+
+export interface CreatePatientDoctorInput {
+  patient_id: string;
+  doctor_id: string;
+  initiated_by: 'doctor' | 'patient';
+  status?: PatientDoctorStatus;
+}
+
+// ============================================
+// Patient Invitation Types
+// ============================================
+
+export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'cancelled';
+
+export interface PatientInvitation {
+  id: string;
+  doctor_id: string;
+  email: string;
+  patient_name: string | null;
+  token: string;
+  status: InvitationStatus;
+  expires_at: string;
+  accepted_at: string | null;
+  patient_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatientInvitationWithDoctor extends PatientInvitation {
+  doctor: Doctor;
+}
+
+export interface CreateInvitationInput {
+  email: string;
+  patient_name?: string | null;
+}
+
+// ============================================
+// Time Slot Types (for booking)
+// ============================================
+
+export interface TimeSlot {
+  start_time: string; // ISO timestamp
+  end_time: string; // ISO timestamp
+  duration_minutes: number;
+  is_available: boolean;
+}
+
+export interface AvailableSlot {
+  date: string; // YYYY-MM-DD
+  start_time: string; // HH:mm
+  end_time: string; // HH:mm
+  duration_minutes: number;
+}
+
+// ============================================
+// Message Types
+// ============================================
+
+export type MessageSenderType = 'doctor' | 'patient';
+export type MessageType = 'text' | 'appointment_request' | 'system';
+
+export interface Message {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  sender_type: MessageSenderType;
+  sender_id: string;
+  recipient_type: MessageSenderType;
+  recipient_id: string;
+  content: string;
+  read_at: string | null;
+  patient_doctor_id: string | null;
+  message_type: MessageType;
+}
+
+export interface MessageWithSender extends Message {
+  sender_name?: string;
+  sender_email?: string;
+}
+
+export interface Conversation {
+  id: string; // patient_doctor_id or generated from sender/recipient
+  other_party_id: string;
+  other_party_name: string;
+  other_party_type: MessageSenderType;
+  last_message: string;
+  last_message_at: string;
+  unread_count: number;
+}
+
+export interface CreateMessageInput {
+  sender_type: MessageSenderType;
+  sender_id: string;
+  recipient_type: MessageSenderType;
+  recipient_id: string;
+  content: string;
+  patient_doctor_id?: string | null;
+  message_type?: MessageType;
+}
+
+// ============================================
+// Blocked Slots Types
+// ============================================
+
+export interface BlockedSlot {
+  id: string;
+  doctor_id: string;
+  blocked_date: string; // YYYY-MM-DD
+  start_time: string; // HH:mm:ss
+  end_time: string; // HH:mm:ss
+  reason: string | null;
+  is_all_day: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBlockedSlotInput {
+  blocked_date: string; // YYYY-MM-DD
+  start_time: string; // HH:mm
+  end_time: string; // HH:mm
+  reason?: string | null;
+  is_all_day?: boolean;
+}
+
+export interface UpdateBlockedSlotInput {
+  blocked_date?: string;
+  start_time?: string;
+  end_time?: string;
+  reason?: string | null;
+  is_all_day?: boolean;
+}
+
+// ============================================
+// Patient Symptom Types
+// ============================================
+
+export type SymptomStatus = 'active' | 'resolved' | 'improving' | 'worsening';
+
+export interface PatientSymptom {
+  id: string;
+  patient_id: string;
+  symptom_text: string;
+  original_transcript: string | null;
+  transcription_language: string | null;
+  severity: number | null; // 1-10 scale
+  duration_description: string | null;
+  onset_date: string | null; // YYYY-MM-DD
+  body_location: string | null;
+  status: SymptomStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSymptomInput {
+  symptom_text: string;
+  original_transcript?: string | null;
+  transcription_language?: string | null;
+  severity?: number | null;
+  duration_description?: string | null;
+  onset_date?: string | null;
+  body_location?: string | null;
+  status?: SymptomStatus;
+  notes?: string | null;
+}
+
+export interface UpdateSymptomInput {
+  symptom_text?: string;
+  severity?: number | null;
+  duration_description?: string | null;
+  onset_date?: string | null;
+  body_location?: string | null;
+  status?: SymptomStatus;
+  notes?: string | null;
 }

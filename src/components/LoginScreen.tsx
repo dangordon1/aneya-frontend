@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export function LoginScreen() {
+  const [loginMode, setLoginMode] = useState<'doctor' | 'patient'>('doctor');
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -13,7 +14,27 @@ export function LoginScreen() {
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Doctor-specific signup fields
+  const [doctorName, setDoctorName] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [clinicName, setClinicName] = useState('');
+
+  // Patient-specific signup fields
+  const [patientName, setPatientName] = useState('');
+
   const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
+
+  // Check for invitation token in URL (for patient invites)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get('invite');
+    if (inviteToken) {
+      setLoginMode('patient');
+      setIsSignUp(true);
+      // Store token for later use
+      sessionStorage.setItem('invitationToken', inviteToken);
+    }
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setError('');
@@ -21,7 +42,30 @@ export function LoginScreen() {
     setGoogleLoading(true);
 
     try {
-      const { error } = await signInWithGoogle();
+      // Pass the role and profile data for new signups (Google will check if user exists)
+      const roleToUse = isSignUp ? loginMode : undefined;
+
+      // Build profile data if this is a signup
+      let profileData: { name: string; specialty?: string; clinic_name?: string } | { name: string } | undefined = undefined;
+      if (isSignUp) {
+        if (loginMode === 'doctor') {
+          const name = doctorName.trim();
+          if (name) {
+            profileData = {
+              name,
+              specialty: specialty.trim() || undefined,
+              clinic_name: clinicName.trim() || undefined
+            };
+          }
+        } else {
+          const name = patientName.trim();
+          if (name) {
+            profileData = { name };
+          }
+        }
+      }
+
+      const { error } = await signInWithGoogle(roleToUse, profileData);
       if (error) {
         setError(error.message);
       }
@@ -58,17 +102,36 @@ export function LoginScreen() {
       return;
     }
 
+    // Validate name fields for signup
+    if (isSignUp && loginMode === 'doctor' && !doctorName.trim()) {
+      setError('Please enter your full name');
+      setLoading(false);
+      return;
+    }
+
+    if (isSignUp && loginMode === 'patient' && !patientName.trim()) {
+      setError('Please enter your full name');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (isSignUp) {
-        console.log('Attempting to sign up with email:', email);
-        const result = await signUp(email, password);
+        console.log('Attempting to sign up with email:', email, 'as', loginMode);
+
+        // Build profile data based on role
+        const profileData = loginMode === 'doctor'
+          ? { name: doctorName.trim(), specialty: specialty.trim() || undefined, clinic_name: clinicName.trim() || undefined }
+          : { name: patientName.trim() };
+
+        const result = await signUp(email, password, loginMode, profileData);
         if (result.error) {
           console.error('Sign up error:', result.error);
           setError(result.error.message);
         } else if (result.session) {
           // Auto-logged in after signup
-          console.log('✅ Account created & auto-logged in');
-          setMessage('Account created! A verification email has been sent to your inbox.');
+          console.log('✅ Account created & auto-logged in as', loginMode);
+          setMessage(`Account created as ${loginMode}! A verification email has been sent to your inbox.`);
           // User will be redirected automatically by auth state change
         } else {
           // Signup succeeded but no session (shouldn't happen with Firebase)
@@ -79,13 +142,13 @@ export function LoginScreen() {
           setConfirmPassword('');
         }
       } else {
-        console.log('Attempting to sign in with email:', email);
-        const { error } = await signIn(email, password);
+        console.log('Attempting to sign in with email:', email, 'as', loginMode);
+        const { error } = await signIn(email, password, loginMode);
         if (error) {
           console.error('Sign in error:', error);
           setError(error.message);
         } else {
-          console.log('✅ Sign in successful');
+          console.log('✅ Sign in successful as', loginMode);
         }
       }
     } catch (err) {
@@ -104,6 +167,11 @@ export function LoginScreen() {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    // Clear role-specific fields
+    setDoctorName('');
+    setSpecialty('');
+    setClinicName('');
+    setPatientName('');
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -162,13 +230,45 @@ export function LoginScreen() {
             {isForgotPassword
               ? 'Reset your password'
               : isSignUp
-                ? 'Create your account'
-                : 'Sign in to continue'}
+                ? `Create your ${loginMode} account`
+                : `Sign in as ${loginMode}`}
           </p>
         </div>
 
+        {/* Two-Tab Login Mode Selector */}
+        <div className="flex gap-1 mb-4">
+          <button
+            onClick={() => {
+              setLoginMode('doctor');
+              setError('');
+              setMessage('');
+            }}
+            className={`flex-1 py-3 text-[15px] font-medium rounded-t-lg transition-colors ${
+              loginMode === 'doctor'
+                ? 'bg-aneya-teal text-white'
+                : 'bg-gray-100 text-aneya-navy/70 hover:bg-gray-200'
+            }`}
+          >
+            Doctor Login
+          </button>
+          <button
+            onClick={() => {
+              setLoginMode('patient');
+              setError('');
+              setMessage('');
+            }}
+            className={`flex-1 py-3 text-[15px] font-medium rounded-t-lg transition-colors ${
+              loginMode === 'patient'
+                ? 'bg-aneya-teal text-white'
+                : 'bg-gray-100 text-aneya-navy/70 hover:bg-gray-200'
+            }`}
+          >
+            Patient Login
+          </button>
+        </div>
+
         {/* Login Form */}
-        <div className="bg-white rounded-lg shadow-lg p-8 border border-aneya-navy/10">
+        <div className="bg-white rounded-lg rounded-t-none shadow-lg p-8 border border-aneya-navy/10">
           {isForgotPassword ? (
             /* Forgot Password Form */
             <>
@@ -326,6 +426,80 @@ export function LoginScreen() {
                   </div>
                 )}
 
+                {/* Doctor-specific Sign Up Fields */}
+                {isSignUp && loginMode === 'doctor' && (
+                  <>
+                    <div className="border-t border-gray-200 pt-4">
+                      <p className="text-sm text-aneya-navy/70 mb-4">Doctor Information</p>
+                    </div>
+                    <div>
+                      <label htmlFor="doctorName" className="block text-sm font-medium text-aneya-navy mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="doctorName"
+                        type="text"
+                        value={doctorName}
+                        onChange={(e) => setDoctorName(e.target.value)}
+                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
+                        placeholder="Dr. John Smith"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="specialty" className="block text-sm font-medium text-aneya-navy mb-2">
+                        Specialty
+                      </label>
+                      <input
+                        id="specialty"
+                        type="text"
+                        value={specialty}
+                        onChange={(e) => setSpecialty(e.target.value)}
+                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
+                        placeholder="General Practice"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="clinicName" className="block text-sm font-medium text-aneya-navy mb-2">
+                        Clinic/Hospital Name
+                      </label>
+                      <input
+                        id="clinicName"
+                        type="text"
+                        value={clinicName}
+                        onChange={(e) => setClinicName(e.target.value)}
+                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
+                        placeholder="City Medical Center"
+                        disabled={loading}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Patient-specific Sign Up Fields */}
+                {isSignUp && loginMode === 'patient' && (
+                  <>
+                    <div className="border-t border-gray-200 pt-4">
+                      <p className="text-sm text-aneya-navy/70 mb-4">Patient Information</p>
+                    </div>
+                    <div>
+                      <label htmlFor="patientName" className="block text-sm font-medium text-aneya-navy mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="patientName"
+                        type="text"
+                        value={patientName}
+                        onChange={(e) => setPatientName(e.target.value)}
+                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
+                        placeholder="John Smith"
+                        disabled={loading}
+                      />
+                    </div>
+                  </>
+                )}
+
                 {/* Show Password Checkbox */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -410,10 +584,12 @@ export function LoginScreen() {
             </>
           )}
 
-          {/* Clinical Disclaimer */}
+          {/* Disclaimer */}
           <div className="mt-6 pt-6 border-t border-aneya-navy/10">
             <p className="text-xs text-aneya-navy/60 text-center">
-              For healthcare professionals only. This system provides clinical decision support and does not replace professional medical judgment.
+              {loginMode === 'doctor'
+                ? 'For healthcare professionals only. This system provides clinical decision support and does not replace professional medical judgment.'
+                : 'Manage your health appointments and connect with your doctors. Always consult your healthcare provider for medical advice.'}
             </p>
           </div>
         </div>

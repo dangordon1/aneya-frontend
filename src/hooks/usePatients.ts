@@ -19,7 +19,7 @@ interface UsePatientsReturn {
 }
 
 export function usePatients(): UsePatientsReturn {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, doctorProfile } = useAuth();
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +119,24 @@ export function usePatients(): UsePatientsReturn {
         if (createError) throw createError;
         if (!data) throw new Error('No data returned from create');
 
+        // Create patient_doctor relationship if doctor profile exists
+        if (doctorProfile?.id) {
+          const { error: relationshipError } = await supabase
+            .from('patient_doctor')
+            .insert({
+              patient_id: data.id,
+              doctor_id: doctorProfile.id,
+              initiated_by: 'doctor',
+              status: 'active'
+            });
+
+          if (relationshipError) {
+            console.warn('⚠️ Could not create patient-doctor relationship:', relationshipError.message);
+          } else {
+            console.log('✅ Patient-doctor relationship created');
+          }
+        }
+
         // Add to local state (cast to PatientWithAppointments for local state)
         setPatients((prev) => [{ ...data, last_visit: null, next_appointment: null } as PatientWithAppointments, ...prev]);
 
@@ -129,7 +147,7 @@ export function usePatients(): UsePatientsReturn {
         return null;
       }
     },
-    [user]
+    [user, doctorProfile]
   );
 
   const updatePatient = useCallback(
