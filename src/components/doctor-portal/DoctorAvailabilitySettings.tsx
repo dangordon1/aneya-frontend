@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useDoctorAvailability } from '../../hooks/useDoctorAvailability';
 import { useBlockedSlots } from '../../hooks/useBlockedSlots';
 import type { DoctorAvailability, CreateAvailabilityInput, CreateBlockedSlotInput } from '../../types/database';
@@ -37,11 +38,25 @@ interface Props {
 type TabType = 'weekly' | 'blocked';
 
 export function DoctorAvailabilitySettings({ onClose }: Props) {
+  const { doctorProfile } = useAuth();
   const { availability, loading, error, createAvailability, deleteAvailability } = useDoctorAvailability();
   const { blockedSlots, loading: loadingBlocked, error: errorBlocked, createBlockedSlot, deleteBlockedSlot } = useBlockedSlots();
 
   const [activeTab, setActiveTab] = useState<TabType>('weekly');
   const [isAddingBlocked, setIsAddingBlocked] = useState(false);
+
+  // If doctor profile isn't loaded yet, show loading state
+  if (!doctorProfile) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Multi-day selection state
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Default to weekdays
