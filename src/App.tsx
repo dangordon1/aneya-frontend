@@ -2,11 +2,14 @@ import { useState, lazy, Suspense } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { TabNavigation } from './components/TabNavigation';
+import { TabNavigation, DoctorTab } from './components/TabNavigation';
 import { LocationSelector } from './components/LocationSelector';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
+import { useMessages } from './hooks/useMessages';
+import { usePatientDoctors } from './hooks/usePatientDoctors';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PatientDashboard } from './components/patient-portal/PatientDashboard';
 
 // Helper function for timestamped logging
 const timestamp = () => new Date().toISOString();
@@ -20,12 +23,16 @@ const InvalidInputScreen = lazy(() => import('./components/InvalidInputScreen').
 const AppointmentsTab = lazy(() => import('./components/AppointmentsTab').then(m => ({ default: m.AppointmentsTab })));
 const PatientsTab = lazy(() => import('./components/PatientsTab').then(m => ({ default: m.PatientsTab })));
 const PatientDetailView = lazy(() => import('./components/PatientDetailView').then(m => ({ default: m.PatientDetailView })));
+// InvitePatientsTab removed - feature disabled for now
+const DoctorMessages = lazy(() => import('./components/doctor-portal/DoctorMessages').then(m => ({ default: m.DoctorMessages })));
+const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorProfileTab').then(m => ({ default: m.DoctorProfileTab })));
+const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -57,7 +64,7 @@ interface StreamEvent {
 }
 
 function MainApp() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isPatient, userRole, doctorProfile, isAdmin } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [currentPatientDetails, setCurrentPatientDetails] = useState<PatientDetails | null>(null);
@@ -77,11 +84,17 @@ function MainApp() {
   const [locationOverride, setLocationOverride] = useState<string | null>(null);
 
   // Appointment system state
-  const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments');
+  const [activeTab, setActiveTab] = useState<DoctorTab>('appointments');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithPatient | null>(null);
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0); // Used to force refresh appointments
   const { saveConsultation } = useConsultations();
+
+  // Messaging state - for unread counts and pending care requests
+  const { unreadCount } = useMessages();
+  const { myPatients } = usePatientDoctors();
+  // Compute pending requests count from patients with pending status initiated by patient
+  const pendingRequestsCount = myPatients.filter(rel => rel.status === 'pending' && rel.initiated_by === 'patient').length;
 
   // Show loading state while checking auth
   if (loading) {
@@ -98,6 +111,11 @@ function MainApp() {
   // Show login screen if not authenticated
   if (!user) {
     return <LoginScreen />;
+  }
+
+  // Show patient portal for patient role
+  if (isPatient && userRole === 'patient') {
+    return <PatientDashboard />;
   }
 
   const handleAnalyze = async (
@@ -1073,21 +1091,32 @@ function MainApp() {
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
-          <LocationSelector
-            selectedLocation={locationOverride}
-            onLocationChange={setLocationOverride}
-          />
+          <div className="flex items-center gap-4">
+            <LocationSelector
+              selectedLocation={locationOverride}
+              onLocationChange={setLocationOverride}
+            />
+            <div className="text-right">
+              {doctorProfile?.name && (
+                <span className="text-aneya-cream text-sm sm:text-base font-medium block">{doctorProfile.name}</span>
+              )}
+              <span className="text-aneya-cream/70 text-xs sm:text-sm font-light tracking-wide">Doctor Portal</span>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Tab Navigation - only show on appointments/patients screens */}
-      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail') && (
+      {/* Tab Navigation - only show on appointments/patients/messages/profile/alldoctors screens */}
+      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail' || currentScreen === 'messages' || currentScreen === 'profile' || currentScreen === 'alldoctors') && (
         <TabNavigation
           activeTab={activeTab}
           onTabChange={(tab) => {
             setActiveTab(tab);
             setCurrentScreen(tab);
           }}
+          unreadMessagesCount={unreadCount}
+          pendingRequestsCount={pendingRequestsCount}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -1122,6 +1151,7 @@ function MainApp() {
                 const tempAppointment: AppointmentWithPatient = {
                   id: '',
                   patient_id: patient.id,
+                  doctor_id: null,
                   scheduled_time: new Date().toISOString(),
                   duration_minutes: 30,
                   status: 'scheduled',
@@ -1131,6 +1161,7 @@ function MainApp() {
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                   created_by: user!.id,
+                  booked_by: 'doctor',
                   consultation_id: null,
                   cancelled_at: null,
                   cancellation_reason: null,
@@ -1140,6 +1171,18 @@ function MainApp() {
               }}
               onAnalyzeConsultation={handleAnalyzeConsultationFromPatientView}
             />
+          )}
+
+          {currentScreen === 'messages' && (
+            <DoctorMessages />
+          )}
+
+          {currentScreen === 'profile' && (
+            <DoctorProfileTab />
+          )}
+
+          {currentScreen === 'alldoctors' && isAdmin && (
+            <AllDoctorsTab />
           )}
 
           {currentScreen === 'input' && (

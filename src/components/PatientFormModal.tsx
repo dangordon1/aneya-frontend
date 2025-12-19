@@ -74,6 +74,12 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
       newErrors.date_of_birth = 'Date of birth is required';
     }
 
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -152,23 +158,42 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
             </div>
           </div>
 
-          {/* Date of Birth */}
-          <div>
-            <label htmlFor="date_of_birth" className="block mb-1 text-[12px] text-gray-600">
-              Date of Birth <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="date_of_birth"
-              type="date"
-              value={formData.date_of_birth}
-              onChange={(e) => updateField('date_of_birth', e.target.value)}
-              className={`w-full p-2 bg-gray-50 border ${
-                errors.date_of_birth ? 'border-red-500' : 'border-gray-200'
-              } rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy`}
-            />
-            {errors.date_of_birth && (
-              <p className="text-red-500 text-[12px] mt-1">{errors.date_of_birth}</p>
-            )}
+          {/* Date of Birth and Email */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label htmlFor="date_of_birth" className="block mb-1 text-[12px] text-gray-600">
+                Date of Birth <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="date_of_birth"
+                type="date"
+                value={formData.date_of_birth}
+                onChange={(e) => updateField('date_of_birth', e.target.value)}
+                className={`w-full p-2 bg-gray-50 border ${
+                  errors.date_of_birth ? 'border-red-500' : 'border-gray-200'
+                } rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy`}
+              />
+              {errors.date_of_birth && (
+                <p className="text-red-500 text-[12px] mt-1">{errors.date_of_birth}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block mb-1 text-[12px] text-gray-600">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => updateField('email', e.target.value)}
+                className={`w-full p-2 bg-gray-50 border ${
+                  errors.email ? 'border-red-500' : 'border-gray-200'
+                } rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy`}
+                placeholder="patient@example.com"
+              />
+              {errors.email && <p className="text-red-500 text-[12px] mt-1">{errors.email}</p>}
+            </div>
           </div>
 
           {/* Height and Weight */}
