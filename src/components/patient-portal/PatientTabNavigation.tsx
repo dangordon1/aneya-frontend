@@ -9,12 +9,12 @@ interface PatientTabNavigationProps {
 export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0 }: PatientTabNavigationProps) {
   return (
     <div className="w-full bg-white border-b border-gray-200">
-      <div className="max-w-4xl mx-auto px-6">
-        <div className="flex gap-2">
+      <div className="max-w-4xl mx-auto px-2 sm:px-6">
+        <div className="flex gap-0.5 sm:gap-2">
           <button
             onClick={() => onTabChange('appointments')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] transition-colors
               ${activeTab === 'appointments'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -26,7 +26,7 @@ export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCou
           <button
             onClick={() => onTabChange('symptoms')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] transition-colors
               ${activeTab === 'symptoms'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -38,7 +38,7 @@ export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCou
           <button
             onClick={() => onTabChange('messages')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors relative
+              flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] transition-colors relative
               ${activeTab === 'messages'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -55,7 +55,7 @@ export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCou
           <button
             onClick={() => onTabChange('doctors')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] transition-colors
               ${activeTab === 'doctors'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -67,7 +67,7 @@ export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCou
           <button
             onClick={() => onTabChange('profile')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] transition-colors
               ${activeTab === 'profile'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
