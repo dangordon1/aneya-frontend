@@ -19,11 +19,9 @@ interface AppointmentWithDoctor extends Appointment {
 export function PatientDashboard() {
   const { patientProfile, signOut, refreshProfiles } = useAuth();
   const [screen, setScreen] = useState<PatientScreen>('tabs');
-  const [activeTab, setActiveTab] = useState<PatientTab>('appointments');
   const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentWithDoctor[]>([]);
   const [loading, setLoading] = useState(true);
   const { unreadCount } = useMessages();
-  const [hasSetInitialTab, setHasSetInitialTab] = useState(false);
 
   // Check if profile has mandatory fields completed
   const isMandatoryFieldsComplete = patientProfile &&
@@ -33,15 +31,18 @@ export function PatientDashboard() {
     patientProfile.date_of_birth !== '2000-01-01' &&
     patientProfile.sex;
 
-  // Redirect to profile tab on first load if profile is incomplete
+  // Set initial tab based on profile completion status
+  // If profile is incomplete, force to 'profile' tab, otherwise default to 'appointments'
+  const [activeTab, setActiveTab] = useState<PatientTab>(
+    !isMandatoryFieldsComplete ? 'profile' : 'appointments'
+  );
+
+  // Update active tab when profile completion status changes
   useEffect(() => {
-    if (patientProfile && !hasSetInitialTab) {
-      if (!isMandatoryFieldsComplete) {
-        setActiveTab('profile');
-      }
-      setHasSetInitialTab(true);
+    if (!isMandatoryFieldsComplete) {
+      setActiveTab('profile');
     }
-  }, [patientProfile, hasSetInitialTab, isMandatoryFieldsComplete]);
+  }, [isMandatoryFieldsComplete]);
 
   useEffect(() => {
     if (patientProfile?.id) {
