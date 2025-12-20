@@ -45,14 +45,17 @@ export function PatientProfileForm({ onBack }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientProfile?.id) return;
+    if (!patientProfile?.id) {
+      setError('No patient profile found. Please try logging in again.');
+      return;
+    }
 
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      const { error: updateError } = await supabase
+      const { data, error: updateError } = await supabase
         .from('patients')
         .update({
           name: formData.name.trim(),
@@ -67,9 +70,18 @@ export function PatientProfileForm({ onBack }: Props) {
           consultation_language: formData.consultation_language,
           updated_at: new Date().toISOString()
         })
-        .eq('id', patientProfile.id);
+        .eq('id', patientProfile.id)
+        .select()
+        .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Supabase update error:', updateError);
+        throw new Error(`Failed to update profile: ${updateError.message} (Code: ${updateError.code})`);
+      }
+
+      if (!data) {
+        throw new Error('No data returned from update. Please check your permissions.');
+      }
 
       await refreshProfiles();
       setSuccessMessage('Profile updated successfully');

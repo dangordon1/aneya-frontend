@@ -23,6 +23,25 @@ export function PatientDashboard() {
   const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentWithDoctor[]>([]);
   const [loading, setLoading] = useState(true);
   const { unreadCount } = useMessages();
+  const [hasSetInitialTab, setHasSetInitialTab] = useState(false);
+
+  // Check if profile has mandatory fields completed
+  const isMandatoryFieldsComplete = patientProfile &&
+    patientProfile.name &&
+    patientProfile.name !== patientProfile.email?.split('@')[0] &&
+    patientProfile.date_of_birth &&
+    patientProfile.date_of_birth !== '2000-01-01' &&
+    patientProfile.sex;
+
+  // Redirect to profile tab on first load if profile is incomplete
+  useEffect(() => {
+    if (patientProfile && !hasSetInitialTab) {
+      if (!isMandatoryFieldsComplete) {
+        setActiveTab('profile');
+      }
+      setHasSetInitialTab(true);
+    }
+  }, [patientProfile, hasSetInitialTab, isMandatoryFieldsComplete]);
 
   useEffect(() => {
     if (patientProfile?.id) {
@@ -62,12 +81,18 @@ export function PatientDashboard() {
     await signOut();
   };
 
-  // Check if profile is incomplete
-  const isProfileIncomplete = patientProfile && (
-    !patientProfile.name ||
-    patientProfile.name === patientProfile.email?.split('@')[0] ||
-    patientProfile.date_of_birth === '2000-01-01'
-  );
+  // Check if profile is incomplete (for warning banner)
+  const isProfileIncomplete = !isMandatoryFieldsComplete;
+
+  // Handle tab changes with validation
+  const handleTabChange = (tab: PatientTab) => {
+    // Prevent navigation away from profile if mandatory fields are not complete
+    if (!isMandatoryFieldsComplete && activeTab === 'profile' && tab !== 'profile') {
+      alert('Please complete all mandatory fields (Name, Date of Birth, and Sex) before navigating to other sections.');
+      return;
+    }
+    setActiveTab(tab);
+  };
 
   // Handle booking flow
   if (screen === 'book') {
@@ -101,25 +126,22 @@ export function PatientDashboard() {
       {/* Tab Navigation */}
       <PatientTabNavigation
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         unreadMessagesCount={unreadCount}
       />
 
       {/* Main Content */}
       <main className="flex-1 bg-aneya-navy">
         {/* Profile incomplete warning */}
-        {isProfileIncomplete && activeTab !== 'profile' && (
+        {isProfileIncomplete && activeTab === 'profile' && (
           <div className="max-w-4xl mx-auto px-4 pt-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-yellow-800 text-sm">
-                Please complete your profile to help your doctors provide better care.
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-red-800 text-sm font-medium">
+                ⚠️ Required: Please complete all mandatory fields marked with <span className="text-red-500">*</span> before navigating to other sections.
               </p>
-              <button
-                onClick={() => setActiveTab('profile')}
-                className="mt-2 text-sm text-aneya-teal hover:text-aneya-teal/80 font-medium"
-              >
-                Complete Profile
-              </button>
+              <p className="text-red-700 text-xs mt-1">
+                You must fill in your Name, Date of Birth, and Sex to continue.
+              </p>
             </div>
           </div>
         )}
@@ -154,7 +176,12 @@ export function PatientDashboard() {
           <PatientProfileForm
             onBack={() => {
               refreshProfiles();
-              setActiveTab('appointments');
+              // Only allow going back if mandatory fields are complete
+              if (isMandatoryFieldsComplete) {
+                setActiveTab('appointments');
+              } else {
+                alert('Please complete all mandatory fields (Name, Date of Birth, and Sex) before leaving this page.');
+              }
             }}
           />
         )}
