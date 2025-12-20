@@ -84,16 +84,6 @@ export function PatientDashboard() {
   // Check if profile is incomplete (for warning banner)
   const isProfileIncomplete = !isMandatoryFieldsComplete;
 
-  // Handle tab changes with validation
-  const handleTabChange = (tab: PatientTab) => {
-    // Prevent navigation away from profile if mandatory fields are not complete
-    if (!isMandatoryFieldsComplete && activeTab === 'profile' && tab !== 'profile') {
-      alert('Please complete all mandatory fields (Name, Date of Birth, and Sex) before navigating to other sections.');
-      return;
-    }
-    setActiveTab(tab);
-  };
-
   // Handle booking flow
   if (screen === 'book') {
     return (
@@ -126,8 +116,9 @@ export function PatientDashboard() {
       {/* Tab Navigation */}
       <PatientTabNavigation
         activeTab={activeTab}
-        onTabChange={handleTabChange}
+        onTabChange={setActiveTab}
         unreadMessagesCount={unreadCount}
+        showOnlyProfile={isProfileIncomplete}
       />
 
       {/* Main Content */}
@@ -137,10 +128,10 @@ export function PatientDashboard() {
           <div className="max-w-4xl mx-auto px-4 pt-4">
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-800 text-sm font-medium">
-                ⚠️ Required: Please complete all mandatory fields marked with <span className="text-red-500">*</span> before navigating to other sections.
+                ⚠️ Welcome! Please complete your profile to get started.
               </p>
               <p className="text-red-700 text-xs mt-1">
-                You must fill in your Name, Date of Birth, and Sex to continue.
+                Fill in all mandatory fields marked with <span className="text-red-500">*</span> (Name, Date of Birth, and Sex) to access your appointments, messages, and other features.
               </p>
             </div>
           </div>
@@ -176,12 +167,11 @@ export function PatientDashboard() {
           <PatientProfileForm
             onBack={() => {
               refreshProfiles();
-              // Only allow going back if mandatory fields are complete
+              // Only navigate back if mandatory fields are complete
               if (isMandatoryFieldsComplete) {
                 setActiveTab('appointments');
-              } else {
-                alert('Please complete all mandatory fields (Name, Date of Birth, and Sex) before leaving this page.');
               }
+              // If profile incomplete, user stays on profile tab (no other tabs available anyway)
             }}
           />
         )}
