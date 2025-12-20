@@ -124,15 +124,15 @@ export function PatientDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 bg-aneya-navy">
-        {/* Profile incomplete warning */}
+        {/* Profile incomplete welcome */}
         {isProfileIncomplete && activeTab === 'profile' && (
           <div className="max-w-4xl mx-auto px-4 pt-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-800 text-sm font-medium">
-                ⚠️ Welcome! Please complete your profile to get started.
+            <div className="bg-aneya-cream border-2 border-aneya-teal rounded-lg p-4">
+              <p className="text-aneya-navy text-sm font-medium">
+                Welcome! Please complete your profile to get started.
               </p>
-              <p className="text-red-700 text-xs mt-1">
-                Fill in all mandatory fields marked with <span className="text-red-500">*</span> (Name, Date of Birth, and Sex) to access your appointments, messages, and other features.
+              <p className="text-aneya-navy/70 text-xs mt-1">
+                Fill in all mandatory fields marked with <span className="text-aneya-teal font-semibold">*</span> (Name, Date of Birth, and Sex) to access your appointments, messages, and other features.
               </p>
             </div>
           </div>
