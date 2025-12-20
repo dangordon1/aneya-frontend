@@ -4,9 +4,29 @@ interface PatientTabNavigationProps {
   activeTab: PatientTab;
   onTabChange: (tab: PatientTab) => void;
   unreadMessagesCount?: number;
+  showOnlyProfile?: boolean; // When true, only show My Details tab
 }
 
-export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0 }: PatientTabNavigationProps) {
+export function PatientTabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0, showOnlyProfile = false }: PatientTabNavigationProps) {
+  // If profile is incomplete, only show My Details tab
+  if (showOnlyProfile) {
+    return (
+      <div className="w-full bg-white border-b border-gray-200">
+        <div className="max-w-4xl mx-auto px-2 sm:px-6">
+          <div className="flex gap-0.5 sm:gap-2">
+            <button
+              onClick={() => onTabChange('profile')}
+              className="flex-1 px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-[15px] font-medium rounded-t-[10px] bg-aneya-navy text-white"
+            >
+              My Details
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full tab navigation when profile is complete
   return (
     <div className="w-full bg-white border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-2 sm:px-6">
