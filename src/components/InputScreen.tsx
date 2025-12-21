@@ -928,10 +928,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       });
 
       // Process diarization if we have audio chunks
-      // TODO: Re-enable after STTT streaming is working
-      // if (audioChunksRef.current.length > 0) {
-      //   await processDiarization();
-      // }
+      if (audioChunksRef.current.length > 0) {
+        await processDiarization();
+      }
 
       mediaRecorderRef.current = null;
     }
@@ -1018,9 +1017,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     } catch (error) {
       console.error('❌ Diarization error:', error);
+      alert('Speaker detection unavailable. Using standard transcript.');
       // Silently fail - continue with realtime transcript
     } finally {
       setIsDiarizing(false);
+      audioChunksRef.current = []; // Clear audio chunks to prevent memory leak
     }
   };
 
@@ -1133,6 +1134,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const handleSkipDiarization = () => {
     setShowSpeakerMapping(false);
     setDiarizationData(null);
+    setIsDiarizing(false);
     console.log('⏭️ Diarization skipped - using realtime transcript');
   };
 
@@ -1528,7 +1530,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               id="consultation"
               value={consultation}
               onChange={(e) => setConsultation(e.target.value)}
-              disabled={isRecording}
+              disabled={isRecording || isDiarizing}
               className={`w-full h-[150px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy ${isRecording ? 'bg-gray-50' : ''
                 }`}
             />
@@ -1539,10 +1541,10 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         <div className="mt-4">
           <button
             onClick={handleSummarize}
-            disabled={isRecording || isSummarizing || !consultation.trim()}
+            disabled={isRecording || isSummarizing || isDiarizing || !consultation.trim()}
             className={`
               w-full px-6 py-3 rounded-[10px] font-medium text-[14px] transition-colors flex items-center justify-center gap-2
-              ${isRecording || isSummarizing || !consultation.trim()
+              ${isRecording || isSummarizing || isDiarizing || !consultation.trim()
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-aneya-teal hover:bg-aneya-teal/90 text-white'
               }
@@ -1588,7 +1590,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           <PrimaryButton
             onClick={handleAnalyze}
             fullWidth
-            disabled={isRecording || isAnalyzing || !consultation.trim()}
+            disabled={isRecording || isAnalyzing || isDiarizing || !consultation.trim()}
           >
             {isAnalyzing ? (
               <span className="flex items-center justify-center gap-2">
