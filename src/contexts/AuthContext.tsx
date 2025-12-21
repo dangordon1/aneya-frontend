@@ -745,8 +745,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Send password reset email (Firebase will send via custom SMTP - Resend)
   const resetPassword = async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      // Configure action code settings to redirect back to our app after password reset
+      const actionCodeSettings = {
+        // URL to redirect to after password reset
+        url: window.location.origin, // Returns to the same origin (aneya.health or localhost)
+        handleCodeInApp: false, // Don't handle the action code in the app (use Firebase hosted page)
+      };
+
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
       console.log('✅ Password reset email sent to:', email);
+      console.log('📧 Redirect URL:', actionCodeSettings.url);
       return { error: null };
     } catch (err) {
       const firebaseError = err as FirebaseAuthError;
