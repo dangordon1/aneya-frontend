@@ -45,8 +45,18 @@ export function PatientProfileForm({ onBack }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Debug logging
+    console.log('📝 Save profile attempt:', {
+      hasPatientProfile: !!patientProfile,
+      patientId: patientProfile?.id,
+      patientEmail: patientProfile?.email,
+      patientName: patientProfile?.name
+    });
+
     if (!patientProfile?.id) {
-      setError('No patient profile found. Please try logging in again.');
+      console.error('❌ No patient profile ID found:', patientProfile);
+      setError('Unable to save: No patient profile loaded. Please try signing out and signing back in.');
       return;
     }
 
@@ -55,6 +65,8 @@ export function PatientProfileForm({ onBack }: Props) {
     setSuccessMessage(null);
 
     try {
+      console.log('🔄 Updating patient profile:', patientProfile.id);
+
       const { data, error: updateError } = await supabase
         .from('patients')
         .update({
@@ -75,18 +87,20 @@ export function PatientProfileForm({ onBack }: Props) {
         .single();
 
       if (updateError) {
-        console.error('Supabase update error:', updateError);
+        console.error('❌ Supabase update error:', updateError);
         throw new Error(`Failed to update profile: ${updateError.message} (Code: ${updateError.code})`);
       }
 
       if (!data) {
+        console.error('❌ No data returned from update');
         throw new Error('No data returned from update. Please check your permissions.');
       }
 
+      console.log('✅ Profile updated successfully:', data);
       await refreshProfiles();
       setSuccessMessage('Profile updated successfully');
     } catch (err) {
-      console.error('Error updating profile:', err);
+      console.error('❌ Error updating profile:', err);
       setError(err instanceof Error ? err.message : 'Failed to update profile');
     } finally {
       setSaving(false);
