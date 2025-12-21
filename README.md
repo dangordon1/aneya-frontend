@@ -1,203 +1,111 @@
-# aneya Frontend
+# Aneya Monorepo
 
-React + TypeScript frontend for clinical decision support with real-time voice transcription.
+React Native mobile app development workspace for Aneya clinical decision support system.
 
-## Overview
-
-This is the user-facing interface for aneya, providing:
-- **React + TypeScript UI** - Modern, responsive clinical interface
-- **Real-time Voice Transcription** - NVIDIA Parakeet TDT model for consultation dictation
-- **aneya Branding** - Custom color scheme and design system
-- **Clinical Workflow** - Intuitive interface for consultation analysis
-
-## Architecture
+## Structure
 
 ```
-┌─────────────────┐         ┌──────────────────┐
-│  React Frontend │ ───────▶│  FastAPI Backend │
-│  (Vercel)       │         │  (Cloud Run)     │
-└─────────────────┘         └──────────────────┘
+aneya-mobile/
+├── apps/
+│   ├── web/          # Existing React web app (Vite + TypeScript)
+│   └── mobile/       # React Native mobile app (to be created)
+├── packages/
+│   ├── shared-types/      # TypeScript types (database, drug info)
+│   ├── shared-api/        # API clients (Supabase, Firebase)
+│   ├── shared-business/   # Business logic and React hooks
+│   └── shared-utils/      # Utility functions
+├── package.json      # Root monorepo config
+├── pnpm-workspace.yaml
+└── turbo.json
 ```
 
-- **Frontend:** https://aneya.vercel.app
-- **Backend:** https://aneya-backend-217191264902.europe-west2.run.app
+## Technology Stack
 
-## Features
+- **Monorepo:** Turborepo with pnpm workspaces
+- **Web:** React 18 + TypeScript + Vite + Tailwind CSS
+- **Mobile:** React Native + Expo (to be created)
+- **Backend:** FastAPI on Google Cloud Run
+- **Database:** Supabase PostgreSQL
+- **Auth:** Firebase Authentication
 
-### Voice Transcription
-- Real-time speech-to-text using **NVIDIA Parakeet TDT 1.1B** model
-- Accumulative transcription pattern for high accuracy (5% WER)
-- Progressive updates every 2 seconds during recording
-- Medical terminology optimized
+## Code Reuse
 
-**Note on Cold Start Latency:** The first transcription request takes ~5 seconds due to model loading. Subsequent requests are 2-3 seconds. See [Performance](#performance) section for details.
+**Target: 60-70% code sharing between web and mobile**
 
-### User Interface
-- Clean, professional design with aneya branding
-- Responsive layout for desktop and mobile
-- Progress indicators for analysis steps
-- Expandable sections for detailed information
-- Clinical warnings and disclaimers
+### Shared Packages
 
-### Design System
+- **`@aneya/shared-types`** - All TypeScript interfaces and types
+- **`@aneya/shared-api`** - Platform-agnostic API clients
+- **`@aneya/shared-business`** - React hooks and contexts
+- **`@aneya/shared-utils`** - Date helpers, validation, etc.
 
-**Colors:**
-- **Primary:** `#0c3555` (aneya-navy)
-- **Accent:** `#1d9e99` (aneya-teal)
-- **Background:** `#f6f5ee` (aneya-cream)
-- **Hover:** Transitions between navy and cream
-
-**Typography:**
-- **Headings:** Georgia (serif)
-- **Body:** Inter (sans-serif)
-
-**Styling:** Tailwind CSS with custom configuration
-
-## Development Setup
+## Development
 
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
+- pnpm 9.0+
 
 ### Installation
 
 ```bash
-# Install dependencies
-npm install
+pnpm install
 ```
 
-### Environment Variables
-
-Create `.env.local` for local development:
+### Running the Web App
 
 ```bash
-VITE_API_URL=http://localhost:8000
-VITE_DEEPGRAM_API_KEY=<your-key>
+cd apps/web
+pnpm dev
 ```
 
-For production (configured in Vercel):
+### Running All Apps (when mobile is created)
 
 ```bash
-VITE_API_URL=https://aneya-backend-217191264902.europe-west2.run.app
-VITE_DEEPGRAM_API_KEY=<production-key>
+pnpm dev
 ```
 
-Note: Transcription uses the backend's Parakeet TDT model - no separate API keys required for voice input.
+## Next Steps
 
-### Running Locally
+1. **Phase 2:** Initialize Expo mobile app in `apps/mobile/`
+2. **Update imports:** Migrate web app to use shared packages
+3. **Add navigation:** Set up Expo Router
+4. **Implement features:** Port web components to React Native
 
-```bash
-npm run dev
+## Git Workflow
+
+This is a git worktree based on the `mobile-monorepo` branch.
+
+**Main repo:** `/Users/dgordon/aneya/aneya-frontend`
+**Worktree:** `/Users/dgordon/aneya-mobile`
+
+When ready, merge `mobile-monorepo` branch back to main.
+
+## Environment Variables
+
+### Web App (`apps/web/.env`)
+
+```
+VITE_API_URL=
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
 ```
 
-Frontend runs on: http://localhost:5173
+### Mobile App (to be created)
 
-### Build
+Environment variables will be managed via Expo EAS secrets.
 
-```bash
-# Development build
-npm run dev
+## Documentation
 
-# Production build
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## Deployment
-
-Deployed on **Vercel** (static React build)
-- **URL:** https://aneya.vercel.app
-- **Framework:** Vite + React + TypeScript
-
-### Deploy to Vercel
-
-```bash
-vercel --prod
-```
-
-The `vercel.json` configuration automatically:
-- Builds from the root directory
-- Outputs to `dist/`
-- Handles routing for SPA
-
-## Component Structure
-
-React components in `src/components/`:
-
-- **InputScreen.tsx** - Consultation input with voice recording
-- **ProgressScreen.tsx** - Animated progress indicators (6 steps)
-- **AnalysisComplete.tsx** - Completion status
-- **ReportScreen.tsx** - Main results display
-- **DiagnosisCard.tsx** - Individual diagnosis with confidence badge
-- **MedicationBox.tsx** - Prescribing guidance cards
-- **ExpandableSection.tsx** - Collapsible content sections
-- **WarningBox.tsx** - Clinical warnings and disclaimers
-- **PrimaryButton.tsx** - Branded button component
-- **ProgressStep.tsx** - Individual progress step indicator
-
-### Voice Input Architecture
-
-Voice transcription uses an **accumulative pattern** in `InputScreen.tsx`:
-- Records audio in 2-second chunks via MediaRecorder
-- Sends progressively longer audio blobs to `/api/transcribe`
-- Backend transcribes using Parakeet TDT and returns full text
-- UI updates with complete transcription (not incremental)
-
-## API Integration
-
-Frontend makes a single POST to `/api/analyze` with:
-
-```typescript
-{
-  consultation: string,
-  patient_id?: string,
-  patient_age?: string,
-  allergies?: string,
-  user_ip?: string,
-  location_override?: string
-}
-```
-
-Transcription endpoint: `POST /api/transcribe` (multipart form with audio file)
-
-## Performance
-
-### Cold Start Behavior
-
-The first transcription request is slower than subsequent ones:
-
-| Request | Latency | Reason |
-|---------|---------|--------|
-| First | ~5-6 seconds | Model loading into memory |
-| Subsequent | ~2-3 seconds | Model already loaded |
-
-**Why this happens:**
-- Parakeet TDT is a 600MB model that must be loaded into CPU/GPU memory
-- Cloud Run may scale to zero, requiring cold start on first request
-- NeMo framework has initialization overhead
-
-**Mitigation options:**
-1. Set Cloud Run `min-instances: 1` to keep backend warm
-2. Implement a warm-up request on page load
-3. Show user feedback during first transcription
-
-## Related Repositories
-
-- **Backend:** [aneya-backend](https://github.com/dangordon1/aneya-backend) - FastAPI + MCP servers deployed on Cloud Run
-
-## Safety and Clinical Disclaimers
-
-⚠️ **Critical:** This is a clinical decision support tool for healthcare professionals.
-
-- All recommendations require professional review before prescribing
-- Verify allergies, interactions, contraindications
-- Consider renal/hepatic function, pregnancy status
-- Follow local protocols and formularies
-- System provides reference information, not clinical judgment
+- [Implementation Plan](/Users/dgordon/.claude/plans/nifty-shimmying-acorn.md)
+- [Web App README](README-web.md)
 
 ## License
 
-Proprietary
+Private - Aneya Healthcare

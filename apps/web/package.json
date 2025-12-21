@@ -1,0 +1,37 @@
+{
+  "name": "aneya-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "vercel-build": "npm run build"
+  },
+  "dependencies": {
+    "@aneya/shared-types": "workspace:*",
+    "@aneya/shared-api": "workspace:*",
+    "@aneya/shared-business": "workspace:*",
+    "@aneya/shared-utils": "workspace:*",
+    "@microsoft/fetch-event-source": "^2.0.1",
+    "@supabase/supabase-js": "^2.86.2",
+    "@types/react-calendar": "^3.9.0",
+    "firebase": "^12.6.0",
+    "lucide-react": "^0.263.1",
+    "posthog-js": "^1.305.0",
+    "react": "^18.2.0",
+    "react-calendar": "^6.0.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8"
+  }
+}
