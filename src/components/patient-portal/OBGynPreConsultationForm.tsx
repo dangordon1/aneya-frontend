@@ -108,11 +108,17 @@ export function OBGynPreConsultationForm({
           type="number"
           min="15"
           max="90"
-          value={formData.last_menstrual_period ? calculateGestationalAge(formData.last_menstrual_period) || '' : ''}
-          disabled
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-          placeholder="Auto-calculated from LMP"
+          value={formData.cycle_length_days || ''}
+          onChange={(e) => setFormData(prev => ({
+            ...prev,
+            cycle_length_days: e.target.value ? parseInt(e.target.value) : undefined,
+          }))}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          placeholder="e.g., 28"
         />
+        <p className="mt-1 text-xs text-gray-500">
+          Typical cycle length is 21-35 days
+        </p>
       </div>
 
       <div>
@@ -250,7 +256,7 @@ export function OBGynPreConsultationForm({
               ...prev,
               number_of_pregnancies: e.target.value ? parseInt(e.target.value) : undefined,
             }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Total number of pregnancies"
           />
         </div>
@@ -267,7 +273,7 @@ export function OBGynPreConsultationForm({
               ...prev,
               number_of_children: e.target.value ? parseInt(e.target.value) : undefined,
             }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Number of living children"
           />
         </div>
@@ -284,7 +290,7 @@ export function OBGynPreConsultationForm({
               ...prev,
               number_of_miscarriages: e.target.value ? parseInt(e.target.value) : undefined,
             }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Include miscarriages and abortions"
           />
         </div>
@@ -439,22 +445,6 @@ export function OBGynPreConsultationForm({
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Sexual Partners (past 12 months)
-        </label>
-        <input
-          type="number"
-          min="0"
-          value={formData.num_sexual_partners || ''}
-          onChange={(e) => setFormData(prev => ({
-            ...prev,
-            num_sexual_partners: e.target.value ? parseInt(e.target.value) : undefined,
-          }))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-          placeholder="Number of partners"
-        />
-      </div>
     </div>
   );
 
@@ -632,6 +622,7 @@ export function OBGynPreConsultationForm({
   );
 
   // Wizard step definitions
+  // Only show Contraception & Family Planning step if NOT already pregnant
   const wizardSteps: WizardStep[] = [
     {
       title: 'Menstrual History',
@@ -643,11 +634,12 @@ export function OBGynPreConsultationForm({
       content: <Step2 />,
       validate: validateStep2,
     },
-    {
+    // Skip contraception/family planning if already pregnant
+    ...(formData.pregnancy_status !== 'pregnant' ? [{
       title: 'Contraception & Family Planning',
       content: <Step3 />,
       validate: validateStep3,
-    },
+    }] : []),
     {
       title: 'Gynecological History',
       content: <Step4 />,
