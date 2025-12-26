@@ -9,8 +9,10 @@ import { CompactCalendar } from './CompactCalendar';
 import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
+import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { isOBGynAppointment } from '../utils/specialtyDetector';
 
 interface AppointmentsTabProps {
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
@@ -18,7 +20,7 @@ interface AppointmentsTabProps {
 }
 
 export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: AppointmentsTabProps) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, doctorProfile } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, createAppointment, cancelAppointment } =
     useAppointments(selectedDate.toISOString().split('T')[0]);
@@ -30,6 +32,11 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
+
+  // OB/GYN Pre-consultation Form Modal state
+  const [showOBGynFormModal, setShowOBGynFormModal] = useState(false);
+  const [selectedAppointmentForForm, setSelectedAppointmentForForm] = useState<AppointmentWithPatient | null>(null);
+  const [appointmentOBGynFormStatus, setAppointmentOBGynFormStatus] = useState<Record<string, 'draft' | 'partial' | 'completed' | null>>({});
 
   // State for past appointments
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
@@ -50,7 +57,13 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   }, [pastAppointments, pastAppointmentsSearch]);
 
   const handleCreateAppointment = async (appointmentData: any) => {
-    await createAppointment(appointmentData);
+    // Auto-assign the logged-in doctor to the appointment
+    const appointmentWithDoctor = {
+      ...appointmentData,
+      doctor_id: doctorProfile?.id || null,
+    };
+
+    await createAppointment(appointmentWithDoctor);
     setIsFormModalOpen(false);
     setEditingAppointment(null);
     setPreFilledDate(null);
@@ -80,6 +93,24 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
       // Reopen the appointment form after patient is created
       setIsFormModalOpen(true);
     }
+  };
+
+  const handleFillPreConsultationForm = (appointment: AppointmentWithPatient) => {
+    setSelectedAppointmentForForm(appointment);
+    setShowOBGynFormModal(true);
+  };
+
+  const handleCloseOBGynFormModal = () => {
+    setShowOBGynFormModal(false);
+    setSelectedAppointmentForForm(null);
+  };
+
+  const handleOBGynFormComplete = () => {
+    // Refresh form status for this appointment
+    if (selectedAppointmentForForm) {
+      // Could refetch the status here if needed
+    }
+    handleCloseOBGynFormModal();
   };
 
   // Fetch past appointments (completed or cancelled) - NON-BLOCKING
@@ -164,6 +195,54 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
       return () => clearTimeout(timer);
     }
   }, [user, loading, isAdmin]); // Also depend on loading state and admin status
+
+  // Fetch OB/GYN form statuses for doctor portal
+  useEffect(() => {
+    const fetchOBGynFormStatuses = async () => {
+      if (!doctorProfile || !isOBGynAppointment(doctorProfile.specialty)) {
+        return;
+      }
+
+      try {
+        // Fetch all appointments for this doctor
+        const { data: allAppointments, error: appointmentsError } = await supabase
+          .from('appointments')
+          .select('id, patient_id')
+          .eq('doctor_id', doctorProfile.id)
+          .in('status', ['scheduled', 'in_progress']);
+
+        if (appointmentsError) throw appointmentsError;
+
+        // For each appointment, fetch the form status
+        const formStatuses: Record<string, 'draft' | 'partial' | 'completed' | null> = {};
+
+        for (const apt of allAppointments || []) {
+          try {
+            const { data: formData, error: formError } = await supabase
+              .from('ob_gyn_consultation_forms')
+              .select('status')
+              .eq('appointment_id', apt.id)
+              .eq('form_type', 'pre_consultation')
+              .single();
+
+            if (!formError && formData) {
+              formStatuses[apt.id] = formData.status;
+            }
+          } catch (err) {
+            // Form doesn't exist yet, that's ok
+          }
+        }
+
+        setAppointmentOBGynFormStatus(formStatuses);
+      } catch (err) {
+        console.error('Error fetching OB/GYN form statuses:', err);
+      }
+    };
+
+    if (!loading && user && doctorProfile) {
+      fetchOBGynFormStatuses();
+    }
+  }, [user, loading, doctorProfile]);
 
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
@@ -291,6 +370,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       onStartConsultation={onStartConsultation}
                       onModify={handleModifyAppointment}
                       onCancel={handleCancelAppointment}
+                      onFillPreConsultationForm={handleFillPreConsultationForm}
+                      obgynFormStatus={appointmentOBGynFormStatus[appointment.id] || null}
+                      doctorSpecialty={(appointment as any).doctor?.specialty}
                     />
                   ))}
               </div>
@@ -347,6 +429,48 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           <DoctorAvailabilitySettings
             onClose={() => setIsAvailabilityModalOpen(false)}
           />
+        )}
+
+        {/* OB/GYN Pre-Consultation Form Modal */}
+        {showOBGynFormModal && selectedAppointmentForForm && user?.id && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+              {/* Background overlay */}
+              <div
+                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                onClick={handleCloseOBGynFormModal}
+              />
+
+              {/* Modal dialog */}
+              <div className="relative inline-block align-bottom bg-white rounded-[20px] text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:w-full sm:max-w-4xl">
+                {/* Header */}
+                <div className="bg-purple-600 px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-[18px] font-semibold text-white">
+                    Fill Pre-Consultation Form
+                  </h3>
+                  <button
+                    onClick={handleCloseOBGynFormModal}
+                    className="text-white hover:text-purple-100 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Form Content */}
+                <div className="px-6 py-8">
+                  <OBGynPreConsultationForm
+                    patientId={selectedAppointmentForForm.patient_id}
+                    appointmentId={selectedAppointmentForForm.id}
+                    filledBy="doctor"
+                    doctorUserId={user.id}
+                    onComplete={handleOBGynFormComplete}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Past Appointments Section */}
