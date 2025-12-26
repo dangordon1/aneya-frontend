@@ -40,7 +40,9 @@ export function AppointmentCard({
   };
 
   // Only show form button for OB/GYN appointments
-  const canShowFormButton = onFillPreConsultationForm !== undefined && isOBGynAppointment(doctorSpecialty);
+  const isOBGyn = isOBGynAppointment(doctorSpecialty);
+  console.log('AppointmentCard - Doctor Specialty:', doctorSpecialty, 'isOBGyn:', isOBGyn, 'Appointment:', appointment.id);
+  const canShowFormButton = onFillPreConsultationForm !== undefined && isOBGyn;
 
   return (
     <div className="bg-white rounded-[16px] p-6 border-2 border-aneya-soft-pink hover:shadow-md transition-shadow">
