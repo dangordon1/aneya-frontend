@@ -181,8 +181,13 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ready' | 'error'>('checking');
   const [isSummarizing, setIsSummarizing] = useState(false);
 
+  // Background save tracking
+  const [isSavingInBackground, setIsSavingInBackground] = useState(false);
+  const saveLockRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Real-time transcription state
-  const [interimTranscript, setInterimTranscript] = useState('');
+  const [_interimTranscript, setInterimTranscript] = useState('');
   const [isConnectingToTranscription, setIsConnectingToTranscription] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string>(''); // For detailed progress feedback
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
@@ -295,6 +300,10 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       cleanupAudio();
       if (timerRef.current) {
         clearInterval(timerRef.current);
+      }
+      // Abort any in-flight background save requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
@@ -692,6 +701,90 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       alert('Failed to summarize consultation. Please try again.');
     } finally {
       setIsSummarizing(false);
+    }
+  };
+
+  // Background save function for fire-and-forget operation
+  const performBackgroundSave = async (): Promise<void> => {
+    setIsSavingInBackground(true);
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // Step 1: Summarize if not already done
+      let summaryData = consultationSummary;
+      if (!summaryData) {
+        const requestBody: { text: string; original_text?: string } = {
+          text: consultation
+        };
+
+        if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
+          requestBody.original_text = originalTranscript;
+        }
+
+        const response = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!response.ok) throw new Error('Summarization failed');
+
+        const data = await response.json();
+        if (data.success) {
+          summaryData = data;
+          setConsultationSummary(data);
+          console.log('✅ Background summarization completed');
+        }
+      }
+
+      // Step 2: Save consultation
+      if (onSaveConsultation && summaryData) {
+        await onSaveConsultation(consultation, summaryData, patientDetails);
+        console.log('✅ Background save completed');
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Background save aborted');
+        return;
+      }
+      console.error('Background save failed:', error);
+    } finally {
+      setIsSavingInBackground(false);
+    }
+  };
+
+  // Handle save and close with fire-and-forget pattern
+  const handleSaveAndClose = () => {
+    // Validation
+    if (!consultation.trim()) {
+      alert('Cannot save empty consultation');
+      return;
+    }
+
+    if (isRecording) {
+      alert('Please stop recording before saving');
+      return;
+    }
+
+    // Prevent duplicate saves
+    if (saveLockRef.current) {
+      console.log('Save already in progress');
+      return;
+    }
+
+    saveLockRef.current = true;
+
+    // Fire-and-forget: Start background save
+    performBackgroundSave()
+      .catch(err => console.error('Background save error:', err))
+      .finally(() => {
+        saveLockRef.current = false;
+      });
+
+    // Immediate navigation (don't await)
+    if (onCloseConsultation) {
+      onCloseConsultation();
     }
   };
 
@@ -1259,7 +1352,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     // Use chunked diarization results if available (read from ref to get latest value)
     const latestSegments = diarizedSegmentsRef.current;
-    const latestRoles = speakerRolesRef.current;
 
     if (latestSegments.length > 0) {
       console.log('✅ Using chunked diarization results');
@@ -2044,6 +2136,34 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             )}
           </PrimaryButton>
         </div>
+
+        {/* Save & Close button - fire-and-forget for quick workflow */}
+        {!isRecording && consultation.trim() && onCloseConsultation && (
+          <div className="mt-3">
+            <button
+              onClick={handleSaveAndClose}
+              disabled={isSavingInBackground}
+              className="w-full px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[15px] hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingInBackground ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save & Close
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Close Consultation button - shown after summarization */}
         {consultationSummary && onCloseConsultation && (
