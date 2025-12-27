@@ -85,6 +85,12 @@ export interface Appointment {
 
 export interface AppointmentWithPatient extends Appointment {
   patient: Patient;
+  doctor?: Doctor | null;  // Optional because doctor_id can be null
+}
+
+export interface AppointmentWithPatientAndDoctor extends Appointment {
+  patient: Patient;
+  doctor?: Doctor;  // Optional because doctor_id can be null
 }
 
 export interface PatientWithAppointments extends Patient {
@@ -512,4 +518,384 @@ export interface UpdateSymptomInput {
   body_location?: string | null;
   status?: SymptomStatus;
   notes?: string | null;
+}
+
+// ============================================
+// OB/GYN Consultation Form Types
+// ============================================
+
+/** Type of consultation form - either before or during the appointment */
+export type FormType = 'pre_consultation' | 'during_consultation';
+
+/** Current status of the consultation form */
+export type FormStatus = 'draft' | 'partial' | 'completed';
+
+/** Menstrual cycle regularity status */
+export type CycleRegularity = 'regular' | 'irregular' | 'absent' | 'unknown';
+
+/** Current pregnancy status */
+export type PregnancyStatus = 'not_pregnant' | 'pregnant' | 'postpartum' | 'unknown';
+
+/** Contraception method status */
+export type ContraceptionStatus = 'none' | 'hormonal' | 'barrier' | 'iud' | 'permanent' | 'other' | 'unknown';
+
+/** Menopausal status */
+export type MenopauseStatus = 'pre_menopausal' | 'perimenopausal' | 'post_menopausal' | 'unknown';
+
+/** Parity history - whether patient has given birth */
+export type ParityHistory = 'nulliparous' | 'multiparous' | 'unknown';
+
+/** Sexual activity status */
+export type SexualActivityStatus = 'active' | 'inactive' | 'unknown';
+
+/** STI (Sexually Transmitted Infection) screening result */
+export type STIScreeningResult = 'positive' | 'negative' | 'not_tested' | 'unknown';
+
+/**
+ * Vital Signs - stores patient's vital measurements
+ * Stored as JSONB in database
+ */
+export interface VitalSigns {
+  /** Systolic blood pressure (mmHg) */
+  systolic_bp?: number | null;
+  /** Diastolic blood pressure (mmHg) */
+  diastolic_bp?: number | null;
+  /** Heart rate (beats per minute) */
+  heart_rate?: number | null;
+  /** Respiratory rate (breaths per minute) */
+  respiratory_rate?: number | null;
+  /** Body temperature (°C) */
+  temperature?: number | null;
+  /** Oxygen saturation (%) */
+  spo2?: number | null;
+  /** Blood glucose level (mg/dL) */
+  blood_glucose?: number | null;
+}
+
+/**
+ * Physical Examination Findings - documents clinical examination results
+ * Stored as JSONB in database
+ */
+export interface PhysicalExamFindings {
+  /** General inspection and appearance */
+  general_inspection?: string | null;
+  /** Abdominal examination findings */
+  abdominal_exam?: string | null;
+  /** Speculum examination findings */
+  speculum_exam?: string | null;
+  /** Digital/Bimanual examination findings */
+  digital_exam?: string | null;
+  /** Breast examination findings */
+  breast?: string | null;
+  /** Any other relevant physical findings */
+  other_findings?: string | null;
+}
+
+/**
+ * Ultrasound Findings - documents ultrasound imaging results
+ * Stored as JSONB in database
+ */
+export interface UltrasoundFindings {
+  /** Type of ultrasound performed (e.g., 'pelvic', 'transvaginal', 'obstetric') */
+  ultrasound_type?: string | null;
+  /** Fetal biometry measurements (Crown-Rump Length, Biparietal Diameter, etc.) */
+  fetal_biometry?: string | null;
+  /** Fetal well-being (Heart rate, movements, etc.) */
+  fetal_wellbeing?: string | null;
+  /** Placental findings and position */
+  placental_findings?: string | null;
+  /** Amniotic fluid volume assessment */
+  amniotic_fluid?: string | null;
+  /** Any anomalies or areas of concern */
+  anomalies_concerns?: string | null;
+  /** Gestational age if pregnant (weeks) */
+  gestational_age_weeks?: number | null;
+}
+
+/**
+ * Laboratory Results - documents lab test findings
+ * Stored as JSONB in database
+ */
+export interface LabResults {
+  /** Full Blood Count findings (hemoglobin, hematocrit, WBC, platelets) */
+  fbc?: string | null;
+  /** Coagulation profile (PT/INR, APTT) */
+  coagulation?: string | null;
+  /** Blood glucose and HbA1c results */
+  glucose?: string | null;
+  /** Serology and STI test results */
+  serology?: string | null;
+  /** Pregnancy-related tests (hCG, AFP, etc.) */
+  pregnancy_tests?: string | null;
+  /** Other relevant lab tests */
+  other_tests?: string | null;
+}
+
+/**
+ * Main OB/GYN Consultation Form Interface
+ * Represents a complete consultation form record in the database
+ */
+export interface OBGynConsultationForm {
+  /** Unique identifier for the form */
+  id: string;
+  /** Foreign key reference to patient */
+  patient_id: string;
+  /** Optional reference to appointment if form was created during an appointment */
+  appointment_id: string | null;
+  /** Type of consultation form - pre or during consultation */
+  form_type: FormType;
+  /** Current status of the form */
+  status: FormStatus;
+  /** Timestamp when form was created */
+  created_at: string;
+  /** Timestamp when form was last updated */
+  updated_at: string;
+  /** User who created the form */
+  created_by: string;
+  /** User who last updated the form */
+  updated_by: string;
+  /** User who filled the form (doctor_id if filled by doctor on behalf of patient, null if filled by patient) */
+  filled_by?: string | null;
+
+  // ---- Demographics & Medical History ----
+  /** Patient's age at time of form creation */
+  age_at_form?: number | null;
+  /** Menstrual cycle regularity status */
+  cycle_regularity: CycleRegularity;
+  /** Date of last menstrual period (YYYY-MM-DD) */
+  last_menstrual_period?: string | null;
+  /** Current pregnancy status */
+  pregnancy_status: PregnancyStatus;
+  /** Estimated date of delivery if pregnant (YYYY-MM-DD) */
+  estimated_delivery_date?: string | null;
+  /** Menopausal status */
+  menopause_status: MenopauseStatus;
+  /** Parity history (whether patient has given birth) */
+  parity_history: ParityHistory;
+  /** Number of living children */
+  number_of_children?: number | null;
+  /** Number of pregnancies */
+  number_of_pregnancies?: number | null;
+  /** Number of miscarriages or abortions */
+  number_of_miscarriages?: number | null;
+
+  // ---- Contraception & Sexuality ----
+  /** Current contraception method being used */
+  contraception_status: ContraceptionStatus;
+  /** Detailed description of contraception method if applicable */
+  contraception_method_details?: string | null;
+  /** Patient's sexual activity status */
+  sexual_activity_status: SexualActivityStatus;
+  /** Number of sexual partners in past year */
+  num_sexual_partners?: number | null;
+  /** Satisfaction with sexual health (1-10 scale) */
+  sexual_satisfaction?: number | null;
+
+  // ---- STI & Screening ----
+  /** Result of most recent STI screening */
+  sti_screening_result: STIScreeningResult;
+  /** Date of last STI screening (YYYY-MM-DD) */
+  last_sti_screening_date?: string | null;
+  /** Date of last pap smear (YYYY-MM-DD) */
+  last_pap_smear_date?: string | null;
+  /** Date of last mammography (YYYY-MM-DD) */
+  last_mammography_date?: string | null;
+
+  // ---- Presenting Complaints ----
+  /** Chief complaint or reason for visit */
+  chief_complaint?: string | null;
+  /** Detailed description of current symptoms */
+  symptoms_description?: string | null;
+  /** Duration of current symptoms in days/weeks/months */
+  symptom_duration?: string | null;
+  /** Severity of symptoms (1-10 scale) */
+  symptom_severity?: number | null;
+  /** Pre-menstrual spotting (spotting before period begins) */
+  premenstrual_spotting?: boolean | null;
+  /** Post-menstrual spotting (spotting after period ends) */
+  postmenstrual_spotting?: boolean | null;
+  /** Post-coital bleeding (bleeding after sexual intercourse) */
+  postcoital_bleeding?: boolean | null;
+  /** Inter-menstrual bleeding (bleeding between periods) */
+  intermenstrual_bleeding?: boolean | null;
+  /** Normal menstrual flow */
+  normal_menstrual_flow?: boolean | null;
+  /** Heavy menstrual bleeding (menorrhagia) */
+  heavy_menstrual_bleeding?: boolean | null;
+  /** Light menstrual bleeding (hypomenorrhea) */
+  light_menstrual_bleeding?: boolean | null;
+  /** Menstrual clotting */
+  menstrual_clotting?: boolean | null;
+
+  // ---- Obstetric History (if applicable) ----
+  /** History of gestational diabetes */
+  gestational_diabetes_history?: boolean | null;
+  /** History of preeclampsia */
+  preeclampsia_history?: boolean | null;
+  /** History of complicated births */
+  complicated_birth_history?: boolean | null;
+  /** Birth complications description */
+  birth_complications_description?: string | null;
+
+  // ---- Gynecologic Conditions ----
+  /** History of fibroids/uterine myomas */
+  fibroids_history?: boolean | null;
+  /** History of endometriosis */
+  endometriosis_history?: boolean | null;
+  /** History of PCOS (Polycystic Ovary Syndrome) */
+  pcos_history?: boolean | null;
+  /** History of pelvic inflammatory disease */
+  pelvic_inflammatory_disease_history?: boolean | null;
+
+  // ---- Clinical Assessments ----
+  /** Vital signs measurements - stored as JSONB */
+  vital_signs?: VitalSigns | null;
+  /** Physical examination findings - stored as JSONB */
+  physical_exam_findings?: PhysicalExamFindings | null;
+  /** Ultrasound findings if performed - stored as JSONB */
+  ultrasound_findings?: UltrasoundFindings | null;
+  /** Laboratory results - stored as JSONB */
+  lab_results?: LabResults | null;
+
+  // ---- Clinical Diagnosis & Plan ----
+  /** Working diagnosis or clinical impression */
+  diagnosis?: string | null;
+  /** Clinical diagnosis text */
+  clinical_diagnosis?: string | null;
+  /** Treatment plan and recommendations */
+  treatment_plan?: string | null;
+  /** Medications prescribed or recommended */
+  medications?: string | null;
+  /** Medications prescribed or recommended (alternative field) */
+  medications_prescribed?: string | null;
+  /** Follow-up appointment date */
+  follow_up_date?: string | null;
+  /** Follow-up recommendations */
+  follow_up_recommendations?: string | null;
+  /** Clinical notes and additional observations */
+  clinical_notes?: string | null;
+}
+
+/**
+ * Input type for creating new OB/GYN consultation forms
+ * All fields are optional to support progressive form filling
+ */
+export interface CreateOBGynFormInput {
+  appointment_id?: string | null;
+  form_type: FormType;
+  status?: FormStatus;
+  filled_by?: string | null;
+  age_at_form?: number | null;
+  cycle_regularity?: CycleRegularity;
+  cycle_length_days?: number | null;
+  last_menstrual_period?: string | null;
+  pregnancy_status?: PregnancyStatus;
+  estimated_delivery_date?: string | null;
+  menopause_status?: MenopauseStatus;
+  parity_history?: ParityHistory;
+  number_of_children?: number | null;
+  number_of_pregnancies?: number | null;
+  number_of_miscarriages?: number | null;
+  contraception_status?: ContraceptionStatus;
+  contraception_method_details?: string | null;
+  sexual_activity_status?: SexualActivityStatus;
+  num_sexual_partners?: number | null;
+  sexual_satisfaction?: number | null;
+  sti_screening_result?: STIScreeningResult;
+  last_sti_screening_date?: string | null;
+  last_pap_smear_date?: string | null;
+  last_mammography_date?: string | null;
+  chief_complaint?: string | null;
+  symptoms_description?: string | null;
+  symptom_duration?: string | null;
+  symptom_severity?: number | null;
+  premenstrual_spotting?: boolean | null;
+  postmenstrual_spotting?: boolean | null;
+  postcoital_bleeding?: boolean | null;
+  intermenstrual_bleeding?: boolean | null;
+  normal_menstrual_flow?: boolean | null;
+  heavy_menstrual_bleeding?: boolean | null;
+  light_menstrual_bleeding?: boolean | null;
+  menstrual_clotting?: boolean | null;
+  gestational_diabetes_history?: boolean | null;
+  preeclampsia_history?: boolean | null;
+  complicated_birth_history?: boolean | null;
+  birth_complications_description?: string | null;
+  fibroids_history?: boolean | null;
+  endometriosis_history?: boolean | null;
+  pcos_history?: boolean | null;
+  pelvic_inflammatory_disease_history?: boolean | null;
+  vital_signs?: VitalSigns | null;
+  physical_exam_findings?: PhysicalExamFindings | null;
+  ultrasound_findings?: UltrasoundFindings | null;
+  lab_results?: LabResults | null;
+  diagnosis?: string | null;
+  clinical_diagnosis?: string | null;
+  treatment_plan?: string | null;
+  medications?: string | null;
+  medications_prescribed?: string | null;
+  follow_up_date?: string | null;
+  follow_up_recommendations?: string | null;
+  clinical_notes?: string | null;
+}
+
+/**
+ * Input type for updating existing OB/GYN consultation forms
+ * All fields are optional - only include fields to be updated
+ */
+export interface UpdateOBGynFormInput {
+  form_type?: FormType;
+  status?: FormStatus;
+  filled_by?: string | null;
+  age_at_form?: number | null;
+  cycle_regularity?: CycleRegularity;
+  last_menstrual_period?: string | null;
+  pregnancy_status?: PregnancyStatus;
+  estimated_delivery_date?: string | null;
+  menopause_status?: MenopauseStatus;
+  parity_history?: ParityHistory;
+  number_of_children?: number | null;
+  number_of_pregnancies?: number | null;
+  number_of_miscarriages?: number | null;
+  contraception_status?: ContraceptionStatus;
+  contraception_method_details?: string | null;
+  sexual_activity_status?: SexualActivityStatus;
+  num_sexual_partners?: number | null;
+  sexual_satisfaction?: number | null;
+  sti_screening_result?: STIScreeningResult;
+  last_sti_screening_date?: string | null;
+  last_pap_smear_date?: string | null;
+  last_mammography_date?: string | null;
+  chief_complaint?: string | null;
+  symptoms_description?: string | null;
+  symptom_duration?: string | null;
+  symptom_severity?: number | null;
+  premenstrual_spotting?: boolean | null;
+  postmenstrual_spotting?: boolean | null;
+  postcoital_bleeding?: boolean | null;
+  intermenstrual_bleeding?: boolean | null;
+  normal_menstrual_flow?: boolean | null;
+  heavy_menstrual_bleeding?: boolean | null;
+  light_menstrual_bleeding?: boolean | null;
+  menstrual_clotting?: boolean | null;
+  gestational_diabetes_history?: boolean | null;
+  preeclampsia_history?: boolean | null;
+  complicated_birth_history?: boolean | null;
+  birth_complications_description?: string | null;
+  fibroids_history?: boolean | null;
+  endometriosis_history?: boolean | null;
+  pcos_history?: boolean | null;
+  pelvic_inflammatory_disease_history?: boolean | null;
+  vital_signs?: VitalSigns | null;
+  physical_exam_findings?: PhysicalExamFindings | null;
+  ultrasound_findings?: UltrasoundFindings | null;
+  lab_results?: LabResults | null;
+  diagnosis?: string | null;
+  clinical_diagnosis?: string | null;
+  treatment_plan?: string | null;
+  medications?: string | null;
+  medications_prescribed?: string | null;
+  follow_up_date?: string | null;
+  follow_up_recommendations?: string | null;
+  clinical_notes?: string | null;
 }
