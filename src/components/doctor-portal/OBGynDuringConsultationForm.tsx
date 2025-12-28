@@ -14,6 +14,7 @@ interface OBGynDuringConsultationFormProps {
   appointmentId?: string;
   preConsultationFormId?: string;
   onComplete?: () => void;
+  displayMode?: 'wizard' | 'flat';
 }
 
 export function OBGynDuringConsultationForm({
@@ -21,6 +22,7 @@ export function OBGynDuringConsultationForm({
   appointmentId,
   preConsultationFormId,
   onComplete,
+  displayMode = 'wizard',
 }: OBGynDuringConsultationFormProps) {
   const { createForm, updateForm, getFormByAppointment, getFormByPatient } = useOBGynForms(patientId);
 
@@ -76,14 +78,20 @@ export function OBGynDuringConsultationForm({
         }
 
         // Look for pre-consultation form to pre-populate
+        // First try by preConsultationFormId if provided, otherwise find by appointmentId
+        const preForms = getFormByPatient(patientId, 'pre_consultation');
+        let preForm: typeof preForms[0] | undefined;
+
         if (preConsultationFormId) {
-          const preForms = getFormByPatient(patientId, 'pre_consultation');
-          const preForm = preForms.find(f => f.id === preConsultationFormId);
-          if (preForm) {
-            setPreConsultationData(preForm);
-            setPregnancyStatus(preForm.pregnancy_status || 'unknown');
-            populateFormState(preForm);
-          }
+          preForm = preForms.find(f => f.id === preConsultationFormId);
+        } else if (appointmentId) {
+          preForm = preForms.find(f => f.appointment_id === appointmentId);
+        }
+
+        if (preForm) {
+          setPreConsultationData(preForm);
+          setPregnancyStatus(preForm.pregnancy_status || 'unknown');
+          populateFormState(preForm);
         }
 
         setIsLoading(false);
@@ -272,8 +280,9 @@ export function OBGynDuringConsultationForm({
         steps={steps}
         onAutoSave={handleAutoSave}
         onComplete={handleCompleteForm}
-        showProgressBar
-        showStepNumbers
+        displayMode={displayMode}
+        showProgressBar={displayMode === 'wizard'}
+        showStepNumbers={displayMode === 'wizard'}
       />
     </div>
   );

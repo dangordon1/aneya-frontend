@@ -2268,6 +2268,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <OBGynDuringConsultationForm
                 patientId={preFilledPatient.id}
                 appointmentId={appointmentContext.id}
+                displayMode="flat"
                 onComplete={() => {
                   setShowOBGynForm(false);
                 }}
