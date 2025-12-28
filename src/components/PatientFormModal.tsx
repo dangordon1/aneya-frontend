@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Patient, CreatePatientInput, ConsultationLanguage, CONSULTATION_LANGUAGES } from '../types/database';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PatientFormModalProps {
   isOpen: boolean;
@@ -9,9 +10,14 @@ interface PatientFormModalProps {
 }
 
 export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFormModalProps) {
+  const { doctorProfile } = useAuth();
+
+  // Default sex to Female for OB/GYN doctors
+  const defaultSex = doctorProfile?.specialty === 'obgyn' ? 'Female' : 'Male';
+
   const [formData, setFormData] = useState<CreatePatientInput>({
     name: '',
-    sex: 'Male',
+    sex: defaultSex,
     date_of_birth: '',
     height_cm: undefined,
     weight_kg: undefined,
@@ -44,7 +50,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
     } else {
       setFormData({
         name: '',
-        sex: 'Male',
+        sex: defaultSex,
         date_of_birth: '',
         height_cm: undefined,
         weight_kg: undefined,
@@ -57,7 +63,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
       });
     }
     setErrors({});
-  }, [patient, isOpen]);
+  }, [patient, isOpen, defaultSex]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};

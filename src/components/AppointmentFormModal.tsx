@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Appointment, Patient, CreateAppointmentInput, AppointmentType } from '../types/database';
+import { useAuth } from '../contexts/AuthContext';
+import { Appointment, Patient, CreateAppointmentInput, AppointmentType, MedicalSpecialty, OBGYNSubtype } from '../types/database';
 
 interface AppointmentFormModalProps {
   isOpen: boolean;
@@ -20,6 +21,8 @@ export function AppointmentFormModal({
   preFilledDate,
   onCreatePatient
 }: AppointmentFormModalProps) {
+  const { doctorProfile } = useAuth();
+
   const [formData, setFormData] = useState<CreateAppointmentInput>({
     patient_id: '',
     scheduled_time: '',
@@ -28,6 +31,13 @@ export function AppointmentFormModal({
     reason: '',
     notes: '',
   });
+
+  // Determine specialty from doctor's profile
+  const doctorSpecialty = doctorProfile?.specialty || 'general';
+  const isOBGynDoctor = doctorSpecialty === 'obgyn';
+
+  // Only subtype selection for OB/GYN doctors
+  const [subtype, setSubtype] = useState<OBGYNSubtype>('general_obgyn');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -63,6 +73,17 @@ export function AppointmentFormModal({
         reason: appointment.reason || '',
         notes: appointment.notes || '',
       });
+
+      // Parse existing appointment to set subtype (specialty comes from doctor profile)
+      if (appointment.specialty_subtype) {
+        setSubtype(appointment.specialty_subtype as OBGYNSubtype);
+      } else if (appointment.appointment_type.startsWith('obgyn_')) {
+        // Legacy: parse from appointment_type
+        const subtypeStr = appointment.appointment_type.replace('obgyn_', '') as OBGYNSubtype;
+        setSubtype(subtypeStr);
+      } else {
+        setSubtype('general_obgyn');
+      }
     } else if (preFilledDate) {
       const dateStr = preFilledDate.toISOString().split('T')[0];
       setFormData({
@@ -73,6 +94,7 @@ export function AppointmentFormModal({
         reason: '',
         notes: '',
       });
+      setSubtype('general_obgyn');
     } else {
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
@@ -84,6 +106,7 @@ export function AppointmentFormModal({
         reason: '',
         notes: '',
       });
+      setSubtype('general_obgyn');
     }
     setErrors({});
   }, [appointment, preFilledDate, isOpen]);
@@ -116,9 +139,20 @@ export function AppointmentFormModal({
       const [date, time] = formData.scheduled_time.split('T');
       const scheduledDateTime = new Date(`${date}T${time}:00`);
 
+      // Build appointment_type from doctor's specialty + subtype
+      let appointmentType: AppointmentType;
+      if (isOBGynDoctor) {
+        appointmentType = `obgyn_${subtype}` as AppointmentType;
+      } else {
+        appointmentType = doctorSpecialty as AppointmentType;
+      }
+
       await onSave({
         ...formData,
         scheduled_time: scheduledDateTime.toISOString(),
+        appointment_type: appointmentType,
+        specialty: doctorSpecialty,
+        specialty_subtype: isOBGynDoctor ? subtype : null,
       });
       onClose();
     } catch (error) {
@@ -272,7 +306,7 @@ export function AppointmentFormModal({
             </div>
           </div>
 
-          {/* Duration and Type */}
+          {/* Duration and OB/GYN Subtype */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="duration" className="block mb-1 text-[12px] text-gray-600">
@@ -291,22 +325,25 @@ export function AppointmentFormModal({
               </select>
             </div>
 
-            <div>
-              <label htmlFor="type" className="block mb-1 text-[12px] text-gray-600">
-                Appointment Type
-              </label>
-              <select
-                id="type"
-                value={formData.appointment_type}
-                onChange={(e) => updateField('appointment_type', e.target.value as AppointmentType)}
-                className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
-              >
-                <option value="general">General</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="emergency">Emergency</option>
-                <option value="routine_checkup">Routine Checkup</option>
-              </select>
-            </div>
+            {/* OB/GYN Subtype Selection (only for OB/GYN doctors) */}
+            {isOBGynDoctor && (
+              <div>
+                <label htmlFor="subtype" className="block mb-1 text-[12px] text-gray-600">
+                  Appointment Type
+                </label>
+                <select
+                  id="subtype"
+                  value={subtype}
+                  onChange={(e) => setSubtype(e.target.value as OBGYNSubtype)}
+                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
+                >
+                  <option value="general_obgyn">General OB/GYN</option>
+                  <option value="infertility">Infertility</option>
+                  <option value="antenatal">Antenatal Care (ANC)</option>
+                  <option value="routine_gyn">Routine Gynecology</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Reason */}

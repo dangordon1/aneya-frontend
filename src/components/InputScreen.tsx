@@ -6,7 +6,7 @@ import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { LocationSelector } from './LocationSelector';
 import { useAuth } from '../contexts/AuthContext';
-import { isOBGynAppointment } from '../utils/specialtyDetector';
+import { requiresOBGynForms } from '../utils/specialtyHelpers';
 import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
@@ -1777,7 +1777,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         </div>
 
         {/* OB/GYN During-consultation Form Button - Prominent location after Patient Details */}
-        {appointmentContext && preFilledPatient && (appointmentContext as any).doctor && isOBGynAppointment((appointmentContext as any).doctor.specialty) && (
+        {appointmentContext && preFilledPatient && (appointmentContext as any).doctor && requiresOBGynForms((appointmentContext as any).doctor.specialty) && (
           <div className="mb-6 bg-white border-2 border-purple-300 rounded-[10px] p-4 sm:p-6">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">

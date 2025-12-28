@@ -10,9 +10,10 @@ import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
 import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
+import { InfertilityPreConsultationForm } from './patient-portal/InfertilityPreConsultationForm';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { isOBGynAppointment } from '../utils/specialtyDetector';
+import { requiresOBGynForms } from '../utils/specialtyHelpers';
 
 interface AppointmentsTabProps {
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
@@ -76,8 +77,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
 
   const handleCancelAppointment = async (appointment: AppointmentWithPatient) => {
     if (window.confirm(`Cancel appointment with ${appointment.patient.name}?`)) {
-      const reason = window.prompt('Reason for cancellation (optional):');
-      await cancelAppointment(appointment.id, reason || undefined);
+      await cancelAppointment(appointment.id);
     }
   };
 
@@ -134,9 +134,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           .order('scheduled_time', { ascending: false })
           .limit(isAdmin ? 50 : 10); // Admins see more appointments
 
-        // Non-admins only see their own appointments
-        if (!isAdmin) {
-          query = query.eq('user_id', user.id);
+        // Non-admins only see their own appointments (doctors see their appointments)
+        if (!isAdmin && doctorProfile) {
+          query = query.eq('doctor_id', doctorProfile.id);
         }
 
         const { data: appointments, error: appointmentsError } = await query;
@@ -199,34 +199,50 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   // Fetch OB/GYN form statuses for doctor portal
   useEffect(() => {
     const fetchOBGynFormStatuses = async () => {
-      if (!doctorProfile || !isOBGynAppointment(doctorProfile.specialty)) {
+      if (!doctorProfile || !requiresOBGynForms(doctorProfile.specialty)) {
         return;
       }
 
       try {
-        // Fetch all appointments for this doctor
+        // Fetch all appointments for this doctor with specialty_subtype
         const { data: allAppointments, error: appointmentsError } = await supabase
           .from('appointments')
-          .select('id, patient_id')
+          .select('id, patient_id, specialty_subtype')
           .eq('doctor_id', doctorProfile.id)
           .in('status', ['scheduled', 'in_progress']);
 
         if (appointmentsError) throw appointmentsError;
 
-        // For each appointment, fetch the form status
+        // For each appointment, fetch the form status from the appropriate table
         const formStatuses: Record<string, 'draft' | 'partial' | 'completed' | null> = {};
 
         for (const apt of allAppointments || []) {
           try {
-            const { data: formData, error: formError } = await supabase
-              .from('ob_gyn_consultation_forms')
-              .select('status')
-              .eq('appointment_id', apt.id)
-              .eq('form_type', 'pre_consultation')
-              .single();
+            // Determine which table to query based on specialty_subtype
+            if (apt.specialty_subtype === 'infertility') {
+              // Query infertility_forms table
+              const { data: formData, error: formError } = await supabase
+                .from('infertility_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
 
-            if (!formError && formData) {
-              formStatuses[apt.id] = formData.status;
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
+            } else {
+              // Query obgyn_consultation_forms table for general/other subtypes
+              const { data: formData, error: formError } = await supabase
+                .from('obgyn_consultation_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
+
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
             }
           } catch (err) {
             // Form doesn't exist yet, that's ok
@@ -372,7 +388,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       onCancel={handleCancelAppointment}
                       onFillPreConsultationForm={handleFillPreConsultationForm}
                       obgynFormStatus={appointmentOBGynFormStatus[appointment.id] || null}
-                      doctorSpecialty={(appointment as any).doctor?.specialty}
+                      doctorSpecialty={appointment.doctor?.specialty}
                     />
                   ))}
               </div>
@@ -446,7 +462,13 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                 {/* Header */}
                 <div className="bg-purple-600 px-6 py-4 flex items-center justify-between">
                   <h3 className="text-[18px] font-semibold text-white">
-                    Fill Pre-Consultation Form
+                    {selectedAppointmentForForm.specialty_subtype === 'infertility'
+                      ? 'Infertility Pre-Consultation Form'
+                      : selectedAppointmentForForm.specialty_subtype === 'antenatal'
+                      ? 'Antenatal Care (ANC) Form'
+                      : selectedAppointmentForForm.specialty_subtype === 'routine_gyn'
+                      ? 'Routine Gynecology Form'
+                      : 'OB/GYN Pre-Consultation Form'}
                   </h3>
                   <button
                     onClick={handleCloseOBGynFormModal}
@@ -460,13 +482,24 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
 
                 {/* Form Content */}
                 <div className="px-6 py-8">
-                  <OBGynPreConsultationForm
-                    patientId={selectedAppointmentForForm.patient_id}
-                    appointmentId={selectedAppointmentForForm.id}
-                    filledBy="doctor"
-                    doctorUserId={user.id}
-                    onComplete={handleOBGynFormComplete}
-                  />
+                  {/* Render specialty-specific form based on appointment subtype */}
+                  {selectedAppointmentForForm.specialty_subtype === 'infertility' ? (
+                    <InfertilityPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  ) : (
+                    <OBGynPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  )}
                 </div>
               </div>
             </div>
