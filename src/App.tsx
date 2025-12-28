@@ -1156,6 +1156,8 @@ function MainApp() {
                   duration_minutes: 30,
                   status: 'scheduled',
                   appointment_type: 'general',
+                  specialty: 'general',
+                  specialty_subtype: null,
                   reason: null,
                   notes: null,
                   created_at: new Date().toISOString(),

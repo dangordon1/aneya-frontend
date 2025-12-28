@@ -20,6 +20,16 @@ export type ConsultationLanguage =
   | 'te-IN'   // Telugu - Sarvam
   | 'other';  // Other languages - ElevenLabs
 
+// Medical Specialty Types
+// Matches database enum medical_specialty_type
+export type MedicalSpecialtyType =
+  | 'general'
+  | 'obgyn'
+  | 'cardiology'
+  | 'neurology'
+  | 'dermatology'
+  | 'other';
+
 export const CONSULTATION_LANGUAGES: { code: ConsultationLanguage; name: string; provider: 'sarvam' | 'elevenlabs'; warning?: string }[] = [
   { code: 'auto', name: 'Auto-detect', provider: 'elevenlabs', warning: 'Reduced accuracy for Indian languages' },
   { code: 'en-IN', name: 'English (India)', provider: 'sarvam' },
@@ -40,6 +50,16 @@ export const CONSULTATION_LANGUAGES: { code: ConsultationLanguage; name: string;
 export const isSarvamLanguage = (lang: ConsultationLanguage): boolean => {
   return lang !== 'other' && lang !== 'auto';
 };
+
+// Medical Specialties - used for dropdown UI and display labels
+export const MEDICAL_SPECIALTIES: { value: MedicalSpecialtyType; label: string }[] = [
+  { value: 'general', label: 'General Practice' },
+  { value: 'obgyn', label: 'Obstetrics & Gynaecology' },
+  { value: 'cardiology', label: 'Cardiology' },
+  { value: 'neurology', label: 'Neurology' },
+  { value: 'dermatology', label: 'Dermatology' },
+  { value: 'other', label: 'Other' },
+];
 
 export interface Patient {
   id: string;
@@ -62,7 +82,18 @@ export interface Patient {
 }
 
 export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
-export type AppointmentType = 'general' | 'follow_up' | 'emergency' | 'routine_checkup';
+
+// Multi-specialty appointment system (2-level: Specialty → Subtype)
+export type MedicalSpecialty = 'general' | 'obgyn' | 'cardiology' | 'neurology' | 'dermatology';
+export type OBGYNSubtype = 'infertility' | 'antenatal' | 'routine_gyn' | 'general_obgyn';
+
+// Backward compatible with existing types + new specialty subtypes
+export type AppointmentType =
+  | 'general'
+  | 'follow_up'
+  | 'emergency'
+  | 'routine_checkup'
+  | `obgyn_${OBGYNSubtype}`; // e.g., 'obgyn_infertility', 'obgyn_antenatal'
 
 export interface Appointment {
   id: string;
@@ -74,6 +105,8 @@ export interface Appointment {
   duration_minutes: number;
   status: AppointmentStatus;
   appointment_type: AppointmentType;
+  specialty: string; // Medical specialty (general, obgyn, cardiology, etc.)
+  specialty_subtype: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
   reason: string | null;
   notes: string | null;
   consultation_id: string | null;
@@ -198,6 +231,8 @@ export interface CreateAppointmentInput {
   scheduled_time: string;
   duration_minutes: number;
   appointment_type: AppointmentType;
+  specialty?: string; // Medical specialty (general, obgyn, cardiology, etc.)
+  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
   reason?: string | null;
   notes?: string | null;
   booked_by?: 'doctor' | 'patient' | null;
@@ -208,6 +243,8 @@ export interface UpdateAppointmentInput {
   duration_minutes?: number;
   status?: AppointmentStatus;
   appointment_type?: AppointmentType;
+  specialty?: string; // Medical specialty (general, obgyn, cardiology, etc.)
+  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
   reason?: string | null;
   notes?: string | null;
 }
@@ -255,7 +292,7 @@ export interface Doctor {
   name: string;
   email: string;
   phone: string | null;
-  specialty: string | null;
+  specialty: MedicalSpecialtyType; // Medical specialty - determines which forms patients see
   license_number: string | null;
   clinic_name: string | null;
   clinic_address: string | null;
@@ -269,7 +306,7 @@ export interface CreateDoctorInput {
   name: string;
   email: string;
   phone?: string | null;
-  specialty?: string | null;
+  specialty?: MedicalSpecialtyType;
   license_number?: string | null;
   clinic_name?: string | null;
   clinic_address?: string | null;
@@ -281,7 +318,7 @@ export interface UpdateDoctorInput {
   name?: string;
   email?: string;
   phone?: string | null;
-  specialty?: string | null;
+  specialty?: MedicalSpecialtyType;
   license_number?: string | null;
   clinic_name?: string | null;
   clinic_address?: string | null;
@@ -898,4 +935,156 @@ export interface UpdateOBGynFormInput {
   follow_up_date?: string | null;
   follow_up_recommendations?: string | null;
   clinical_notes?: string | null;
+}
+
+// ============================================
+// Infertility Forms (Multi-Specialty System)
+// ============================================
+
+/** Infertility type classification */
+export type InfertilityType = 'primary' | 'secondary';
+
+/** Sexual frequency for infertility assessment */
+export type SexualFrequency = 'daily' | 'weekly' | 'monthly' | 'rarely';
+
+/** IVF cycle outcome */
+export type IVFOutcome = 'pregnant' | 'not_pregnant' | 'miscarriage';
+
+/**
+ * Infertility Form - Main interface
+ * Uses JSONB storage for flexibility (no schema updates needed)
+ */
+export interface InfertilityForm {
+  id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  form_type: FormType; // 'pre_consultation' | 'during_consultation'
+  status: FormStatus; // 'draft' | 'partial' | 'completed'
+  filled_by: string | null; // NULL if patient, doctor user_id if doctor-filled
+  vitals_record_id: string | null; // Reference to shared patient_vitals table
+  infertility_data: InfertilityFormData; // JSONB
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+}
+
+/**
+ * Infertility Form Data Structure (stored in JSONB)
+ * Flexible schema - can add fields without migrations
+ */
+export interface InfertilityFormData {
+  // Infertility Type
+  infertility_type?: InfertilityType;
+
+  // Menstrual History (some overlap with generic obgyn)
+  menstrual_history?: {
+    lmp?: string; // ISO date (YYYY-MM-DD)
+    cycle_length_days?: number;
+    cycle_regularity?: CycleRegularity;
+    bleeding_pattern?: {
+      normal_flow?: boolean;
+      heavy_bleeding?: boolean;
+      light_bleeding?: boolean;
+      menstrual_clotting?: boolean;
+      premenstrual_spotting?: boolean;
+      postmenstrual_spotting?: boolean;
+      postcoital_bleeding?: boolean;
+      intermenstrual_bleeding?: boolean;
+    };
+  };
+
+  // Sexual History
+  sexual_history?: {
+    frequency?: SexualFrequency;
+    satisfaction?: number; // 1-10 scale
+    dyspareunia?: boolean; // pain during intercourse
+    dyspareunia_description?: string;
+  };
+
+  // Medical History (specialized for infertility)
+  medical_history?: {
+    diabetes?: boolean;
+    hypertension?: boolean;
+    thyroid_disorder?: boolean;
+    pcos?: boolean;
+    endometriosis?: boolean;
+    previous_surgeries?: string[];
+  };
+
+  // Previous Treatment
+  previous_treatment?: {
+    ovulation_induction?: boolean;
+    iui_cycles?: number;
+    ivf_cycles?: number;
+    ivf_outcomes?: Array<{
+      cycle_number: number;
+      outcome: IVFOutcome;
+      date?: string;
+    }>;
+  };
+
+  // Investigations
+  investigations?: {
+    hormones?: {
+      fsh?: number;
+      lh?: number;
+      amh?: number;
+      prolactin?: number;
+      thyroid?: {
+        tsh?: number;
+        t3?: number;
+        t4?: number;
+      };
+    };
+    ultrasound?: {
+      date?: string;
+      findings?: string;
+      antral_follicle_count?: number;
+    };
+    hsg?: {
+      date?: string;
+      findings?: string;
+      tubes_patent?: boolean;
+    };
+    semen_analysis?: {
+      date?: string;
+      count?: number; // million/mL
+      motility?: number; // percentage
+      morphology?: number; // percentage normal
+    };
+  };
+
+  // Treatment Cycles (tracking table)
+  treatment_cycles?: Array<{
+    date?: string;
+    cycle_type?: string; // IUI, IVF, etc.
+    medications?: string;
+    outcome?: string;
+    notes?: string;
+  }>;
+}
+
+/**
+ * Input type for creating new infertility forms
+ */
+export interface CreateInfertilityFormInput {
+  patient_id: string;
+  appointment_id?: string | null;
+  form_type: FormType;
+  status?: FormStatus;
+  filled_by?: string | null;
+  vitals_record_id?: string | null;
+  infertility_data: Partial<InfertilityFormData>;
+}
+
+/**
+ * Input type for updating existing infertility forms
+ */
+export interface UpdateInfertilityFormInput {
+  form_type?: FormType;
+  status?: FormStatus;
+  filled_by?: string | null;
+  vitals_record_id?: string | null;
+  infertility_data?: Partial<InfertilityFormData>;
 }

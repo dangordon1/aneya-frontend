@@ -1,7 +1,7 @@
-import { AppointmentWithPatient } from '../types/database';
+import { AppointmentWithPatient, MedicalSpecialtyType } from '../types/database';
 import { AppointmentStatusBadge } from './AppointmentStatusBadge';
 import { formatTime24 } from '../utils/dateHelpers';
-import { isOBGynAppointment } from '../utils/specialtyDetector';
+import { requiresOBGynForms } from '../utils/specialtyHelpers';
 
 interface AppointmentCardProps {
   appointment: AppointmentWithPatient;
@@ -10,7 +10,7 @@ interface AppointmentCardProps {
   onCancel: (appointment: AppointmentWithPatient) => void;
   onFillPreConsultationForm?: (appointment: AppointmentWithPatient) => void;
   obgynFormStatus?: 'draft' | 'partial' | 'completed' | null;
-  doctorSpecialty?: string | null;
+  doctorSpecialty?: MedicalSpecialtyType | null;
 }
 
 export function AppointmentCard({
@@ -40,9 +40,9 @@ export function AppointmentCard({
   };
 
   // Only show form button for OB/GYN appointments
-  const isOBGyn = isOBGynAppointment(doctorSpecialty);
-  console.log('AppointmentCard - Doctor Specialty:', doctorSpecialty, 'isOBGyn:', isOBGyn, 'Appointment:', appointment.id);
+  const isOBGyn = requiresOBGynForms(doctorSpecialty);
   const canShowFormButton = onFillPreConsultationForm !== undefined && isOBGyn;
+  const statusCheck = appointment.status === 'scheduled' || appointment.status === 'in_progress';
 
   return (
     <div className="bg-white rounded-[16px] p-6 border-2 border-aneya-soft-pink hover:shadow-md transition-shadow">

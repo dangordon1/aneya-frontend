@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOBGynForms } from '../../hooks/useOBGynForms';
 import { ProgressiveWizard, WizardStep } from '../ProgressiveWizard';
+import { Checkbox } from '../common';
 import {
   CreateOBGynFormInput,
   UpdateOBGynFormInput,
@@ -108,10 +109,10 @@ export function OBGynPreConsultationForm({
           type="number"
           min="15"
           max="90"
-          value={formData.cycle_length_days || ''}
+          value={formData.cycle_length_days ?? ''}
           onChange={(e) => setFormData(prev => ({
             ...prev,
-            cycle_length_days: e.target.value ? parseInt(e.target.value) : undefined,
+            cycle_length_days: e.target.value !== '' ? parseInt(e.target.value) : undefined,
           }))}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           placeholder="e.g., 28"
@@ -142,26 +143,82 @@ export function OBGynPreConsultationForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-700 mb-3">
           Bleeding Pattern
         </label>
-        <div className="space-y-2">
-          <label className="flex items-center">
-            <input type="checkbox" className="rounded border-gray-300" defaultChecked />
-            <span className="ml-2 text-sm text-gray-700">Normal flow</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="rounded border-gray-300" />
-            <span className="ml-2 text-sm text-gray-700">Heavy bleeding</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="rounded border-gray-300" />
-            <span className="ml-2 text-sm text-gray-700">Light bleeding</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="rounded border-gray-300" />
-            <span className="ml-2 text-sm text-gray-700">Clotting</span>
-          </label>
+        <div className="space-y-3">
+          <Checkbox
+            label="Normal flow"
+            description="Regular menstrual flow"
+            checked={formData.normal_menstrual_flow || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              normal_menstrual_flow: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Heavy bleeding"
+            description="Menorrhagia - heavy or prolonged menstrual bleeding"
+            checked={formData.heavy_menstrual_bleeding || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              heavy_menstrual_bleeding: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Light bleeding"
+            description="Hypomenorrhea - unusually light menstrual flow"
+            checked={formData.light_menstrual_bleeding || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              light_menstrual_bleeding: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Clotting"
+            description="Presence of blood clots during menstruation"
+            checked={formData.menstrual_clotting || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              menstrual_clotting: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Pre-menstrual spotting"
+            description="Spotting before menstrual period begins"
+            checked={formData.premenstrual_spotting || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              premenstrual_spotting: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Post-menstrual spotting"
+            description="Spotting after menstrual period ends"
+            checked={formData.postmenstrual_spotting || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              postmenstrual_spotting: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Post-coital bleeding"
+            description="Bleeding after sexual intercourse"
+            checked={formData.postcoital_bleeding || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              postcoital_bleeding: e.target.checked || undefined,
+            }))}
+          />
+          <Checkbox
+            label="Inter-menstrual bleeding"
+            description="Bleeding between periods"
+            checked={formData.intermenstrual_bleeding || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              intermenstrual_bleeding: e.target.checked || undefined,
+            }))}
+          />
         </div>
       </div>
 
@@ -251,10 +308,10 @@ export function OBGynPreConsultationForm({
           <input
             type="number"
             min="0"
-            value={formData.number_of_pregnancies || ''}
+            value={formData.number_of_pregnancies ?? ''}
             onChange={(e) => setFormData(prev => ({
               ...prev,
-              number_of_pregnancies: e.target.value ? parseInt(e.target.value) : undefined,
+              number_of_pregnancies: e.target.value !== '' ? parseInt(e.target.value) : undefined,
             }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Total number of pregnancies"
@@ -268,10 +325,10 @@ export function OBGynPreConsultationForm({
           <input
             type="number"
             min="0"
-            value={formData.number_of_children || ''}
+            value={formData.number_of_children ?? ''}
             onChange={(e) => setFormData(prev => ({
               ...prev,
-              number_of_children: e.target.value ? parseInt(e.target.value) : undefined,
+              number_of_children: e.target.value !== '' ? parseInt(e.target.value) : undefined,
             }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Number of living children"
@@ -285,10 +342,10 @@ export function OBGynPreConsultationForm({
           <input
             type="number"
             min="0"
-            value={formData.number_of_miscarriages || ''}
+            value={formData.number_of_miscarriages ?? ''}
             onChange={(e) => setFormData(prev => ({
               ...prev,
-              number_of_miscarriages: e.target.value ? parseInt(e.target.value) : undefined,
+              number_of_miscarriages: e.target.value !== '' ? parseInt(e.target.value) : undefined,
             }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             placeholder="Include miscarriages and abortions"
@@ -298,42 +355,30 @@ export function OBGynPreConsultationForm({
         <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
           <h4 className="font-medium text-blue-900 text-sm mb-2">Obstetric History</h4>
           <div className="space-y-3">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.gestational_diabetes_history || false}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  gestational_diabetes_history: e.target.checked,
-                }))}
-                className="rounded border-gray-300"
-              />
-              <span className="ml-2 text-sm text-blue-900">History of Gestational Diabetes</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.preeclampsia_history || false}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  preeclampsia_history: e.target.checked,
-                }))}
-                className="rounded border-gray-300"
-              />
-              <span className="ml-2 text-sm text-blue-900">History of Preeclampsia</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.complicated_birth_history || false}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  complicated_birth_history: e.target.checked,
-                }))}
-                className="rounded border-gray-300"
-              />
-              <span className="ml-2 text-sm text-blue-900">Complicated Births</span>
-            </label>
+            <Checkbox
+              label="History of Gestational Diabetes"
+              checked={formData.gestational_diabetes_history || false}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                gestational_diabetes_history: e.target.checked,
+              }))}
+            />
+            <Checkbox
+              label="History of Preeclampsia"
+              checked={formData.preeclampsia_history || false}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                preeclampsia_history: e.target.checked,
+              }))}
+            />
+            <Checkbox
+              label="Complicated Births"
+              checked={formData.complicated_birth_history || false}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                complicated_birth_history: e.target.checked,
+              }))}
+            />
           </div>
           {formData.complicated_birth_history && (
             <div className="mt-3">
@@ -542,54 +587,38 @@ export function OBGynPreConsultationForm({
       <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
         <h4 className="font-medium text-purple-900 text-sm mb-3">Gynecological Conditions</h4>
         <div className="space-y-2">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={formData.fibroids_history || false}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                fibroids_history: e.target.checked,
-              }))}
-              className="rounded border-gray-300"
-            />
-            <span className="ml-2 text-sm text-purple-900">Fibroids (Uterine Myomas)</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={formData.endometriosis_history || false}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                endometriosis_history: e.target.checked,
-              }))}
-              className="rounded border-gray-300"
-            />
-            <span className="ml-2 text-sm text-purple-900">Endometriosis</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={formData.pcos_history || false}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                pcos_history: e.target.checked,
-              }))}
-              className="rounded border-gray-300"
-            />
-            <span className="ml-2 text-sm text-purple-900">PCOS (Polycystic Ovary Syndrome)</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={formData.pelvic_inflammatory_disease_history || false}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                pelvic_inflammatory_disease_history: e.target.checked,
-              }))}
-              className="rounded border-gray-300"
-            />
-            <span className="ml-2 text-sm text-purple-900">Pelvic Inflammatory Disease</span>
-          </label>
+          <Checkbox
+            label="Fibroids (Uterine Myomas)"
+            checked={formData.fibroids_history || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              fibroids_history: e.target.checked,
+            }))}
+          />
+          <Checkbox
+            label="Endometriosis"
+            checked={formData.endometriosis_history || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              endometriosis_history: e.target.checked,
+            }))}
+          />
+          <Checkbox
+            label="PCOS (Polycystic Ovary Syndrome)"
+            checked={formData.pcos_history || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              pcos_history: e.target.checked,
+            }))}
+          />
+          <Checkbox
+            label="Pelvic Inflammatory Disease"
+            checked={formData.pelvic_inflammatory_disease_history || false}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              pelvic_inflammatory_disease_history: e.target.checked,
+            }))}
+          />
         </div>
       </div>
 

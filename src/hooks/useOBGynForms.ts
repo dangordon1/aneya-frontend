@@ -44,7 +44,7 @@ export function useOBGynForms(patientId?: string): UseOBGynFormsReturn {
       setError(null);
 
       let query = supabase
-        .from('ob_gyn_consultation_forms')
+        .from('obgyn_consultation_forms')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -95,7 +95,7 @@ export function useOBGynForms(patientId?: string): UseOBGynFormsReturn {
         };
 
         const { data, error: insertError } = await supabase
-          .from('ob_gyn_consultation_forms')
+          .from('obgyn_consultation_forms')
           .insert(insertData)
           .select()
           .single();
@@ -128,7 +128,7 @@ export function useOBGynForms(patientId?: string): UseOBGynFormsReturn {
         setError(null);
 
         let query = supabase
-          .from('ob_gyn_consultation_forms')
+          .from('obgyn_consultation_forms')
           .update({
             ...input,
             updated_by: user.id,
@@ -175,7 +175,7 @@ export function useOBGynForms(patientId?: string): UseOBGynFormsReturn {
         setError(null);
 
         let query = supabase
-          .from('ob_gyn_consultation_forms')
+          .from('obgyn_consultation_forms')
           .delete()
           .eq('id', formId);
 
