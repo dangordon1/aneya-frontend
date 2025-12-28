@@ -489,6 +489,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       appointmentId={selectedAppointmentForForm.id}
                       filledBy="doctor"
                       doctorUserId={user.id}
+                      displayMode={selectedAppointmentForForm.status === 'in_progress' ? 'flat' : 'wizard'}
                       onComplete={handleOBGynFormComplete}
                     />
                   ) : (
@@ -497,6 +498,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       appointmentId={selectedAppointmentForForm.id}
                       filledBy="doctor"
                       doctorUserId={user.id}
+                      displayMode={selectedAppointmentForForm.status === 'in_progress' ? 'flat' : 'wizard'}
                       onComplete={handleOBGynFormComplete}
                     />
                   )}

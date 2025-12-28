@@ -16,6 +16,7 @@ interface InfertilityPreConsultationFormProps {
   onComplete?: () => void;
   filledBy?: 'patient' | 'doctor'; // Who is filling the form
   doctorUserId?: string; // Doctor's user ID if filled by doctor
+  displayMode?: 'wizard' | 'flat'; // Controls display style
 }
 
 export function InfertilityPreConsultationForm({
@@ -24,6 +25,7 @@ export function InfertilityPreConsultationForm({
   onComplete,
   filledBy = 'patient',
   doctorUserId,
+  displayMode = 'wizard',
 }: InfertilityPreConsultationFormProps) {
   const { createForm, updateForm, getFormByAppointment, autoSaveForm } = useInfertilityForms(patientId);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
@@ -530,8 +532,9 @@ export function InfertilityPreConsultationForm({
         steps={wizardSteps}
         onAutoSave={handleAutoSave}
         onComplete={handleComplete}
-        showProgressBar={true}
-        showStepNumbers={true}
+        displayMode={displayMode}
+        showProgressBar={displayMode === 'wizard'}
+        showStepNumbers={displayMode === 'wizard'}
         allowSkip={false}
       />
     </div>
