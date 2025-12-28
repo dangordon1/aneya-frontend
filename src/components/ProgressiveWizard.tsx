@@ -16,6 +16,7 @@ export interface ProgressiveWizardProps {
   showProgressBar?: boolean;
   showStepNumbers?: boolean;
   allowSkip?: boolean;
+  displayMode?: 'wizard' | 'flat';
 }
 
 export function ProgressiveWizard({
@@ -28,6 +29,7 @@ export function ProgressiveWizard({
   showProgressBar = true,
   showStepNumbers = true,
   allowSkip = false,
+  displayMode = 'wizard',
 }: ProgressiveWizardProps) {
   const [activeStep, setActiveStep] = useState(currentStep);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
@@ -59,6 +61,31 @@ export function ProgressiveWizard({
       setErrors(error instanceof Error ? error.message : 'Validation failed');
       setIsValidating(false);
       return false;
+    }
+  };
+
+  const validateAllSteps = async (): Promise<{ isValid: boolean; firstErrorIndex?: number }> => {
+    setIsValidating(true);
+    setErrors('');
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        if (step.validate) {
+          const isValid = await Promise.resolve(step.validate());
+          if (!isValid) {
+            setErrors(`Please complete all required fields in "${step.title}"`);
+            setIsValidating(false);
+            return { isValid: false, firstErrorIndex: i };
+          }
+        }
+      }
+      setIsValidating(false);
+      return { isValid: true };
+    } catch (error) {
+      setErrors(error instanceof Error ? error.message : 'Validation failed');
+      setIsValidating(false);
+      return { isValid: false };
     }
   };
 
@@ -116,10 +143,98 @@ export function ProgressiveWizard({
     }
   };
 
+  const handleCompleteFlat = async () => {
+    const { isValid, firstErrorIndex } = await validateAllSteps();
+    if (!isValid) {
+      // Scroll to first error section if available
+      if (firstErrorIndex !== undefined) {
+        const sectionElement = document.getElementById(`step-section-${firstErrorIndex}`);
+        sectionElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      return;
+    }
+
+    // Auto-save before completing
+    await handleAutoSave();
+
+    // Mark all steps as completed
+    const allSteps = new Set(steps.map((_, i) => i));
+    setCompletedSteps(allSteps);
+
+    // Call onComplete
+    await Promise.resolve(onComplete?.(steps.length));
+  };
+
   const isFirstStep = activeStep === 0;
   const isLastStep = activeStep === steps.length - 1;
   const progressPercentage = ((activeStep + 1) / steps.length) * 100;
 
+  // Flat mode rendering - show all steps at once
+  if (displayMode === 'flat') {
+    return (
+      <div className="w-full bg-white rounded-[20px] p-4 sm:p-8">
+        {/* Error Message */}
+        {errors && (
+          <div className="mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-[10px]">
+            <div className="flex gap-3">
+              <svg className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <p className="text-[14px] text-red-700">{errors}</p>
+            </div>
+          </div>
+        )}
+
+        {/* All Steps as Sections */}
+        <div className="space-y-8">
+          {steps.map((step, index) => (
+            <div key={index} id={`step-section-${index}`} className="pb-8 border-b border-gray-200 last:border-b-0 last:pb-0">
+              <h3 className="text-[18px] font-semibold text-aneya-navy mb-4">
+                {step.title}
+              </h3>
+              <div>{step.content}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Complete Button */}
+        <div className="mt-8 pt-6 border-t border-gray-200 flex items-center justify-between">
+          {isSaving && (
+            <div className="flex items-center gap-2 text-[13px] text-gray-600">
+              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Auto-saving...</span>
+            </div>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={handleCompleteFlat}
+            disabled={isValidating || isSaving}
+            className="px-6 py-3 bg-aneya-teal text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isValidating ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Validating...
+              </>
+            ) : (
+              <>
+                Complete Form
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Wizard mode rendering - original step-by-step display
   return (
     <div className="w-full bg-white rounded-[20px] p-4 sm:p-8">
       {/* Progress Bar */}

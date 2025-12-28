@@ -18,6 +18,7 @@ interface OBGynPreConsultationFormProps {
   onComplete?: () => void;
   filledBy?: 'patient' | 'doctor'; // Indicates who is filling the form
   doctorUserId?: string; // Doctor's user ID if filled by doctor
+  displayMode?: 'wizard' | 'flat'; // Controls display style
 }
 
 // Helper function to calculate gestational age
@@ -35,6 +36,7 @@ export function OBGynPreConsultationForm({
   onComplete,
   filledBy = 'patient',
   doctorUserId,
+  displayMode = 'wizard',
 }: OBGynPreConsultationFormProps) {
   const { createForm, updateForm, getFormByAppointment, autoSaveForm } = useOBGynForms(patientId);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
@@ -727,8 +729,9 @@ export function OBGynPreConsultationForm({
         steps={wizardSteps}
         onAutoSave={handleAutoSave}
         onComplete={handleComplete}
-        showProgressBar={true}
-        showStepNumbers={true}
+        displayMode={displayMode}
+        showProgressBar={displayMode === 'wizard'}
+        showStepNumbers={displayMode === 'wizard'}
         allowSkip={false}
       />
     </div>
