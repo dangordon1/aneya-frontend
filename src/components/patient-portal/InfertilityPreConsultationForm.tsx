@@ -4,11 +4,9 @@ import { ProgressiveWizard, WizardStep } from '../ProgressiveWizard';
 import { Checkbox } from '../common';
 import {
   InfertilityFormData,
-  CreateInfertilityFormInput,
   UpdateInfertilityFormInput,
   InfertilityType,
   SexualFrequency,
-  IVFOutcome,
   CycleRegularity,
 } from '../../types/database';
 

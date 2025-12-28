@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Appointment, Patient, CreateAppointmentInput, AppointmentType, MedicalSpecialty, OBGYNSubtype } from '../types/database';
+import { Appointment, Patient, CreateAppointmentInput, AppointmentType, OBGYNSubtype } from '../types/database';
 
 interface AppointmentFormModalProps {
   isOpen: boolean;

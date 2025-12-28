@@ -103,7 +103,7 @@ export function AppointmentCard({
           )}
         </div>
 
-        {canShowFormButton && (appointment.status === 'scheduled' || appointment.status === 'in_progress') && (
+        {canShowFormButton && statusCheck && (
           <button
             onClick={() => onFillPreConsultationForm?.(appointment)}
             className="w-full px-4 py-2 bg-purple-600 text-white rounded-[10px] text-[14px] font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
