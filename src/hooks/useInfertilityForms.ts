@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   InfertilityForm,
-  InfertilityFormData,
   CreateInfertilityFormInput,
   UpdateInfertilityFormInput,
   FormType,
