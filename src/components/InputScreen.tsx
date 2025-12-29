@@ -4,6 +4,7 @@ import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LAN
 import { formatTime24 } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
+import { AudioPlayer } from './AudioPlayer';
 import { LocationSelector } from './LocationSelector';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
@@ -47,7 +48,7 @@ interface InputScreenProps {
     transcript?: string,
     summary?: string
   ) => void;
-  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => Promise<void>;
+  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails, audioUrl?: string | null) => Promise<void>;
   onUpdateConsultation?: (summaryResponse: any) => Promise<void>;
   onCloseConsultation?: () => void;
   onBack?: () => void;
@@ -55,6 +56,7 @@ interface InputScreenProps {
   appointmentContext?: AppointmentWithPatient;
   locationOverride?: string | null;
   onLocationChange?: (location: string | null) => void;
+  onOpenInfertilityForm?: () => void;
 }
 
 const SAMPLE_CONSULTATION_TEXT = `Doctor: Good morning, Mr. Thompson. I'm Dr. Patel. What brings you in today?
@@ -152,13 +154,14 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
   currentConditions: 'Type 2 Diabetes Mellitus, Hypertension',
 };
 
-export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
+export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange, onOpenInfertilityForm }: InputScreenProps) {
   const { user } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
   const [consultationSummary, setConsultationSummary] = useState<any>(null); // Consultation Summary (structured data from summarize API)
   const [originalTranscript, setOriginalTranscript] = useState(''); // Original language transcript
+  const [audioUrl, setAudioUrl] = useState<string | null>(null); // GCS URL for the audio recording
 
   // Initialize patient details based on preFilledPatient or default
   const initialPatientDetails: PatientDetails = preFilledPatient ? {
@@ -301,8 +304,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      // Abort any in-flight background save requests
-      if (abortControllerRef.current) {
+      // DON'T abort background saves - let them complete even after unmount
+      // Only abort if save hasn't started (saveLockRef is false)
+      if (abortControllerRef.current && !saveLockRef.current) {
         abortControllerRef.current.abort();
       }
     };
@@ -611,7 +615,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Save consultation before analyzing
       if (onSaveConsultation && summaryData) {
         try {
-          await onSaveConsultation(consultation, summaryData, patientDetails);
+          await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
           console.log('✅ Consultation saved before analysis');
         } catch (saveError) {
           console.error('Failed to save consultation:', saveError);
@@ -686,7 +690,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         // Auto-save the consultation after summarizing
         if (onSaveConsultation) {
           try {
-            await onSaveConsultation(consultation, data, patientDetails);
+            await onSaveConsultation(consultation, data, patientDetails, audioUrl);
             console.log('✅ Consultation saved after summarization');
           } catch (saveError) {
             console.error('Failed to save consultation:', saveError);
@@ -740,7 +744,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       // Step 2: Save consultation
       if (onSaveConsultation && summaryData) {
-        await onSaveConsultation(consultation, summaryData, patientDetails);
+        await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
         console.log('✅ Background save completed');
       }
     } catch (error: any) {
@@ -1409,6 +1413,12 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       const data = await response.json();
       console.log(`✅ Audio uploaded to GCS: ${data.gcs_uri}`);
+
+      // Save the audio URL to state so it can be included in the consultation
+      if (data.gcs_uri) {
+        setAudioUrl(data.gcs_uri);
+      }
+
       return data;
     } catch (error) {
       console.error('❌ Audio upload error:', error);
@@ -1789,7 +1799,14 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
                 <p className="text-[13px] text-gray-600 mb-4">Fill out the specialized clinical assessment form for this OB/GYN consultation during the appointment.</p>
                 <button
-                  onClick={() => setShowOBGynForm(true)}
+                  onClick={() => {
+                    // Check if this is an infertility appointment
+                    if (appointmentContext?.specialty_subtype === 'infertility' && onOpenInfertilityForm) {
+                      onOpenInfertilityForm();
+                    } else {
+                      setShowOBGynForm(true);
+                    }
+                  }}
                   className="w-full sm:w-auto px-4 py-2.5 bg-purple-600 text-white rounded-[8px] font-medium text-[14px] hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -1805,7 +1822,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         {/* Recording UI - embedded, slides down consultation */}
         {isRecording && (
           <div className="mb-6 bg-white border-2 border-aneya-teal rounded-[10px] p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col gap-6 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
               {/* Left: Recording indicator */}
               <div className="flex items-center gap-3 sm:gap-4">
                 {/* Animated mic icon */}
@@ -1833,36 +1850,36 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               </div>
 
               {/* Right: Control buttons - stack on mobile */}
-              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="flex items-stretch justify-between sm:justify-end gap-3 sm:gap-3 w-full sm:w-auto">
                 {/* Cancel button */}
                 <button
                   onClick={cancelRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
+                  className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
                 >
-                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <span className="hidden xs:inline sm:inline">Cancel</span>
+                  <span className="text-sm sm:text-[14px]">Cancel</span>
                 </button>
 
                 {/* Pause/Resume button */}
                 <button
                   onClick={isPaused ? resumeRecording : pauseRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
+                  className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
                 >
                   {isPaused ? (
                     <>
-                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                       </svg>
-                      <span className="hidden xs:inline sm:inline">Resume</span>
+                      <span className="text-sm sm:text-[14px]">Resume</span>
                     </>
                   ) : (
                     <>
-                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
-                      <span className="hidden xs:inline sm:inline">Pause</span>
+                      <span className="text-sm sm:text-[14px]">Pause</span>
                     </>
                   )}
                 </button>
@@ -1870,18 +1887,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {/* Stop button */}
                 <button
                   onClick={stopRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
+                  className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
                 >
-                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                     <rect x="6" y="6" width="8" height="8" rx="1" />
                   </svg>
-                  <span className="hidden xs:inline sm:inline">Stop</span>
+                  <span className="text-sm sm:text-[14px]">Stop</span>
                 </button>
               </div>
             </div>
 
             {/* Two-column transcript display during recording */}
-            <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="hidden sm:grid sm:grid-cols-2 gap-4 mt-6">
               {/* LEFT: Real-time transcript from WebSocket */}
               <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -2106,6 +2123,22 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             <label className="block mb-2 text-[14px] font-medium text-aneya-navy">
               Consultation Summary
             </label>
+
+            {/* Audio Recording */}
+            {audioUrl && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-aneya-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <h5 className="text-[14px] font-semibold text-aneya-navy">
+                    Consultation Recording
+                  </h5>
+                </div>
+                <AudioPlayer audioUrl={audioUrl} />
+              </div>
+            )}
+
             <StructuredSummaryDisplay
               summaryData={consultationSummary}
               onUpdate={(updated) => setConsultationSummary(updated)}

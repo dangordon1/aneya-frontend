@@ -22,8 +22,10 @@ interface UseInfertilityFormsReturn {
 /**
  * Hook for managing infertility consultation forms
  * Provides CRUD operations and auto-save functionality
+ * @param patientId - Optional patient ID to filter forms
+ * @param userId - Optional user ID (Firebase user ID) for created_by/updated_by fields
  */
-export function useInfertilityForms(patientId?: string): UseInfertilityFormsReturn {
+export function useInfertilityForms(patientId?: string, userId?: string): UseInfertilityFormsReturn {
   const [forms, setForms] = useState<InfertilityForm[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +87,9 @@ export function useInfertilityForms(patientId?: string): UseInfertilityFormsRetu
       setError(null);
 
       try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('User not authenticated');
+        // Use provided userId (Firebase user ID) or throw error if not provided
+        if (!userId) {
+          throw new Error('User ID is required to create form');
         }
 
         const formData = {
@@ -99,8 +100,8 @@ export function useInfertilityForms(patientId?: string): UseInfertilityFormsRetu
           filled_by: input.filled_by || null,
           vitals_record_id: input.vitals_record_id || null,
           infertility_data: input.infertility_data || {},
-          created_by: user.id,
-          updated_by: user.id,
+          created_by: userId,
+          updated_by: userId,
         };
 
         const { data, error: createError } = await supabase
@@ -125,7 +126,7 @@ export function useInfertilityForms(patientId?: string): UseInfertilityFormsRetu
         return null;
       }
     },
-    []
+    [userId]
   );
 
   /**
@@ -136,15 +137,14 @@ export function useInfertilityForms(patientId?: string): UseInfertilityFormsRetu
       setError(null);
 
       try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('User not authenticated');
+        // Use provided userId (Firebase user ID) or throw error if not provided
+        if (!userId) {
+          throw new Error('User ID is required to update form');
         }
 
         const updateData = {
           ...input,
-          updated_by: user.id,
+          updated_by: userId,
           updated_at: new Date().toISOString(),
         };
 
@@ -173,7 +173,7 @@ export function useInfertilityForms(patientId?: string): UseInfertilityFormsRetu
         return null;
       }
     },
-    []
+    [userId]
   );
 
   /**

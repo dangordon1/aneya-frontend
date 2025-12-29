@@ -1,53 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, Users, Clock, AlertCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { EditableSection } from './EditableSection';
-
-interface SummaryData {
-  success?: boolean;
-  summary?: string;
-  speakers?: {
-    doctor?: string;
-    patient?: string;
-  };
-  metadata?: {
-    patient_name?: string;
-    patient_location?: string;
-    consultation_date?: string;
-    key_demographic?: string;
-    duration_seconds?: number;
-    total_turns?: number;
-  };
-  timeline?: Array<{
-    event: string;
-    timeframe: string;
-    description: string;
-  }>;
-  clinical_summary?: {
-    chief_complaint?: string;
-    history_present_illness?: string;
-    review_of_systems?: Record<string, string>;
-    past_medical_history?: string;
-    medications_current?: string[];
-    allergies?: string;
-    physical_examination?: string;
-    investigations_ordered?: string[];
-    investigations_reviewed?: string[];
-    assessment?: string;
-    plan?: {
-      diagnostic?: string[];
-      therapeutic?: string[];
-      patient_education?: string[];
-      follow_up?: string;
-    };
-  };
-  key_concerns?: string[];
-  recommendations_given?: string[];
-  clinical_context?: {
-    special_populations?: string;
-    safety_considerations?: string;
-    red_flags?: string;
-  };
-}
+import { SummaryData } from '../types/database';
 
 interface StructuredSummaryDisplayProps {
   summaryData: SummaryData;
@@ -109,7 +63,6 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
   const timeline = summaryData.timeline || [];
   const keyConcerns = summaryData.key_concerns || [];
   const recommendations = summaryData.recommendations_given || [];
-  const context = summaryData.clinical_context || {};
 
   return (
     <div className="space-y-4">
@@ -122,7 +75,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
           >
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-aneya-teal" />
-              <h4 className="text-[16px] font-semibold text-aneya-navy">Patient Information</h4>
+              <h4 className="text-[16px] font-semibold text-aneya-navy">Consultation Information</h4>
             </div>
             {expandedSections.metadata ? (
               <ChevronUp className="w-5 h-5 text-aneya-navy" />
@@ -133,37 +86,35 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
 
           {expandedSections.metadata && (
             <div className="p-4 bg-white space-y-2">
-              {metadata.patient_name && (
-                <div className="flex gap-2">
-                  <span className="text-[14px] font-medium text-aneya-navy">Name:</span>
-                  <span className="text-[14px] text-aneya-navy">{metadata.patient_name}</span>
-                </div>
-              )}
-              {metadata.key_demographic && (
-                <div className="flex gap-2">
-                  <span className="text-[14px] font-medium text-aneya-navy">Status:</span>
-                  <span className="text-[14px] text-aneya-navy">{metadata.key_demographic}</span>
-                </div>
-              )}
-              {metadata.patient_location && (
+              {metadata.location && (
                 <div className="flex gap-2">
                   <span className="text-[14px] font-medium text-aneya-navy">Location:</span>
-                  <span className="text-[14px] text-aneya-navy">{metadata.patient_location}</span>
+                  <span className="text-[14px] text-aneya-navy">{metadata.location}</span>
                 </div>
               )}
-              {metadata.duration_seconds && (
+              {metadata.consultation_duration_seconds && (
                 <div className="flex gap-2">
                   <span className="text-[14px] font-medium text-aneya-navy">Duration:</span>
                   <span className="text-[14px] text-aneya-navy">
-                    {Math.floor(metadata.duration_seconds / 60)}m {Math.floor(metadata.duration_seconds % 60)}s
+                    {Math.floor(metadata.consultation_duration_seconds / 60)}m {Math.floor(metadata.consultation_duration_seconds % 60)}s
                   </span>
                 </div>
               )}
-              {summaryData.speakers && (
+              {metadata.patient_info && Object.keys(metadata.patient_info).length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[14px] font-medium text-aneya-navy">Patient Info:</span>
+                  {Object.entries(metadata.patient_info).map(([key, value]) => (
+                    <div key={key} className="pl-4 text-[13px] text-aneya-navy">
+                      {key}: {String(value)}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {summaryData.speakers && Object.keys(summaryData.speakers).length > 0 && (
                 <div className="flex gap-2">
                   <span className="text-[14px] font-medium text-aneya-navy">Speakers:</span>
                   <span className="text-[14px] text-aneya-navy">
-                    Doctor ({summaryData.speakers.doctor}), Patient ({summaryData.speakers.patient})
+                    {Object.entries(summaryData.speakers).map(([role, name]) => `${role} (${name})`).join(', ')}
                   </span>
                 </div>
               )}
@@ -368,17 +319,17 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
 
           {expandedSections.timeline && (
             <div className="p-4 bg-white space-y-3">
-              {timeline.map((event, idx) => (
+              {timeline.map((item, idx) => (
                 <div key={idx} className="flex gap-3 pb-3 border-b last:border-b-0 border-amber-100">
                   <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-[12px] font-bold mt-1">
                     {idx + 1}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h6 className="text-[14px] font-medium text-aneya-navy">{event.event}</h6>
-                      <span className="text-[12px] text-gray-500">({event.timeframe})</span>
+                      <h6 className="text-[14px] font-medium text-aneya-navy">{item.event || 'Event'}</h6>
+                      {item.time && <span className="text-[12px] text-gray-500">({item.time})</span>}
                     </div>
-                    <p className="text-[14px] text-aneya-navy">{event.description}</p>
+                    {item.details && <p className="text-[14px] text-aneya-navy">{item.details}</p>}
                   </div>
                 </div>
               ))}
@@ -389,8 +340,7 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
 
       {/* Key Information Section - Collapsible */}
       {((Array.isArray(keyConcerns) && keyConcerns.length > 0) ||
-        (Array.isArray(recommendations) && recommendations.length > 0) ||
-        context.special_populations) && (
+        (Array.isArray(recommendations) && recommendations.length > 0)) && (
         <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
           <button
             onClick={() => toggleSection('keyInfo')}
@@ -434,20 +384,6 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
                       <li key={idx} className="text-[14px] text-aneya-navy">{rec}</li>
                     ))}
                   </ul>
-                </div>
-              )}
-
-              {context.special_populations && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h6 className="text-[14px] font-medium text-aneya-navy mb-1">Special Populations:</h6>
-                  <p className="text-[14px] text-aneya-navy">{context.special_populations}</p>
-                </div>
-              )}
-
-              {context.safety_considerations && (
-                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                  <h6 className="text-[14px] font-medium text-aneya-navy mb-1">Safety Considerations:</h6>
-                  <p className="text-[14px] text-aneya-navy">{context.safety_considerations}</p>
                 </div>
               )}
             </div>

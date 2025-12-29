@@ -6,23 +6,24 @@ import {
   UpdateInfertilityFormInput,
 } from '../../types/database';
 
-interface InfertilityPreConsultationFormProps {
+interface InfertilityDuringConsultationFormProps {
   patientId: string;
   appointmentId: string;
   onComplete?: () => void;
+  onBack?: () => void;
   filledBy?: 'patient' | 'doctor';
   doctorUserId?: string;
 }
 
-export function InfertilityPreConsultationForm({
+export function InfertilityDuringConsultationForm({
   patientId,
   appointmentId,
   onComplete,
-  filledBy = 'patient',
+  onBack,
+  filledBy = 'doctor',
   doctorUserId,
-}: InfertilityPreConsultationFormProps) {
-  // Pass doctorUserId (Firebase user ID) to hook for created_by/updated_by fields
-  const { createForm, updateForm, getFormByAppointment } = useInfertilityForms(patientId, doctorUserId);
+}: InfertilityDuringConsultationFormProps) {
+  const { createForm, updateForm, getFormByAppointment } = useInfertilityForms(patientId);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<InfertilityFormData>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -52,7 +53,7 @@ export function InfertilityPreConsultationForm({
       const newForm = await createForm(patientId, {
         patient_id: patientId,
         appointment_id: appointmentId,
-        form_type: 'pre_consultation',
+        form_type: 'during_consultation',
         status: 'partial',
         filled_by: filledBy === 'doctor' ? doctorUserId || null : null,
         infertility_data: formData,
@@ -78,7 +79,7 @@ export function InfertilityPreConsultationForm({
         await createForm(patientId, {
           patient_id: patientId,
           appointment_id: appointmentId,
-          form_type: 'pre_consultation',
+          form_type: 'during_consultation',
           status: 'completed',
           filled_by: filledBy === 'doctor' ? doctorUserId || null : null,
           infertility_data: formData,
