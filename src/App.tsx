@@ -669,14 +669,9 @@ function MainApp() {
   };
 
   // Handler for analyzing consultations from PatientDetailView (uses selectedPatient from state)
-  const handleAnalyzeConsultationFromPatientView = async (consultation: Consultation) => {
-    if (!selectedPatient) {
-      alert('No patient selected');
-      return;
-    }
-
-    // Build patient details from selected patient
-    const patientDetails = buildPatientDetails(selectedPatient);
+  const handleAnalyzeConsultationFromPatientView = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
+    // Build patient details from appointment patient data
+    const patientDetails = buildPatientDetails(appointment.patient);
 
     // Get the text to analyze
     const textToAnalyze = consultation.original_transcript || consultation.consultation_text || '';
