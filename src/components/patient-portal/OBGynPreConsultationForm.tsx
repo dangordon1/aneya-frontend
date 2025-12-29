@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useOBGynForms } from '../../hooks/useOBGynForms';
-import { ProgressiveWizard, WizardStep } from '../ProgressiveWizard';
 import { Checkbox } from '../common';
 import {
   CreateOBGynFormInput,
@@ -18,7 +17,6 @@ interface OBGynPreConsultationFormProps {
   onComplete?: () => void;
   filledBy?: 'patient' | 'doctor'; // Indicates who is filling the form
   doctorUserId?: string; // Doctor's user ID if filled by doctor
-  displayMode?: 'wizard' | 'flat'; // Controls display style
 }
 
 // Helper function to calculate gestational age
@@ -36,10 +34,10 @@ export function OBGynPreConsultationForm({
   onComplete,
   filledBy = 'patient',
   doctorUserId,
-  displayMode = 'wizard',
 }: OBGynPreConsultationFormProps) {
-  const { createForm, updateForm, getFormByAppointment, autoSaveForm } = useOBGynForms(patientId);
+  const { createForm, updateForm, getFormByAppointment } = useOBGynForms(patientId);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<CreateOBGynFormInput>({
     form_type: 'pre_consultation',
     status: 'draft',
@@ -56,27 +54,16 @@ export function OBGynPreConsultationForm({
     }
   }, [appointmentId, getFormByAppointment]);
 
-  // Validation functions for each step
-  const validateStep1 = (): boolean => {
-    // Menstrual History - at least one field should be filled
-    const hasData = !!(formData.last_menstrual_period || formData.cycle_regularity !== undefined);
-    return hasData;
-  };
+  // Auto-save on form data changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentFormId && Object.keys(formData).length > 0) {
+        handleAutoSave();
+      }
+    }, 1000);
 
-  const validateStep2 = (): boolean => {
-    // Pregnancy Status & History - at least pregnancy status should be selected
-    return formData.pregnancy_status !== undefined;
-  };
-
-  const validateStep3 = (): boolean => {
-    // Contraception & Family Planning - at least contraception status should be selected
-    return formData.contraception_status !== undefined;
-  };
-
-  const validateStep4 = (): boolean => {
-    // Gynecological History - at least STI screening result should be selected
-    return formData.sti_screening_result !== undefined;
-  };
+    return () => clearTimeout(timer);
+  }, [formData, currentFormId]);
 
   // Step content components
   const Step1 = () => (
@@ -652,33 +639,7 @@ export function OBGynPreConsultationForm({
     </div>
   );
 
-  // Wizard step definitions
-  // Only show Contraception & Family Planning step if NOT already pregnant
-  const wizardSteps: WizardStep[] = [
-    {
-      title: 'Menstrual History',
-      content: <Step1 />,
-      validate: validateStep1,
-    },
-    {
-      title: 'Pregnancy Status & History',
-      content: <Step2 />,
-      validate: validateStep2,
-    },
-    // Skip contraception/family planning if already pregnant
-    ...(formData.pregnancy_status !== 'pregnant' ? [{
-      title: 'Contraception & Family Planning',
-      content: <Step3 />,
-      validate: validateStep3,
-    }] : []),
-    {
-      title: 'Gynecological History',
-      content: <Step4 />,
-      validate: validateStep4,
-    },
-  ];
-
-  const handleAutoSave = async (_stepIndex: number) => {
+  const handleAutoSave = async () => {
     if (!currentFormId) {
       // Create form if it doesn't exist yet
       const newForm = await createForm(patientId, {
@@ -695,45 +656,92 @@ export function OBGynPreConsultationForm({
         status: 'partial',
         filled_by: filledBy === 'doctor' ? doctorUserId : null,
       };
-      autoSaveForm(currentFormId, updateData);
+      await updateForm(currentFormId, updateData);
     }
   };
 
-  const handleComplete = async () => {
-    if (!currentFormId) {
-      // Create form if it doesn't exist
-      const newForm = await createForm(patientId, {
-        ...formData,
-        status: 'completed',
-        filled_by: filledBy === 'doctor' ? doctorUserId : null,
-      });
-      if (newForm) {
-        setCurrentFormId(newForm.id);
-      }
-    } else {
-      // Mark form as completed
-      await updateForm(currentFormId, {
-        ...formData,
-        status: 'completed',
-        filled_by: filledBy === 'doctor' ? doctorUserId : null,
-      });
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    // Call the completion callback
-    onComplete?.();
+    setIsSaving(true);
+    try {
+      if (!currentFormId) {
+        // Create form if it doesn't exist
+        const newForm = await createForm(patientId, {
+          ...formData,
+          status: 'completed',
+          filled_by: filledBy === 'doctor' ? doctorUserId : null,
+        });
+        if (newForm) {
+          setCurrentFormId(newForm.id);
+        }
+      } else {
+        // Mark form as completed
+        await updateForm(currentFormId, {
+          ...formData,
+          status: 'completed',
+          filled_by: filledBy === 'doctor' ? doctorUserId : null,
+        });
+      }
+
+      // Call the completion callback
+      onComplete?.();
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      alert('Failed to submit form. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="w-full">
-      <ProgressiveWizard
-        steps={wizardSteps}
-        onAutoSave={handleAutoSave}
-        onComplete={handleComplete}
-        displayMode={displayMode}
-        showProgressBar={displayMode === 'wizard'}
-        showStepNumbers={displayMode === 'wizard'}
-        allowSkip={false}
-      />
+    <div className="w-full max-w-4xl mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Section 1: Menstrual History */}
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+            Menstrual History
+          </h2>
+          <Step1 />
+        </div>
+
+        {/* Section 2: Pregnancy Status & History */}
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+            Pregnancy Status & History
+          </h2>
+          <Step2 />
+        </div>
+
+        {/* Section 3: Contraception & Family Planning - Only show if not pregnant */}
+        {formData.pregnancy_status !== 'pregnant' && (
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+              Contraception & Family Planning
+            </h2>
+            <Step3 />
+          </div>
+        )}
+
+        {/* Section 4: Gynecological History */}
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+            Gynecological History
+          </h2>
+          <Step4 />
+        </div>
+
+        {/* Submit Button */}
+        <div className="flex justify-end gap-3 pt-4">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="px-6 py-3 bg-aneya-teal text-white rounded-lg font-medium hover:bg-aneya-teal/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSaving ? 'Saving...' : 'Submit Form'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

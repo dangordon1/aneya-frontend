@@ -11,6 +11,7 @@ import { PastAppointmentCard } from './PastAppointmentCard';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
 import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
 import { InfertilityPreConsultationForm } from './patient-portal/InfertilityPreConsultationForm';
+import { AntenatalPreConsultationForm } from './patient-portal/AntenatalPreConsultationForm';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
@@ -111,6 +112,85 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
       // Could refetch the status here if needed
     }
     handleCloseOBGynFormModal();
+  };
+
+  const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    if (!consultation) {
+      console.error('No consultation to re-summarize');
+      return;
+    }
+
+    try {
+      // Get the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      // Prepare the request body
+      const requestBody = {
+        text: consultation.consultation_text || consultation.original_transcript || '',
+        original_text: consultation.original_transcript,
+        patient_info: consultation.patient_snapshot || {
+          patient_id: appointment.patient_id,
+          patient_age: appointment.patient?.date_of_birth
+            ? `${new Date().getFullYear() - new Date(appointment.patient.date_of_birth).getFullYear()} years old`
+            : undefined,
+        },
+        is_from_transcription: true,
+        transcription_language: consultation.transcription_language || 'en'
+      };
+
+      // Call the backend summarize endpoint
+      const response = await fetch(`${apiUrl}/api/summarize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to re-summarize: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.consultation_data) {
+        throw new Error('Invalid response from summarize endpoint');
+      }
+
+      // Update the consultation in the database
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        })
+        .eq('id', consultation.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Update local state
+      setConsultationsMap((prev) => ({
+        ...prev,
+        [appointment.id]: {
+          ...consultation,
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        }
+      }));
+
+      console.log('Consultation re-summarized successfully');
+    } catch (error) {
+      console.error('Error re-summarizing consultation:', error);
+      alert('Failed to re-summarize consultation. Please try again.');
+    }
   };
 
   // Fetch past appointments (completed or cancelled) - NON-BLOCKING
@@ -223,6 +303,18 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
               // Query infertility_forms table
               const { data: formData, error: formError } = await supabase
                 .from('infertility_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
+
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
+            } else if (apt.specialty_subtype === 'antenatal') {
+              // Query antenatal_forms table
+              const { data: formData, error: formError } = await supabase
+                .from('antenatal_forms')
                 .select('status')
                 .eq('appointment_id', apt.id)
                 .eq('form_type', 'pre_consultation')
@@ -466,8 +558,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       ? 'Infertility Pre-Consultation Form'
                       : selectedAppointmentForForm.specialty_subtype === 'antenatal'
                       ? 'Antenatal Care (ANC) Form'
-                      : selectedAppointmentForForm.specialty_subtype === 'routine_gyn'
-                      ? 'Routine Gynecology Form'
                       : 'OB/GYN Pre-Consultation Form'}
                   </h3>
                   <button
@@ -489,7 +579,14 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       appointmentId={selectedAppointmentForForm.id}
                       filledBy="doctor"
                       doctorUserId={user.id}
-                      displayMode={selectedAppointmentForForm.status === 'in_progress' ? 'flat' : 'wizard'}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  ) : selectedAppointmentForForm.specialty_subtype === 'antenatal' ? (
+                    <AntenatalPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
                       onComplete={handleOBGynFormComplete}
                     />
                   ) : (
@@ -498,7 +595,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       appointmentId={selectedAppointmentForForm.id}
                       filledBy="doctor"
                       doctorUserId={user.id}
-                      displayMode={selectedAppointmentForForm.status === 'in_progress' ? 'flat' : 'wizard'}
                       onComplete={handleOBGynFormComplete}
                     />
                   )}
@@ -581,6 +677,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                   appointment={appointment}
                   consultation={consultationsMap[appointment.id] || null}
                   onAnalyze={onAnalyzeConsultation}
+                  onResummarize={handleResummarize}
                 />
               ))}
             </div>

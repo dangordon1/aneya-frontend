@@ -340,7 +340,6 @@ export function AppointmentFormModal({
                   <option value="general_obgyn">General OB/GYN</option>
                   <option value="infertility">Infertility</option>
                   <option value="antenatal">Antenatal Care (ANC)</option>
-                  <option value="routine_gyn">Routine Gynecology</option>
                 </select>
               </div>
             )}

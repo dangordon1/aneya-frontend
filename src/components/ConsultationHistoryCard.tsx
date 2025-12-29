@@ -1,22 +1,25 @@
 import { useState } from 'react';
 import { Consultation } from '../types/database';
-import { ChevronDown, ChevronUp, Trash2, Brain, FileText, Activity, Pill, Stethoscope } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Brain, FileText, Activity, Pill, Stethoscope, RefreshCw, FlaskConical } from 'lucide-react';
 import { formatDateUK, formatTime24, formatDuration } from '../utils/dateHelpers';
 
 interface ConsultationHistoryCardProps {
   consultation: Consultation;
   onDelete?: (consultationId: string) => Promise<boolean>;
   onAnalyze?: (consultation: Consultation) => void;
+  onResummarize?: (consultation: Consultation) => Promise<void>;
 }
 
-export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze }: ConsultationHistoryCardProps) {
+export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onResummarize }: ConsultationHistoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResummarizing, setIsResummarizing] = useState(false);
 
   // Check if consultation has been analyzed
   const hasAiAnalysis = consultation.diagnoses && consultation.diagnoses.length > 0;
   const canAnalyze = !hasAiAnalysis && onAnalyze;
+  const canResummarize = onResummarize;
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card expansion
@@ -270,13 +273,28 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze }: C
             )}
           </div>
 
-          {/* Consultation Summary */}
+          {/* Consultation Summary with Re-summarize Button */}
           <div className="bg-blue-50 rounded-[12px] p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Activity className="w-4 h-4 text-aneya-navy" />
-              <h5 className="text-[14px] text-aneya-navy font-semibold">
-                Consultation Summary
-              </h5>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-aneya-navy" />
+                <h5 className="text-[14px] text-aneya-navy font-semibold">
+                  Consultation Summary
+                </h5>
+              </div>
+              {canResummarize && (
+                <button
+                  onClick={() => {
+                    setIsResummarizing(true);
+                    onResummarize(consultation).finally(() => setIsResummarizing(false));
+                  }}
+                  disabled={isResummarizing}
+                  className="px-3 py-1 bg-aneya-teal text-white rounded-[8px] text-[12px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isResummarizing ? 'animate-spin' : ''}`} />
+                  {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
+                </button>
+              )}
             </div>
             {summary ? (
               <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
@@ -288,6 +306,48 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze }: C
               </p>
             )}
           </div>
+
+          {/* Investigations Section */}
+          {consultation.summary_data?.clinical_summary &&
+           ((consultation.summary_data.clinical_summary.investigations_ordered?.length ?? 0) > 0 ||
+            (consultation.summary_data.clinical_summary.investigations_reviewed?.length ?? 0) > 0) && (
+            <div className="bg-indigo-50 rounded-[12px] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FlaskConical className="w-4 h-4 text-indigo-600" />
+                <h5 className="text-[14px] text-indigo-800 font-semibold">
+                  Investigations
+                </h5>
+              </div>
+
+              {consultation.summary_data.clinical_summary.investigations_ordered &&
+               consultation.summary_data.clinical_summary.investigations_ordered.length > 0 && (
+                <div className="mb-3">
+                  <h6 className="text-[13px] font-medium text-indigo-700 mb-1">Investigations Ordered:</h6>
+                  <ul className="space-y-1">
+                    {consultation.summary_data.clinical_summary.investigations_ordered.map((inv, idx) => (
+                      <li key={idx} className="text-[13px] text-gray-700 pl-3 border-l-2 border-indigo-300">
+                        {inv}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {consultation.summary_data.clinical_summary.investigations_reviewed &&
+               consultation.summary_data.clinical_summary.investigations_reviewed.length > 0 && (
+                <div>
+                  <h6 className="text-[13px] font-medium text-indigo-700 mb-1">Investigations Reviewed:</h6>
+                  <ul className="space-y-1">
+                    {consultation.summary_data.clinical_summary.investigations_reviewed.map((inv, idx) => (
+                      <li key={idx} className="text-[13px] text-gray-700 pl-3 border-l-2 border-indigo-300">
+                        {inv}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Treatments (from consultation - doctor's recommendations) */}
           <div className="bg-orange-50 rounded-[12px] p-4">
@@ -483,9 +543,15 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze }: C
 
           {/* Action Buttons */}
           <div className="flex gap-3 mt-2">
-            <button className="flex-1 px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors">
-              View Full Report
-            </button>
+            {canAnalyze && (
+              <button
+                onClick={() => onAnalyze && onAnalyze(consultation)}
+                className="flex-1 px-4 py-2 bg-aneya-navy text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
+              >
+                <Brain className="w-4 h-4" />
+                Run AI Analysis
+              </button>
+            )}
             {onDelete && (
               <button
                 onClick={handleDelete}

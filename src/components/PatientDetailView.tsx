@@ -5,6 +5,7 @@ import { usePatients } from '../hooks/usePatients';
 import { ConsultationHistoryCard } from './ConsultationHistoryCard';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAgeString, formatDateUK } from '../utils/dateHelpers';
+import { supabase } from '../lib/supabase';
 
 interface PatientDetailViewProps {
   patient: Patient;
@@ -21,7 +22,7 @@ export function PatientDetailView({
   onStartConsultation,
   onAnalyzeConsultation,
 }: PatientDetailViewProps) {
-  const { consultations, loading: consultationsLoading, deleteConsultation } = useConsultations(patient.id);
+  const { consultations, loading: consultationsLoading, deleteConsultation, refetch } = useConsultations(patient.id);
   const { updatePatient } = usePatients();
 
   const [isConsultationsExpanded, setIsConsultationsExpanded] = useState(true);
@@ -48,6 +49,68 @@ export function PatientDetailView({
   const handleCancelConditions = () => {
     setConditionsValue(patient.current_conditions || '');
     setIsEditingConditions(false);
+  };
+
+  const handleResummarize = async (consultation: Consultation) => {
+    try {
+      // Get the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      // Prepare the request body
+      const requestBody = {
+        text: consultation.consultation_text || consultation.original_transcript || '',
+        original_text: consultation.original_transcript,
+        patient_info: consultation.patient_snapshot || {
+          patient_id: patient.id,
+          patient_age: calculateAgeString(patient.date_of_birth),
+        },
+        is_from_transcription: true,
+        transcription_language: consultation.transcription_language || 'en'
+      };
+
+      // Call the backend summarize endpoint
+      const response = await fetch(`${apiUrl}/api/summarize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to re-summarize: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.consultation_data) {
+        throw new Error('Invalid response from summarize endpoint');
+      }
+
+      // Update the consultation in the database
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        })
+        .eq('id', consultation.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Refresh the consultations list to show updated data
+      await refetch(patient.id);
+
+      console.log('Consultation re-summarized successfully');
+    } catch (error) {
+      console.error('Error re-summarizing consultation:', error);
+      alert('Failed to re-summarize consultation. Please try again.');
+    }
   };
 
   return (
@@ -274,6 +337,7 @@ export function PatientDetailView({
                     consultation={consultation}
                     onDelete={deleteConsultation}
                     onAnalyze={onAnalyzeConsultation}
+                    onResummarize={handleResummarize}
                   />
                 ))
               )}

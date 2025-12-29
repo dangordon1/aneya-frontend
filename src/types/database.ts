@@ -85,7 +85,7 @@ export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'can
 
 // Multi-specialty appointment system (2-level: Specialty → Subtype)
 export type MedicalSpecialty = 'general' | 'obgyn' | 'cardiology' | 'neurology' | 'dermatology';
-export type OBGYNSubtype = 'infertility' | 'antenatal' | 'routine_gyn' | 'general_obgyn';
+export type OBGYNSubtype = 'infertility' | 'antenatal' | 'general_obgyn';
 
 // Backward compatible with existing types + new specialty subtypes
 export type AppointmentType =
@@ -106,7 +106,7 @@ export interface Appointment {
   status: AppointmentStatus;
   appointment_type: AppointmentType;
   specialty: string; // Medical specialty (general, obgyn, cardiology, etc.)
-  specialty_subtype: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
+  specialty_subtype: string | null; // Specialty subtype (infertility, antenatal, general_obgyn for OBGYN)
   reason: string | null;
   notes: string | null;
   consultation_id: string | null;
@@ -145,6 +145,7 @@ export interface Consultation {
   consultation_text: string; // Translated/final consultation text (English)
   original_transcript: string | null; // Original language transcript before translation
   transcription_language: string | null;
+  audio_url: string | null; // GCS URL for the consultation audio recording
   patient_snapshot: Record<string, any> | null;
   analysis_result: Record<string, any> | null; // AI analysis - null until analyze is called
   diagnoses: Record<string, any>[] | null; // AI diagnoses - empty until analyze is called
@@ -172,9 +173,17 @@ export interface SummaryData {
   clinical_summary?: {
     chief_complaint?: string;
     history_present_illness?: string;
+    review_of_systems?: Record<string, string>;
     physical_examination?: string;
+    investigations_ordered?: string[];
+    investigations_reviewed?: string[];
     assessment?: string;
-    plan?: string;
+    plan?: {
+      diagnostic?: string[];
+      therapeutic?: string[];
+      patient_education?: string[];
+      follow_up?: string;
+    };
   };
   key_concerns?: string[];
   recommendations_given?: string[];
@@ -232,7 +241,7 @@ export interface CreateAppointmentInput {
   duration_minutes: number;
   appointment_type: AppointmentType;
   specialty?: string; // Medical specialty (general, obgyn, cardiology, etc.)
-  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
+  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, general_obgyn for OBGYN)
   reason?: string | null;
   notes?: string | null;
   booked_by?: 'doctor' | 'patient' | null;
@@ -244,7 +253,7 @@ export interface UpdateAppointmentInput {
   status?: AppointmentStatus;
   appointment_type?: AppointmentType;
   specialty?: string; // Medical specialty (general, obgyn, cardiology, etc.)
-  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, routine_gyn for OBGYN)
+  specialty_subtype?: string | null; // Specialty subtype (infertility, antenatal, general_obgyn for OBGYN)
   reason?: string | null;
   notes?: string | null;
 }
@@ -255,6 +264,7 @@ export interface CreateConsultationInput {
   consultation_text: string; // Translated/final consultation text (English)
   original_transcript?: string | null; // Original language transcript before translation
   transcription_language?: string | null;
+  audio_url?: string | null; // GCS URL for the consultation audio recording
   patient_snapshot?: Record<string, any> | null;
   analysis_result?: Record<string, any> | null; // AI analysis - null until analyze is called
   diagnoses?: Record<string, any>[] | null; // AI diagnoses - empty until analyze is called
@@ -975,9 +985,21 @@ export interface InfertilityForm {
  */
 export interface InfertilityFormData {
   // Infertility Type
-  infertility_type?: InfertilityType;
+  infertility_type?: InfertilityType | string;
 
-  // Menstrual History (some overlap with generic obgyn)
+  // Basic Information (Pre-Consultation Form fields)
+  duration_of_marriage?: number | string;
+  consanguinity?: string;
+  contraception_used?: string;
+
+  // Menstrual History (flattened for form compatibility)
+  lmp?: string; // ISO date (YYYY-MM-DD)
+  duration_attempting_pregnancy?: number | string;
+  menstrual_cycle?: string; // 'regular' | 'irregular'
+  duration_of_flow?: number | string;
+  dysmenorrhoea?: string; // 'mild' | 'moderate' | 'severe' | 'none'
+
+  // Menstrual History (detailed - some overlap with generic obgyn)
   menstrual_history?: {
     lmp?: string; // ISO date (YYYY-MM-DD)
     cycle_length_days?: number;
@@ -994,6 +1016,27 @@ export interface InfertilityFormData {
     };
   };
 
+  // Complaints
+  complaints?: {
+    impotence?: boolean;
+    apareunia?: boolean;
+    premature_ejaculation?: boolean;
+    retrograde_ejaculation?: boolean;
+    vaginismus?: boolean;
+    dyspareunia?: boolean;
+    others?: string;
+  };
+
+  // Obstetric History
+  obstetric_history?: {
+    gravida?: number | string;
+    para?: number | string;
+    live_births?: number | string; // NEW - L
+    abortions?: number | string;
+    deaths?: number | string; // NEW - D
+  };
+  previous_obstetric_history?: string; // Textarea for detailed history
+
   // Sexual History
   sexual_history?: {
     frequency?: SexualFrequency;
@@ -1002,19 +1045,48 @@ export interface InfertilityFormData {
     dyspareunia_description?: string;
   };
 
-  // Medical History (specialized for infertility)
+  // Medical History (Wife - specialized for infertility)
   medical_history?: {
     diabetes?: boolean;
     hypertension?: boolean;
-    thyroid_disorder?: boolean;
+    thyroid?: boolean;
+    asthma?: boolean;
+    tuberculosis?: boolean;
+    cancer?: boolean; // NEW
+    hepa_b?: boolean; // NEW
+    alcohol?: boolean; // NEW
+    smoking?: boolean; // NEW
+    exercise?: boolean; // NEW
+    recreational_drugs?: boolean; // NEW
+    thyroid_disorder?: boolean; // Legacy field
     pcos?: boolean;
     endometriosis?: boolean;
+    others_checked?: boolean;
+    others?: string;
     previous_surgeries?: string[];
+  };
+
+  // Husband Medical History (NEW)
+  husband_medical_history?: {
+    diabetes?: boolean;
+    hypertension?: boolean;
+    thyroid?: boolean;
+    asthma?: boolean;
+    tuberculosis?: boolean;
+    cancer?: boolean;
+    hepa_b?: boolean;
+    alcohol?: boolean;
+    smoking?: boolean;
+    exercise?: boolean;
+    recreational_drugs?: boolean;
+    others_checked?: boolean;
+    others?: string;
   };
 
   // Previous Treatment
   previous_treatment?: {
     ovulation_induction?: boolean;
+    cycles?: number | string; // Generic cycles count
     iui_cycles?: number;
     ivf_cycles?: number;
     ivf_outcomes?: Array<{
@@ -1024,8 +1096,31 @@ export interface InfertilityFormData {
     }>;
   };
 
-  // Investigations
+  // Previous Surgeries (flat field for form)
+  previous_surgeries?: string;
+
+  // Family History
+  family_history?: string;
+
+  // General History (NEW)
+  general_history?: string;
+
+  // Immunization History (NEW)
+  immunization_history?: string;
+
+  // Investigations (form-compatible structure)
   investigations?: {
+    hb?: number | string;
+    rbs?: number | string;
+    hiv_hbsag_hcv?: string;
+    tb_bactec_cis?: string;
+    tsh?: number | string;
+    prl?: number | string;
+    e2?: number | string;
+    cbc?: string;
+    ogt_tha_c?: string;
+    findings?: string;
+    // Detailed structure (optional)
     hormones?: {
       fsh?: number;
       lh?: number;
@@ -1088,3 +1183,290 @@ export interface UpdateInfertilityFormInput {
   vitals_record_id?: string | null;
   infertility_data?: Partial<InfertilityFormData>;
 }
+
+// ============================================
+// Antenatal (ANC) Form Types
+// ============================================
+
+export interface PreviousPregnancy {
+  pregnancy_num: number; // I, II, III, etc.
+  mode_of_conception?: 'natural' | 'ivf' | 'iui' | 'other';
+  mode_of_delivery?: 'normal' | 'lscs' | 'forceps' | 'vacuum' | 'abortion';
+  sex?: 'M' | 'F';
+  age?: number; // Current age of child
+  alive?: boolean;
+  abortion?: boolean;
+  birth_weight_kg?: number;
+  year?: number;
+  breastfeeding_months?: number;
+  anomalies?: string;
+  complications?: string;
+}
+
+export interface RiskFactors {
+  previous_lscs?: boolean;
+  previous_pph?: boolean;
+  pih?: boolean; // Pregnancy-Induced Hypertension
+  gdm?: boolean; // Gestational Diabetes Mellitus
+  previous_stillbirth?: boolean;
+  previous_preterm?: boolean;
+  anemia?: boolean;
+  heart_disease?: boolean;
+  thyroid?: boolean;
+  other_conditions?: string;
+}
+
+export type USGScanType = 'dating' | 'nt_scan' | 'anomaly' | 'growth1' | 'growth2' | 'growth3' | 'other';
+
+export interface USGScan {
+  scan_type: USGScanType;
+  date: string; // ISO date
+  ga_weeks?: number; // Gestational age at scan
+  findings?: string;
+  crl?: number; // Crown-Rump Length (mm) - Dating scan
+  nt_thickness?: number; // Nuchal Translucency (mm) - NT scan
+  nasal_bone?: boolean; // NT scan
+  efw?: number; // Estimated Fetal Weight (grams) - Growth scans
+  afi?: number; // Amniotic Fluid Index
+  position?: 'cephalic' | 'breech' | 'transverse';
+  anatomical_survey?: string; // Anomaly scan details
+  anomalies?: string;
+}
+
+export interface DopplerStudy {
+  date: string;
+  umbilical_artery?: string;
+  middle_cerebral_artery?: string;
+  uterine_artery?: string;
+  findings?: string;
+}
+
+export interface NSTTest {
+  date: string;
+  result?: 'reactive' | 'non_reactive';
+  notes?: string;
+}
+
+export interface LabInvestigations {
+  first_trimester?: {
+    hemoglobin?: number;
+    blood_group?: string;
+    rh_factor?: string;
+    vdrl?: string;
+    hiv?: string;
+    hbsag?: string;
+    blood_sugar?: number;
+  };
+  second_trimester?: {
+    hemoglobin?: number;
+    triple_marker?: string;
+    quadruple_marker?: string;
+    gtt?: number; // Glucose Tolerance Test
+  };
+  third_trimester?: {
+    hemoglobin?: number;
+    blood_sugar?: number;
+    repeat_hiv?: string;
+    repeat_hbsag?: string;
+  };
+}
+
+export interface BirthPlan {
+  mode_of_delivery?: 'normal' | 'elective_lscs' | 'emergency_lscs' | 'instrumental';
+  ga_at_delivery?: number; // Gestational age (weeks)
+  iol_plan?: string; // Induction of Labour plan
+  epidural?: boolean;
+  support_person?: string;
+  episiotomy?: 'yes' | 'no' | 'as_needed';
+  breastfeeding_plan?: string;
+}
+
+export interface Referral {
+  date: string;
+  referred_to: string; // Specialist/Hospital
+  reason: string;
+  outcome?: string;
+}
+
+export interface AntenatalForm {
+  id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  form_type: FormType;
+  status: FormStatus;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  filled_by: string | null;
+
+  // Current Pregnancy
+  lmp?: string | null;
+  edd?: string | null; // Calculated EDD from LMP
+  scan_edd?: string | null; // EDD from ultrasound scan
+  clinical_edd?: string | null; // EDD from clinical examination
+  gestational_age_weeks?: number | null;
+  gravida?: number | null;
+  para?: number | null;
+  live?: number | null;
+  abortions?: number | null;
+
+  // Marriage & Social History
+  marriage_date?: string | null; // Date of marriage (or year)
+  cohabitation_period_months?: number | null; // Period of cohabitation in months
+  consanguinity?: 'consanguineous' | 'non_consanguineous' | null; // Consanguineous marriage status
+
+  // Partner Details
+  partner_name?: string | null;
+  partner_blood_group?: string | null;
+  partner_medical_history?: Record<string, any> | null;
+
+  // Obstetric History
+  previous_pregnancies?: PreviousPregnancy[] | null;
+
+  // Risk Factors
+  risk_factors?: RiskFactors | null;
+
+  // Medical/Surgical/Family History
+  medical_history?: Record<string, any> | null;
+  surgical_history?: string | null;
+  family_history?: Record<string, any> | null;
+
+  // Gynecological History
+  menstrual_history?: Record<string, any> | null;
+  contraception_history?: string | null;
+
+  // Immunization
+  immunization_status?: Record<string, any> | null;
+
+  // Current Symptoms
+  current_symptoms?: string | null;
+  complaints?: string | null;
+
+  // USG Scans
+  usg_scans?: USGScan[] | null;
+
+  // Antepartum Surveillance
+  doppler_studies?: DopplerStudy[] | null;
+  nst_tests?: NSTTest[] | null;
+  other_surveillance?: Record<string, any> | null;
+
+  // Lab Investigations
+  lab_investigations?: LabInvestigations | null;
+
+  // Birth Plan
+  birth_plan?: BirthPlan | null;
+
+  // Plan of Management
+  plan_mother?: string | null;
+  plan_fetus?: string | null;
+
+  // Hospitalization & Follow-up
+  admission_date?: string | null;
+  followup_plan?: string | null;
+  postpartum_visits?: string | null;
+
+  // Referrals
+  referrals?: Referral[] | null;
+}
+
+export interface AntenatalVisit {
+  id: string;
+  antenatal_form_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  visit_number: number;
+  visit_date: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+
+  gestational_age_weeks?: number | null;
+  weight_kg?: number | null;
+  blood_pressure_systolic?: number | null;
+  blood_pressure_diastolic?: number | null;
+  fundal_height_cm?: number | null;
+  presentation?: 'cephalic' | 'breech' | 'transverse' | null;
+  fetal_heart_rate?: number | null;
+  urine_albumin?: string | null;
+  urine_sugar?: string | null;
+  edema?: boolean | null;
+  edema_location?: string | null;
+  remarks?: string | null;
+  complaints?: string | null;
+  clinical_notes?: string | null;
+  treatment_given?: string | null;
+  next_visit_plan?: string | null;
+}
+
+export interface CreateAntenatalFormInput {
+  appointment_id?: string | null;
+  form_type: FormType;
+  status?: FormStatus;
+  filled_by?: string | null;
+  lmp?: string | null;
+  edd?: string | null;
+  scan_edd?: string | null;
+  clinical_edd?: string | null;
+  gestational_age_weeks?: number | null;
+  gravida?: number | null;
+  para?: number | null;
+  live?: number | null;
+  abortions?: number | null;
+  marriage_date?: string | null;
+  cohabitation_period_months?: number | null;
+  consanguinity?: 'consanguineous' | 'non_consanguineous' | null;
+  partner_name?: string | null;
+  partner_blood_group?: string | null;
+  partner_medical_history?: Record<string, any> | null;
+  previous_pregnancies?: PreviousPregnancy[] | null;
+  risk_factors?: RiskFactors | null;
+  medical_history?: Record<string, any> | null;
+  surgical_history?: string | null;
+  family_history?: Record<string, any> | null;
+  menstrual_history?: Record<string, any> | null;
+  contraception_history?: string | null;
+  immunization_status?: Record<string, any> | null;
+  current_symptoms?: string | null;
+  complaints?: string | null;
+  usg_scans?: USGScan[] | null;
+  doppler_studies?: DopplerStudy[] | null;
+  nst_tests?: NSTTest[] | null;
+  other_surveillance?: Record<string, any> | null;
+  lab_investigations?: LabInvestigations | null;
+  birth_plan?: BirthPlan | null;
+  plan_mother?: string | null;
+  plan_fetus?: string | null;
+  admission_date?: string | null;
+  followup_plan?: string | null;
+  postpartum_visits?: string | null;
+  referrals?: Referral[] | null;
+}
+
+export interface UpdateAntenatalFormInput extends Partial<CreateAntenatalFormInput> {
+  status?: FormStatus;
+}
+
+export interface CreateAntenatalVisitInput {
+  antenatal_form_id: string;
+  visit_number: number;
+  visit_date: string;
+  gestational_age_weeks?: number | null;
+  weight_kg?: number | null;
+  blood_pressure_systolic?: number | null;
+  blood_pressure_diastolic?: number | null;
+  fundal_height_cm?: number | null;
+  presentation?: 'cephalic' | 'breech' | 'transverse' | null;
+  fetal_heart_rate?: number | null;
+  urine_albumin?: string | null;
+  urine_sugar?: string | null;
+  edema?: boolean | null;
+  edema_location?: string | null;
+  remarks?: string | null;
+  complaints?: string | null;
+  clinical_notes?: string | null;
+  treatment_given?: string | null;
+  next_visit_plan?: string | null;
+}
+
+export interface UpdateAntenatalVisitInput extends Partial<CreateAntenatalVisitInput> {}

@@ -120,34 +120,10 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
             throw new Error('No data returned from save');
           }
 
-          // If this consultation is linked to an appointment, update the appointment status
-          if (input.appointment_id) {
-            console.log('Updating appointment status to completed:', input.appointment_id);
-            // Also retry the appointment update
-            for (let updateAttempt = 1; updateAttempt <= maxAttempts; updateAttempt++) {
-              const { error: updateError } = await supabase
-                .from('appointments')
-                .update({
-                  status: 'completed',
-                  consultation_id: data.id
-                })
-                .eq('id', input.appointment_id);
-
-              if (updateError) {
-                if (isRetryableError(updateError) && updateAttempt < maxAttempts) {
-                  const delay = Math.min(500 * Math.pow(2, updateAttempt - 1), 5000);
-                  console.warn(`Network error updating appointment, retrying in ${delay}ms...`);
-                  await sleep(delay);
-                  continue;
-                }
-                console.error('Error updating appointment status:', updateError);
-                // Don't fail the consultation save if appointment update fails
-              } else {
-                console.log('Appointment marked as completed');
-              }
-              break;
-            }
-          }
+          // Appointment status update is now handled by database trigger
+          // See migration: 012_appointment_status_trigger.sql
+          // The trigger automatically updates appointment.status to 'completed'
+          // when a consultation is saved with an appointment_id
 
           setConsultations((prev) => [data, ...prev]);
           console.log('Consultation saved successfully');

@@ -2,11 +2,11 @@
  * Audio Chunk Extraction Utilities
  *
  * Extracts overlapping audio chunks from recorded blobs for real-time diarization.
- * Chunks include 5-second overlap to enable speaker ID matching across segments.
+ * Chunks include 10-second overlap to enable speaker ID matching across segments.
  */
 
-const CHUNK_DURATION = 30; // seconds
-const OVERLAP_DURATION = 5; // seconds
+const CHUNK_DURATION = 60; // seconds
+const OVERLAP_DURATION = 10; // seconds
 
 // Store the WebM initialization segment (first blob with codec headers)
 // This needs to be prepended to all chunks after chunk 0 so FFmpeg can decode them
@@ -32,13 +32,13 @@ export function resetWebMInitSegment() {
  * Extract audio chunk with overlap from MediaRecorder blobs
  *
  * For chunk N:
- * - Audio: (N*30 - 5) to (N*30 + 30) seconds
- * - Overlap: First 5 seconds are shared with previous chunk
+ * - Audio: (N*60 - 10) to (N*60 + 60) seconds
+ * - Overlap: First 10 seconds are shared with previous chunk
  *
  * Example:
- * - Chunk 0: 0-30s (no overlap)
- * - Chunk 1: 25-60s (25-30s overlaps with Chunk 0)
- * - Chunk 2: 55-90s (55-60s overlaps with Chunk 1)
+ * - Chunk 0: 0-60s (no overlap)
+ * - Chunk 1: 50-120s (50-60s overlaps with Chunk 0)
+ * - Chunk 2: 110-180s (110-120s overlaps with Chunk 1)
  */
 export function extractAudioChunk(
   allBlobs: Blob[],

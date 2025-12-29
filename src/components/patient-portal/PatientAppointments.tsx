@@ -375,7 +375,44 @@ function ConsultationModal({ consultation, onClose }: { consultation: Consultati
               {summary.clinical_summary.plan && (
                 <div>
                   <h4 className="font-medium text-aneya-navy mb-2">Treatment Plan</h4>
-                  <p className="text-gray-700">{summary.clinical_summary.plan}</p>
+                  <div className="space-y-3 text-gray-700">
+                    {summary.clinical_summary.plan.diagnostic && summary.clinical_summary.plan.diagnostic.length > 0 && (
+                      <div>
+                        <h5 className="font-medium text-sm text-aneya-navy mb-1">Diagnostic:</h5>
+                        <ul className="list-disc list-inside space-y-1 pl-2">
+                          {summary.clinical_summary.plan.diagnostic.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {summary.clinical_summary.plan.therapeutic && summary.clinical_summary.plan.therapeutic.length > 0 && (
+                      <div>
+                        <h5 className="font-medium text-sm text-aneya-navy mb-1">Therapeutic:</h5>
+                        <ul className="list-disc list-inside space-y-1 pl-2">
+                          {summary.clinical_summary.plan.therapeutic.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {summary.clinical_summary.plan.patient_education && summary.clinical_summary.plan.patient_education.length > 0 && (
+                      <div>
+                        <h5 className="font-medium text-sm text-aneya-navy mb-1">Patient Education:</h5>
+                        <ul className="list-disc list-inside space-y-1 pl-2">
+                          {summary.clinical_summary.plan.patient_education.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {summary.clinical_summary.plan.follow_up && (
+                      <div>
+                        <h5 className="font-medium text-sm text-aneya-navy mb-1">Follow-up:</h5>
+                        <p className="pl-2">{summary.clinical_summary.plan.follow_up}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </>
