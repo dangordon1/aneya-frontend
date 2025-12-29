@@ -1,17 +1,17 @@
-import { useState } from 'react';
-import { Patient, Consultation } from '../types/database';
-import { useConsultations } from '../hooks/useConsultations';
+import { useState, useEffect } from 'react';
+import { Patient, Consultation, AppointmentWithPatient } from '../types/database';
 import { usePatients } from '../hooks/usePatients';
-import { ConsultationHistoryCard } from './ConsultationHistoryCard';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { PastAppointmentCard } from './PastAppointmentCard';
+import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { calculateAgeString, formatDateUK } from '../utils/dateHelpers';
+import { supabase } from '../lib/supabase';
 
 interface PatientDetailViewProps {
   patient: Patient;
   onBack: () => void;
   onEditPatient: (patient: Patient) => void;
   onStartConsultation: (patient: Patient) => void;
-  onAnalyzeConsultation?: (consultation: Consultation) => void;
+  onAnalyzeConsultation?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
 }
 
 export function PatientDetailView({
@@ -21,10 +21,12 @@ export function PatientDetailView({
   onStartConsultation,
   onAnalyzeConsultation,
 }: PatientDetailViewProps) {
-  const { consultations, loading: consultationsLoading, deleteConsultation } = useConsultations(patient.id);
   const { updatePatient } = usePatients();
 
-  const [isConsultationsExpanded, setIsConsultationsExpanded] = useState(true);
+  const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
+  const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [isEditingMedications, setIsEditingMedications] = useState(false);
   const [isEditingConditions, setIsEditingConditions] = useState(false);
   const [medicationsValue, setMedicationsValue] = useState(patient.current_medications || '');
@@ -48,6 +50,121 @@ export function PatientDetailView({
   const handleCancelConditions = () => {
     setConditionsValue(patient.current_conditions || '');
     setIsEditingConditions(false);
+  };
+
+  // Fetch past appointments for this patient
+  const fetchPastAppointments = async () => {
+    try {
+      setAppointmentsLoading(true);
+
+      // First query: Get appointments (without consultations)
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select('*, patient:patients(*)')
+        .eq('patient_id', patient.id)
+        .in('status', ['completed', 'cancelled'])
+        .order('scheduled_time', { ascending: false });
+
+      if (appointmentsError) throw appointmentsError;
+
+      setPastAppointments(appointmentsData || []);
+
+      // Second query: Get consultations for appointments that have them
+      const consultationIds = (appointmentsData || [])
+        .filter(apt => apt.consultation_id)
+        .map(apt => apt.consultation_id as string);
+
+      if (consultationIds.length > 0) {
+        const { data: consultationsData, error: consultationsError } = await supabase
+          .from('consultations')
+          .select('*')
+          .in('id', consultationIds);
+
+        if (consultationsError) throw consultationsError;
+
+        // Build consultations map by appointment_id
+        const map: Record<string, Consultation> = {};
+        (consultationsData || []).forEach((consultation: Consultation) => {
+          if (consultation.appointment_id) {
+            map[consultation.appointment_id] = consultation;
+          }
+        });
+        setConsultationsMap(map);
+      }
+    } catch (error) {
+      console.error('Error fetching past appointments:', error);
+    } finally {
+      setAppointmentsLoading(false);
+    }
+  };
+
+  // Fetch appointments on mount and when patient changes
+  useEffect(() => {
+    fetchPastAppointments();
+  }, [patient.id]);
+
+  const handleResummarize = async (_appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    if (!consultation) return;
+
+    try {
+      // Get the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      // Prepare the request body
+      const requestBody = {
+        text: consultation.consultation_text || consultation.original_transcript || '',
+        original_text: consultation.original_transcript,
+        patient_info: consultation.patient_snapshot || {
+          patient_id: patient.id,
+          patient_age: calculateAgeString(patient.date_of_birth),
+        },
+        is_from_transcription: true,
+        transcription_language: consultation.transcription_language || 'en'
+      };
+
+      // Call the backend summarize endpoint
+      const response = await fetch(`${apiUrl}/api/summarize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to re-summarize: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.consultation_data) {
+        throw new Error('Invalid response from summarize endpoint');
+      }
+
+      // Update the consultation in the database
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        })
+        .eq('id', consultation.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Refresh the appointments list to show updated data
+      await fetchPastAppointments();
+
+      console.log('Consultation re-summarized successfully');
+    } catch (error) {
+      console.error('Error re-summarizing consultation:', error);
+      alert('Failed to re-summarize consultation. Please try again.');
+    }
   };
 
   return (
@@ -235,48 +352,39 @@ export function PatientDetailView({
           )}
         </section>
 
-        {/* Previous Consultations */}
-        <section className="mb-6">
-          <button
-            onClick={() => setIsConsultationsExpanded(!isConsultationsExpanded)}
-            className="w-full flex items-center justify-between p-4 bg-white border-2 border-aneya-teal rounded-[10px] hover:border-aneya-navy transition-colors mb-3"
-          >
-            <div className="flex items-center gap-3">
-              <h2 className="text-[20px] text-aneya-navy">Previous Consultations</h2>
-              <span className="text-[14px] text-gray-500">
-                ({consultations.length} {consultations.length === 1 ? 'consultation' : 'consultations'})
+        {/* Past Appointments */}
+        <section className="mt-12 border-t border-gray-300 pt-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-[24px] text-aneya-navy font-semibold">
+              Past Appointments
+            </h2>
+            {pastAppointments.length > 0 && (
+              <span className="text-sm text-gray-500">
+                {pastAppointments.length} of {pastAppointments.length}
               </span>
-            </div>
-            {isConsultationsExpanded ? (
-              <ChevronUp className="w-5 h-5 text-aneya-navy" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-aneya-navy" />
             )}
-          </button>
+          </div>
 
-          {isConsultationsExpanded && (
-            <div className="space-y-3">
-              {consultationsLoading ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 mx-auto mb-2 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
-                  <p className="text-[14px] text-gray-600">Loading consultations...</p>
-                </div>
-              ) : consultations.length === 0 ? (
-                <div className="bg-white rounded-[16px] p-8 text-center border-2 border-gray-200">
-                  <p className="text-[15px] text-gray-600">
-                    No previous consultations on record
-                  </p>
-                </div>
-              ) : (
-                consultations.map((consultation) => (
-                  <ConsultationHistoryCard
-                    key={consultation.id}
-                    consultation={consultation}
-                    onDelete={deleteConsultation}
-                    onAnalyze={onAnalyzeConsultation}
-                  />
-                ))
-              )}
+          {appointmentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pastAppointments.length === 0 ? (
+            <div className="bg-gray-50 rounded-[16px] p-8 text-center border border-gray-200">
+              <p className="text-[14px] text-gray-600">
+                No completed or cancelled appointments yet
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto space-y-4 pr-2">
+              {pastAppointments.map((appointment) => (
+                <PastAppointmentCard
+                  key={appointment.id}
+                  appointment={appointment}
+                  consultation={consultationsMap[appointment.id] || null}
+                  onClick={() => setSelectedAppointmentDetail(appointment)}
+                />
+              ))}
             </div>
           )}
         </section>
@@ -312,6 +420,18 @@ export function PatientDetailView({
             Edit Patient
           </button>
         </div>
+
+        {/* Appointment Detail Modal */}
+        {selectedAppointmentDetail && (
+          <AppointmentDetailModal
+            isOpen={true}
+            onClose={() => setSelectedAppointmentDetail(null)}
+            appointment={selectedAppointmentDetail}
+            consultation={consultationsMap[selectedAppointmentDetail.id] || null}
+            onAnalyze={onAnalyzeConsultation}
+            onResummarize={handleResummarize}
+          />
+        )}
       </div>
     </div>
   );

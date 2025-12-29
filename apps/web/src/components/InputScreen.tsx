@@ -4,8 +4,30 @@ import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LAN
 import { formatTime24 } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
+import { AudioPlayer } from './AudioPlayer';
 import { LocationSelector } from './LocationSelector';
 import { useAuth } from '../contexts/AuthContext';
+import { requiresOBGynForms } from '../utils/specialtyHelpers';
+import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
+import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
+import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
+
+interface ChunkStatus {
+  index: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  startTime: number;
+  endTime: number;
+  error?: string;
+}
+
+interface DiarizedSegment {
+  speaker_id: string;
+  speaker_role?: string;
+  text: string;
+  start_time: number;
+  end_time: number;
+  chunk_index: number;
+}
 
 export interface PatientDetails {
   name: string;
@@ -26,7 +48,7 @@ interface InputScreenProps {
     transcript?: string,
     summary?: string
   ) => void;
-  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => Promise<void>;
+  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails, audioUrl?: string | null) => Promise<void>;
   onUpdateConsultation?: (summaryResponse: any) => Promise<void>;
   onCloseConsultation?: () => void;
   onBack?: () => void;
@@ -34,6 +56,7 @@ interface InputScreenProps {
   appointmentContext?: AppointmentWithPatient;
   locationOverride?: string | null;
   onLocationChange?: (location: string | null) => void;
+  onOpenInfertilityForm?: () => void;
 }
 
 const SAMPLE_CONSULTATION_TEXT = `Doctor: Good morning, Mr. Thompson. I'm Dr. Patel. What brings you in today?
@@ -131,13 +154,14 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
   currentConditions: 'Type 2 Diabetes Mellitus, Hypertension',
 };
 
-export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
+export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange, onOpenInfertilityForm }: InputScreenProps) {
   const { user } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
   const [consultationSummary, setConsultationSummary] = useState<any>(null); // Consultation Summary (structured data from summarize API)
   const [originalTranscript, setOriginalTranscript] = useState(''); // Original language transcript
+  const [audioUrl, setAudioUrl] = useState<string | null>(null); // GCS URL for the audio recording
 
   // Initialize patient details based on preFilledPatient or default
   const initialPatientDetails: PatientDetails = preFilledPatient ? {
@@ -160,8 +184,13 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ready' | 'error'>('checking');
   const [isSummarizing, setIsSummarizing] = useState(false);
 
+  // Background save tracking
+  const [isSavingInBackground, setIsSavingInBackground] = useState(false);
+  const saveLockRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Real-time transcription state
-  const [interimTranscript, setInterimTranscript] = useState('');
+  const [_interimTranscript, setInterimTranscript] = useState('');
   const [isConnectingToTranscription, setIsConnectingToTranscription] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string>(''); // For detailed progress feedback
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
@@ -177,8 +206,53 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [diarizationData, setDiarizationData] = useState<any>(null);
   const [showSpeakerMapping, setShowSpeakerMapping] = useState(false);
 
+  // Chunked diarization state (used by processNextChunk, UI display will be added in separate task)
+  const [chunkStatuses, setChunkStatuses] = useState<ChunkStatus[]>([]);
+  const [diarizedSegments, setDiarizedSegments] = useState<DiarizedSegment[]>([]);
+  const diarizedSegmentsRef = useRef<DiarizedSegment[]>([]); // Ref to access latest value
+  const [speakerRoles, setSpeakerRoles] = useState<Record<string, string>>({});
+  const speakerRolesRef = useRef<Record<string, string>>({}); // Ref to access latest value
+  const [lastProcessedChunkIndex, setLastProcessedChunkIndex] = useState(-1);
+
+  // CRITICAL: Lock to prevent parallel chunk processing
+  // Sarvam batch jobs take 30-120s, so we must process chunks sequentially
+  const [isProcessingChunk, setIsProcessingChunk] = useState(false);
+
+  // Keep refs in sync with state for accessing latest values in async functions
+  useEffect(() => {
+    diarizedSegmentsRef.current = diarizedSegments;
+  }, [diarizedSegments]);
+
+  useEffect(() => {
+    speakerRolesRef.current = speakerRoles;
+  }, [speakerRoles]);
+
+  // Debug: log diarized segments and chunk status when they update
+  useEffect(() => {
+    if (diarizedSegments.length > 0) {
+      console.log(`📝 Diarized segments updated: ${diarizedSegments.length} total segments`);
+      console.log('Latest segments:', diarizedSegments.slice(-3));
+    }
+  }, [diarizedSegments.length]);
+
+  useEffect(() => {
+    if (chunkStatuses.length > 0) {
+      const summary = chunkStatuses.map(c => `${c.index}:${c.status}`).join(', ');
+      console.log(`📊 Chunk status: [${summary}]`);
+    }
+  }, [chunkStatuses]);
+
+  useEffect(() => {
+    if (Object.keys(speakerRoles).length > 0) {
+      console.log('👥 Speaker roles:', speakerRoles);
+    }
+  }, [speakerRoles]);
+
   // Recording consent modal state
   const [showConsentModal, setShowConsentModal] = useState(false);
+
+  // OB/GYN during-consultation form state
+  const [showOBGynForm, setShowOBGynForm] = useState(false);
 
   // Audio recording refs
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -223,8 +297,197 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      // DON'T abort background saves - let them complete even after unmount
+      // Only abort if save hasn't started (saveLockRef is false)
+      if (abortControllerRef.current && !saveLockRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, []);
+
+  // Process a chunk (regular or final) for real-time diarization
+  const processChunk = useCallback(async (chunkInfo: any) => {
+    try {
+      const nextIndex = chunkInfo.index;
+
+      // Check if chunk already exists (prevent duplicate processing)
+      const chunkExists = chunkStatuses.some(c => c.index === nextIndex);
+      if (chunkExists) {
+        console.warn(`⚠️  Chunk ${nextIndex} already processing/processed, skipping`);
+        return;
+      }
+
+      // Set processing lock to prevent parallel chunks
+      setIsProcessingChunk(true);
+
+      // Update chunk status to processing
+      setChunkStatuses(prev => [
+        ...prev,
+        {
+          index: nextIndex,
+          status: 'processing',
+          startTime: chunkInfo.startTime,
+          endTime: chunkInfo.endTime
+        }
+      ]);
+
+      // Prepare FormData for API call
+      const formData = new FormData();
+      formData.append('audio', chunkInfo.audioBlob, `chunk-${nextIndex}.webm`);
+      formData.append('chunk_index', nextIndex.toString());
+      formData.append('chunk_start', chunkInfo.startTime.toString());
+      formData.append('chunk_end', chunkInfo.endTime.toString());
+      formData.append('language', consultationLanguage);
+
+      // Send to backend for diarization
+      const response = await fetch(`${API_URL}/api/diarize-chunk`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`Chunk diarization failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Chunk ${nextIndex} diarized: ${data.detected_speakers.length} speakers, ${data.segments.length} segments`);
+
+      // Update chunk status to completed
+      setChunkStatuses(prev =>
+        prev.map(c => c.index === nextIndex ? { ...c, status: 'completed' } : c)
+      );
+
+      // If this is not the first chunk, match speakers with previous chunk
+      let remappedSegments = data.segments;
+      if (nextIndex > 0 && data.start_overlap_stats) {
+        // Get previous chunk's end_overlap_stats from state
+        setChunkStatuses(prev => {
+          const prevChunkData = prev.find(c => c.index === nextIndex - 1);
+          if (prevChunkData && (prevChunkData as any).endOverlapStats) {
+            // Match speakers across chunks
+            const speakerMapping = matchSpeakersAcrossChunks(
+              (prevChunkData as any).endOverlapStats,
+              data.start_overlap_stats
+            );
+
+            // Remap speaker IDs in segments
+            remappedSegments = data.segments.map((seg: any) => ({
+              ...seg,
+              speaker_id: speakerMapping.get(seg.speaker_id) || seg.speaker_id
+            }));
+
+            console.log(`🔀 Remapped speakers for chunk ${nextIndex}:`, Object.fromEntries(speakerMapping));
+          }
+          return prev;
+        });
+      }
+
+      // Label segments with speaker IDs (roles will be identified during summarization)
+      const labeledSegments = remappedSegments.map((seg: any) => ({
+        ...seg,
+        speaker_role: seg.speaker_id,  // Use speaker_id directly (e.g., "speaker_0", "speaker_1")
+        chunk_index: nextIndex,
+        // Adjust timestamps to global recording time
+        start_time: chunkInfo.startTime + seg.start_time,
+        end_time: chunkInfo.startTime + seg.end_time
+      }));
+
+      // Merge segments into global list (deduplicate overlaps)
+      setDiarizedSegments(prev => {
+        // Filter out duplicates using time-based and text similarity
+        const newSegments = labeledSegments.filter((newSeg: any) => {
+          // Check if this segment is too similar to any existing segment
+          const isDuplicate = prev.some(existingSeg => {
+            // Same speaker within 2 seconds with similar text
+            const timeDiff = Math.abs(newSeg.start_time - existingSeg.start_time);
+            const sameOrSimilarTime = timeDiff < 2.0;
+            const sameSpeaker = newSeg.speaker_id === existingSeg.speaker_id;
+
+            // Check text similarity (normalized)
+            const normalizeText = (text: string) => text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+            const newText = normalizeText(newSeg.text);
+            const existingText = normalizeText(existingSeg.text);
+
+            // Consider duplicate if same speaker, close in time, and text overlaps significantly
+            const textMatch = newText === existingText ||
+                              newText.includes(existingText) ||
+                              existingText.includes(newText);
+
+            return sameOrSimilarTime && sameSpeaker && textMatch;
+          });
+
+          return !isDuplicate;
+        });
+
+        console.log(`📥 Adding ${newSegments.length} new segments (${labeledSegments.length - newSegments.length} duplicates filtered)`);
+
+        const merged = [...prev, ...newSegments];
+        // Sort by start_time
+        merged.sort((a, b) => a.start_time - b.start_time);
+        return merged;
+      });
+
+      console.log(`📊 Total diarized segments: ${diarizedSegments.length + labeledSegments.length}`);
+
+      // Store overlap stats for next chunk
+      setChunkStatuses(prev =>
+        prev.map(c => c.index === nextIndex
+          ? { ...c, endOverlapStats: data.end_overlap_stats } as any
+          : c
+        )
+      );
+
+      // Update last processed chunk index
+      setLastProcessedChunkIndex(nextIndex);
+
+    } catch (error) {
+      console.error(`❌ Chunk processing error:`, error);
+
+      // Update chunk status to failed
+      const nextIndex = lastProcessedChunkIndex + 1;
+      setChunkStatuses(prev =>
+        prev.map(c => c.index === nextIndex
+          ? { ...c, status: 'failed', error: String(error) }
+          : c
+        )
+      );
+    } finally {
+      // Always clear processing lock, even on error
+      setIsProcessingChunk(false);
+      console.log(`🔓 Processing lock released`);
+    }
+  }, [lastProcessedChunkIndex, recordingTime, consultationLanguage, diarizedSegments.length]);
+
+  // Process next chunk for real-time diarization
+  const processNextChunk = useCallback(async () => {
+    const nextIndex = lastProcessedChunkIndex + 1;
+    console.log(`🎬 Processing chunk ${nextIndex} at ${recordingTime}s`);
+
+    // Extract audio chunk
+    const chunkInfo = extractAudioChunk(audioChunksRef.current, nextIndex, recordingTime);
+    if (!chunkInfo) {
+      console.warn(`⚠️  Could not extract chunk ${nextIndex}`);
+      return;
+    }
+
+    await processChunk(chunkInfo);
+  }, [lastProcessedChunkIndex, recordingTime, processChunk]);
+
+  // Chunk processing timer - process chunks every 30 seconds during recording
+  // CRITICAL: Only process one chunk at a time (sequential, not parallel)
+  useEffect(() => {
+    if (isRecording && recordingTime > 0) {
+      // Don't start new chunk if one is already processing
+      if (isProcessingChunk) {
+        return;
+      }
+
+      if (shouldProcessNextChunk(recordingTime, lastProcessedChunkIndex)) {
+        console.log(`🔒 Acquiring processing lock for chunk ${lastProcessedChunkIndex + 1}`);
+        processNextChunk();
+      }
+    }
+  }, [isRecording, recordingTime, lastProcessedChunkIndex, isProcessingChunk, processNextChunk]);
 
   // Cleanup audio resources
   const cleanupAudio = useCallback(() => {
@@ -255,6 +518,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       audioStreamRef.current = null;
       console.log('🎤 Microphone released');
     }
+
+    // Clear chunk processing lock
+    setIsProcessingChunk(false);
 
     isAudioInitializedRef.current = false;
   }, []);
@@ -302,7 +568,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Save consultation before analyzing
       if (onSaveConsultation && summaryData) {
         try {
-          await onSaveConsultation(consultation, summaryData, patientDetails);
+          await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
           console.log('✅ Consultation saved before analysis');
         } catch (saveError) {
           console.error('Failed to save consultation:', saveError);
@@ -377,7 +643,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         // Auto-save the consultation after summarizing
         if (onSaveConsultation) {
           try {
-            await onSaveConsultation(consultation, data, patientDetails);
+            await onSaveConsultation(consultation, data, patientDetails, audioUrl);
             console.log('✅ Consultation saved after summarization');
           } catch (saveError) {
             console.error('Failed to save consultation:', saveError);
@@ -392,6 +658,90 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       alert('Failed to summarize consultation. Please try again.');
     } finally {
       setIsSummarizing(false);
+    }
+  };
+
+  // Background save function for fire-and-forget operation
+  const performBackgroundSave = async (): Promise<void> => {
+    setIsSavingInBackground(true);
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // Step 1: Summarize if not already done
+      let summaryData = consultationSummary;
+      if (!summaryData) {
+        const requestBody: { text: string; original_text?: string } = {
+          text: consultation
+        };
+
+        if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
+          requestBody.original_text = originalTranscript;
+        }
+
+        const response = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!response.ok) throw new Error('Summarization failed');
+
+        const data = await response.json();
+        if (data.success) {
+          summaryData = data;
+          setConsultationSummary(data);
+          console.log('✅ Background summarization completed');
+        }
+      }
+
+      // Step 2: Save consultation
+      if (onSaveConsultation && summaryData) {
+        await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
+        console.log('✅ Background save completed');
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Background save aborted');
+        return;
+      }
+      console.error('Background save failed:', error);
+    } finally {
+      setIsSavingInBackground(false);
+    }
+  };
+
+  // Handle save and close with fire-and-forget pattern
+  const handleSaveAndClose = () => {
+    // Validation
+    if (!consultation.trim()) {
+      alert('Cannot save empty consultation');
+      return;
+    }
+
+    if (isRecording) {
+      alert('Please stop recording before saving');
+      return;
+    }
+
+    // Prevent duplicate saves
+    if (saveLockRef.current) {
+      console.log('Save already in progress');
+      return;
+    }
+
+    saveLockRef.current = true;
+
+    // Fire-and-forget: Start background save
+    performBackgroundSave()
+      .catch(err => console.error('Background save error:', err))
+      .finally(() => {
+        saveLockRef.current = false;
+      });
+
+    // Immediate navigation (don't await)
+    if (onCloseConsultation) {
+      onCloseConsultation();
     }
   };
 
@@ -767,6 +1117,14 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       setIsConnectingToTranscription(true);
       setConnectionStatus('Requesting microphone...');
 
+      // Reset chunked diarization state and consultation transcript
+      setChunkStatuses([]);
+      setDiarizedSegments([]);
+      setSpeakerRoles({});
+      setLastProcessedChunkIndex(-1);
+      setConsultation(''); // Clear consultation for fresh real-time transcript
+      console.log('🔄 Reset chunked diarization state and consultation');
+
       // Determine which provider to use based on consultation language
       const useSarvam = isSarvamLanguage(consultationLanguage);
       transcriptionProviderRef.current = useSarvam ? 'sarvam' : 'elevenlabs';
@@ -852,6 +1210,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // NEW: Start MediaRecorder for audio blob capture (for speaker diarization)
       try {
         audioChunksRef.current = []; // Reset chunks
+        resetWebMInitSegment(); // Reset WebM init segment for new recording
         const mediaRecorder = new MediaRecorder(stream, {
           mimeType: 'audio/webm;codecs=opus'
         });
@@ -914,7 +1273,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     // Clear interim transcript
     setInterimTranscript('');
 
-    // NEW: Stop MediaRecorder and process diarization
+    // NEW: Stop MediaRecorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
 
@@ -927,13 +1286,54 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         }
       });
 
-      // Process diarization if we have audio chunks
-      // TODO: Re-enable after STTT streaming is working
-      // if (audioChunksRef.current.length > 0) {
-      //   await processDiarization();
-      // }
-
       mediaRecorderRef.current = null;
+    }
+
+    // Process final partial chunk if any remaining audio exists
+    const finalChunkInfo = extractFinalChunk(
+      audioChunksRef.current,
+      lastProcessedChunkIndex,
+      recordingTime
+    );
+
+    if (finalChunkInfo) {
+      console.log(`🎬 Processing FINAL chunk ${finalChunkInfo.index}...`);
+      await processChunk(finalChunkInfo);
+      console.log('✅ Final chunk API call completed, waiting for state updates...');
+
+      // Wait a bit for React state updates to propagate
+      // processChunk updates diarizedSegments via setState, which is async
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Use chunked diarization results if available (read from ref to get latest value)
+    const latestSegments = diarizedSegmentsRef.current;
+
+    if (latestSegments.length > 0) {
+      console.log('✅ Using chunked diarization results');
+      console.log(`📝 Total diarized segments: ${latestSegments.length}`);
+
+      // Format segments as "Doctor: text\nPatient: text" transcript
+      const formattedTranscript = latestSegments
+        .sort((a, b) => a.start_time - b.start_time)
+        .map(seg => {
+          // Use speaker_role if available (e.g., "Doctor", "Patient"), otherwise use speaker_id
+          const speaker = seg.speaker_role || seg.speaker_id;
+          return `${speaker}: ${seg.text}`;
+        })
+        .join('\n\n');
+
+      setConsultation(formattedTranscript);
+      console.log('✅ Speaker-labeled transcript set as consultation');
+
+      // Optional: Upload audio to GCS for storage (non-blocking)
+      if (audioChunksRef.current.length > 0) {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        uploadAudioToGCS(audioBlob);
+      }
+    } else {
+      console.log('ℹ️  No chunked diarization segments - using real-time transcript');
+      // Real-time transcript is already in consultation state from Sarvam WebSocket
     }
 
     // Clean up audio resources
@@ -965,6 +1365,12 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       const data = await response.json();
       console.log(`✅ Audio uploaded to GCS: ${data.gcs_uri}`);
+
+      // Save the audio URL to state so it can be included in the consultation
+      if (data.gcs_uri) {
+        setAudioUrl(data.gcs_uri);
+      }
+
       return data;
     } catch (error) {
       console.error('❌ Audio upload error:', error);
@@ -1018,9 +1424,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     } catch (error) {
       console.error('❌ Diarization error:', error);
+      alert('Speaker detection unavailable. Using standard transcript.');
       // Silently fail - continue with realtime transcript
     } finally {
       setIsDiarizing(false);
+      audioChunksRef.current = []; // Clear audio chunks to prevent memory leak
     }
   };
 
@@ -1133,6 +1541,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const handleSkipDiarization = () => {
     setShowSpeakerMapping(false);
     setDiarizationData(null);
+    setIsDiarizing(false);
     console.log('⏭️ Diarization skipped - using realtime transcript');
   };
 
@@ -1184,6 +1593,232 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             </div>
           </div>
         )}
+
+        {/* HERO SECTION - Language Selector + Large Record Button */}
+        <div className="mb-8 sm:mb-10">
+          {/* Language Selector - Centered above button (when NOT recording) */}
+          {!isRecording && (
+            <div className="flex justify-center mb-4">
+              <div className="flex flex-col gap-1 items-center">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="consultation-language" className="text-[14px] text-gray-700 font-medium">
+                    Language:
+                  </label>
+                  <select
+                    id="consultation-language"
+                    value={consultationLanguage}
+                    onChange={(e) => setConsultationLanguage(e.target.value as ConsultationLanguage)}
+                    disabled={isRecording || isConnectingToTranscription}
+                    className="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-[14px] text-aneya-navy focus:outline-none focus:border-aneya-teal disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]"
+                  >
+                    {CONSULTATION_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Warning for auto-detect */}
+                {consultationLanguage === 'auto' && (
+                  <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+                    <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Reduced accuracy for Indian languages
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Large Record Button - Hero CTA (when NOT recording) */}
+          {!isRecording && (
+            <div className="flex flex-col items-center gap-4">
+              <button
+                onClick={() => setShowConsentModal(true)}
+                disabled={isConnectingToTranscription}
+                className="hero-record-button"
+              >
+                {isConnectingToTranscription ? (
+                  <>
+                    <svg className="animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>{connectionStatus || 'Connecting...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                    </svg>
+                    <span>Record Consultation</span>
+                  </>
+                )}
+              </button>
+
+              {/* Translation option - centered below button */}
+              {!isSarvamLanguage(consultationLanguage) && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={shouldTranslateToEnglish}
+                    onChange={(e) => setShouldTranslateToEnglish(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-aneya-navy focus:ring-aneya-teal"
+                  />
+                  <span className="text-[14px] text-aneya-navy">Translate to English</span>
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* Recording Controls - Replace button when recording */}
+          {isRecording && (
+            <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-6 sm:p-8">
+              {/* Timer and Status - Centered at top */}
+              <div className="flex flex-col items-center gap-2 mb-8">
+                {/* Animated mic icon */}
+                <div className={`relative ${!isPaused ? 'animate-pulse' : ''}`}>
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
+                    <svg className={`h-8 w-8 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  {/* Recording dot */}
+                  {!isPaused && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse" />
+                  )}
+                </div>
+
+                {/* Timer */}
+                <div className="text-[32px] sm:text-[40px] font-mono text-aneya-navy font-bold">
+                  {formatTime(recordingTime)}
+                </div>
+
+                {/* Status */}
+                <div className={`text-[14px] sm:text-[16px] font-medium ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {isPaused ? 'Paused' : `Streaming${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
+                </div>
+              </div>
+
+              {/* Large Control Buttons - Centered */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-8">
+                {/* Cancel button */}
+                <button
+                  onClick={cancelRecording}
+                  className="recording-control-button cancel"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Cancel</span>
+                </button>
+
+                {/* Pause/Resume button */}
+                <button
+                  onClick={isPaused ? resumeRecording : pauseRecording}
+                  className="recording-control-button pause-resume"
+                >
+                  {isPaused ? (
+                    <>
+                      <svg fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                      </svg>
+                      <span>Resume</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>Pause</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Stop button */}
+                <button
+                  onClick={stopRecording}
+                  className="recording-control-button stop"
+                >
+                  <svg fill="currentColor" viewBox="0 0 20 20">
+                    <rect x="6" y="6" width="8" height="8" rx="1" />
+                  </svg>
+                  <span>Stop</span>
+                </button>
+              </div>
+
+              {/* Two-column transcript display during recording */}
+              <div className="hidden sm:grid sm:grid-cols-2 gap-4">
+                {/* LEFT: Real-time transcript from WebSocket */}
+                <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[14px] font-medium text-aneya-navy">
+                      Real-time Transcript
+                    </h3>
+                    <div className="text-[11px] text-gray-500">
+                      Live WebSocket
+                    </div>
+                  </div>
+
+                  <div className="max-h-[400px] overflow-y-auto space-y-2">
+                    {consultation ? (
+                      <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {consultation}
+                      </p>
+                    ) : (
+                      <p className="text-[12px] text-gray-400 italic">
+                        Listening...
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* RIGHT: Diarized segments appearing progressively */}
+                <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[14px] font-medium text-aneya-navy">
+                      Speaker-Labeled Transcript
+                    </h3>
+                    <div className="text-[11px] text-gray-500">
+                      {diarizedSegments.length > 0 ? `${diarizedSegments.length} segments` : 'Processing...'}
+                    </div>
+                  </div>
+
+                  <div className="max-h-[400px] overflow-y-auto space-y-3">
+                    {diarizedSegments.length === 0 ? (
+                      <p className="text-[12px] text-gray-400 italic">
+                        Speaker-labeled segments will appear here as chunks are processed...
+                      </p>
+                    ) : (
+                      diarizedSegments.map((seg, idx) => (
+                        <div key={`${seg.start_time.toFixed(2)}-${seg.speaker_id}-${idx}`} className="border-l-2 border-gray-200 pl-3 py-1">
+                          <div className="flex items-start gap-2">
+                            <div className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${
+                              seg.speaker_id === 'speaker_0'
+                                ? 'bg-blue-100 text-blue-800'
+                                : seg.speaker_id === 'speaker_1'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {seg.speaker_id}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[13px] text-gray-700 leading-relaxed">
+                                {seg.text}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Patient Details - expandable section */}
         <div className="mb-6">
@@ -1329,220 +1964,82 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           )}
         </div>
 
-        {/* Recording UI - embedded, slides down consultation */}
-        {isRecording && (
-          <div className="mb-6 bg-white border-2 border-aneya-teal rounded-[10px] p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              {/* Left: Recording indicator */}
-              <div className="flex items-center gap-3 sm:gap-4">
-                {/* Animated mic icon */}
-                <div className={`relative ${!isPaused ? 'animate-pulse' : ''}`}>
-                  <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
-                    <svg className={`h-5 w-5 sm:h-6 sm:w-6 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  {/* Recording dot */}
-                  {!isPaused && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  )}
-                </div>
-
-                {/* Timer and status */}
-                <div>
-                  <div className="text-[24px] sm:text-[28px] font-mono text-aneya-navy">
-                    {formatTime(recordingTime)}
-                  </div>
-                  <div className={`text-[11px] sm:text-[12px] ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
-                    {isPaused ? 'Paused' : `Streaming${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
-                  </div>
-                </div>
+        {/* OB/GYN During-consultation Form Button - Prominent location after Patient Details */}
+        {appointmentContext && preFilledPatient && (appointmentContext as any).doctor && requiresOBGynForms((appointmentContext as any).doctor.specialty) && (
+          <div className="mb-6 bg-white border-2 border-purple-300 rounded-[10px] p-4 sm:p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
               </div>
-
-              {/* Right: Control buttons - stack on mobile */}
-              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto">
-                {/* Cancel button */}
+              <div className="flex-1">
+                <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
+                <p className="text-[13px] text-gray-600 mb-4">Fill out the specialized clinical assessment form for this OB/GYN consultation during the appointment.</p>
                 <button
-                  onClick={cancelRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
+                  onClick={() => {
+                    // Check if this is an infertility appointment
+                    if (appointmentContext?.specialty_subtype === 'infertility' && onOpenInfertilityForm) {
+                      onOpenInfertilityForm();
+                    } else {
+                      setShowOBGynForm(true);
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-purple-600 text-white rounded-[8px] font-medium text-[14px] hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
                 >
-                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span className="hidden xs:inline sm:inline">Cancel</span>
-                </button>
-
-                {/* Pause/Resume button */}
-                <button
-                  onClick={isPaused ? resumeRecording : pauseRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
-                >
-                  {isPaused ? (
-                    <>
-                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                      </svg>
-                      <span className="hidden xs:inline sm:inline">Resume</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      <span className="hidden xs:inline sm:inline">Pause</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Stop button */}
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-[13px] sm:text-[14px] flex-1 sm:flex-none"
-                >
-                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <rect x="6" y="6" width="8" height="8" rx="1" />
-                  </svg>
-                  <span className="hidden xs:inline sm:inline">Stop</span>
+                  Open Assessment Form
                 </button>
               </div>
             </div>
-
-            {/* Real-time transcript preview */}
-            {interimTranscript && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="text-[12px] text-gray-500 mb-1">Live transcription:</div>
-                <div className="text-[14px] text-gray-700 italic">{interimTranscript}</div>
-              </div>
-            )}
           </div>
         )}
 
         {/* Consultation summary */}
         <div>
-          <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="mb-3">
             <label htmlFor="consultation" className="text-[20px] leading-[26px] text-aneya-navy font-serif">
               aneya consultation summary:
             </label>
+          </div>
 
-            {!isRecording && (
-              <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
-                {/* Record Consultation Button */}
-                <button
-                  onClick={() => setShowConsentModal(true)}
-                  disabled={isConnectingToTranscription}
-                  className={`
-                    flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-[10px] font-medium text-[14px]
-                    transition-all duration-200 w-full sm:w-auto
-                    ${isConnectingToTranscription
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : 'bg-aneya-navy hover:bg-aneya-navy-hover text-white'
-                    }
-                  `}
-                >
-                  {isConnectingToTranscription ? (
-                    <>
-                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      {connectionStatus || 'Connecting...'}
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                      </svg>
-                      Record Consultation
-                    </>
-                  )}
-                </button>
-
-                {/* Language and Translation Options - Below Record Button */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
-                  {/* Consultation Language Dropdown */}
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <label htmlFor="consultation-language" className="text-[12px] text-gray-600 whitespace-nowrap">
-                        Language:
-                      </label>
-                      <select
-                        id="consultation-language"
-                        value={consultationLanguage}
-                        onChange={(e) => setConsultationLanguage(e.target.value as ConsultationLanguage)}
-                        disabled={isRecording || isConnectingToTranscription}
-                        className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg text-[13px] text-aneya-navy focus:outline-none focus:border-aneya-teal disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {CONSULTATION_LANGUAGES.map((lang) => (
-                          <option key={lang.code} value={lang.code}>
-                            {lang.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* Warning for auto-detect mode */}
-                    {consultationLanguage === 'auto' && (
-                      <p className="text-[11px] text-amber-600 flex items-center gap-1">
-                        <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        Reduced accuracy for Indian languages
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Translate to English checkbox - only show for non-Sarvam languages */}
-                  {!isSarvamLanguage(consultationLanguage) && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shouldTranslateToEnglish}
-                        onChange={(e) => setShouldTranslateToEnglish(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-aneya-navy focus:ring-aneya-teal"
-                      />
-                      <span className="text-[14px] text-aneya-navy">Translate to English</span>
-                    </label>
-                  )}
-                </div>
-
+          {/* Consultation Transcript - Only show when NOT recording */}
+          {!isRecording && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="consultation" className="text-[14px] font-medium text-aneya-navy">
+                  Consultation Transcript
+                </label>
+                {isAdmin && (
+                  <button
+                    onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
+                    className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
+                  >
+                    Load Sample Text
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* Consultation Transcript */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="consultation" className="text-[14px] font-medium text-aneya-navy">
-                Consultation Transcript
-              </label>
-              {isAdmin && (
-                <button
-                  onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
-                  className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
-                  disabled={isRecording}
-                >
-                  Load Sample Text
-                </button>
-              )}
+              <textarea
+                id="consultation"
+                value={consultation}
+                onChange={(e) => setConsultation(e.target.value)}
+                disabled={isDiarizing}
+                className="w-full h-[150px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
+              />
             </div>
-            <textarea
-              id="consultation"
-              value={consultation}
-              onChange={(e) => setConsultation(e.target.value)}
-              disabled={isRecording}
-              className={`w-full h-[150px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy ${isRecording ? 'bg-gray-50' : ''
-                }`}
-            />
-          </div>
+          )}
         </div>
 
         {/* Summarise button */}
         <div className="mt-4">
           <button
             onClick={handleSummarize}
-            disabled={isRecording || isSummarizing || !consultation.trim()}
+            disabled={isRecording || isSummarizing || isDiarizing || !consultation.trim()}
             className={`
               w-full px-6 py-3 rounded-[10px] font-medium text-[14px] transition-colors flex items-center justify-center gap-2
-              ${isRecording || isSummarizing || !consultation.trim()
+              ${isRecording || isSummarizing || isDiarizing || !consultation.trim()
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-aneya-teal hover:bg-aneya-teal/90 text-white'
               }
@@ -1573,6 +2070,22 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             <label className="block mb-2 text-[14px] font-medium text-aneya-navy">
               Consultation Summary
             </label>
+
+            {/* Audio Recording */}
+            {audioUrl && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-aneya-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <h5 className="text-[14px] font-semibold text-aneya-navy">
+                    Consultation Recording
+                  </h5>
+                </div>
+                <AudioPlayer audioUrl={audioUrl} />
+              </div>
+            )}
+
             <StructuredSummaryDisplay
               summaryData={consultationSummary}
               onUpdate={(updated) => setConsultationSummary(updated)}
@@ -1588,7 +2101,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           <PrimaryButton
             onClick={handleAnalyze}
             fullWidth
-            disabled={isRecording || isAnalyzing || !consultation.trim()}
+            disabled={isRecording || isAnalyzing || isDiarizing || !consultation.trim()}
           >
             {isAnalyzing ? (
               <span className="flex items-center justify-center gap-2">
@@ -1603,6 +2116,34 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             )}
           </PrimaryButton>
         </div>
+
+        {/* Save & Close button - fire-and-forget for quick workflow */}
+        {!isRecording && consultation.trim() && onCloseConsultation && (
+          <div className="mt-3">
+            <button
+              onClick={handleSaveAndClose}
+              disabled={isSavingInBackground}
+              className="w-full px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[15px] hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingInBackground ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save & Close
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Close Consultation button - shown after summarization */}
         {consultationSummary && onCloseConsultation && (
@@ -1682,6 +2223,36 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               >
                 Confirm
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OB/GYN During-consultation Form Modal */}
+      {showOBGynForm && appointmentContext && preFilledPatient && appointmentContext.id && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-purple-600 text-white p-4 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">OB/GYN Clinical Assessment Form</h2>
+              <button
+                onClick={() => setShowOBGynForm(false)}
+                className="text-white/80 hover:text-white text-xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <OBGynDuringConsultationForm
+                patientId={preFilledPatient.id}
+                appointmentId={appointmentContext.id}
+                displayMode="flat"
+                onComplete={() => {
+                  setShowOBGynForm(false);
+                }}
+              />
             </div>
           </div>
         </div>

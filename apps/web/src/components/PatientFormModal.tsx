@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Patient, CreatePatientInput, ConsultationLanguage, CONSULTATION_LANGUAGES } from '../types/database';
+import { useAuth } from '../contexts/AuthContext';
+import { X } from 'lucide-react';
 
 interface PatientFormModalProps {
   isOpen: boolean;
@@ -9,9 +11,14 @@ interface PatientFormModalProps {
 }
 
 export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFormModalProps) {
+  const { doctorProfile } = useAuth();
+
+  // Default sex to Female for OB/GYN doctors
+  const defaultSex = doctorProfile?.specialty === 'obgyn' ? 'Female' : 'Male';
+
   const [formData, setFormData] = useState<CreatePatientInput>({
     name: '',
-    sex: 'Male',
+    sex: defaultSex,
     date_of_birth: '',
     height_cm: undefined,
     weight_kg: undefined,
@@ -44,7 +51,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
     } else {
       setFormData({
         name: '',
-        sex: 'Male',
+        sex: defaultSex,
         date_of_birth: '',
         height_cm: undefined,
         weight_kg: undefined,
@@ -57,7 +64,7 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
       });
     }
     setErrors({});
-  }, [patient, isOpen]);
+  }, [patient, isOpen, defaultSex]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -114,9 +121,18 @@ export function PatientFormModal({ isOpen, onClose, onSave, patient }: PatientFo
   return (
     <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8 pt-16 sm:pt-8">
       <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-5rem)] sm:max-h-[90vh] overflow-y-auto">
-        <h2 className="text-[24px] sm:text-[28px] text-aneya-navy mb-4 sm:mb-6">
-          {patient ? 'Edit Patient' : 'Create New Patient'}
-        </h2>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-[24px] sm:text-[28px] text-aneya-navy">
+            {patient ? 'Edit Patient' : 'Create New Patient'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            type="button"
+          >
+            <X className="w-6 h-6 text-gray-600" />
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           {/* Name and Sex */}

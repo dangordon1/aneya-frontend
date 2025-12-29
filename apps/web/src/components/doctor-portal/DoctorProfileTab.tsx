@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import type { UpdateDoctorInput } from '../../types/database';
+import type { UpdateDoctorInput, MedicalSpecialtyType } from '../../types/database';
+import { MEDICAL_SPECIALTIES } from '../../types/database';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -23,11 +24,21 @@ export function DoctorProfileTab() {
   const [detectedTimezone, setDetectedTimezone] = useState<string | null>(null);
   const hasAttemptedGeoDetection = useRef(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    specialty: MedicalSpecialtyType;
+    clinic_name: string;
+    clinic_address: string;
+    default_appointment_duration: number;
+    timezone: string;
+    allow_patient_messages: boolean;
+  }>({
     name: '',
     email: '',
     phone: '',
-    specialty: '',
+    specialty: 'general',
     clinic_name: '',
     clinic_address: '',
     default_appointment_duration: 15,
@@ -76,7 +87,7 @@ export function DoctorProfileTab() {
         name: doctorProfile.name || '',
         email: doctorProfile.email || '',
         phone: doctorProfile.phone || '',
-        specialty: doctorProfile.specialty || '',
+        specialty: doctorProfile.specialty,
         clinic_name: doctorProfile.clinic_name || '',
         clinic_address: doctorProfile.clinic_address || '',
         default_appointment_duration: doctorProfile.default_appointment_duration || 15,
@@ -98,7 +109,7 @@ export function DoctorProfileTab() {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim() || null,
-        specialty: formData.specialty.trim() || null,
+        specialty: formData.specialty,
         clinic_name: formData.clinic_name.trim() || null,
         clinic_address: formData.clinic_address.trim() || null,
         default_appointment_duration: formData.default_appointment_duration,
@@ -139,7 +150,7 @@ export function DoctorProfileTab() {
         name: doctorProfile.name || '',
         email: doctorProfile.email || '',
         phone: doctorProfile.phone || '',
-        specialty: doctorProfile.specialty || '',
+        specialty: doctorProfile.specialty,
         clinic_name: doctorProfile.clinic_name || '',
         clinic_address: doctorProfile.clinic_address || '',
         default_appointment_duration: doctorProfile.default_appointment_duration || 15,
@@ -252,18 +263,25 @@ export function DoctorProfileTab() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>
-                <input
-                  type="text"
+                <select
                   value={formData.specialty}
-                  onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, specialty: e.target.value as MedicalSpecialtyType })}
                   disabled={!isEditing}
                   className={`w-full p-3 border rounded-lg text-sm ${
                     isEditing
                       ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
                       : 'border-gray-200 bg-gray-50 text-gray-600'
                   }`}
-                  placeholder="General Practice"
-                />
+                >
+                  {MEDICAL_SPECIALTIES.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Your specialty determines which forms patients see
+                </p>
               </div>
             </div>
           </div>

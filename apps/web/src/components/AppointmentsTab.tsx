@@ -8,9 +8,14 @@ import { PatientFormModal } from './PatientFormModal';
 import { CompactCalendar } from './CompactCalendar';
 import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
+import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
+import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
+import { InfertilityPreConsultationForm } from './patient-portal/InfertilityPreConsultationForm';
+import { AntenatalPreConsultationForm } from './patient-portal/AntenatalPreConsultationForm';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { requiresOBGynForms } from '../utils/specialtyHelpers';
 
 interface AppointmentsTabProps {
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
@@ -18,7 +23,7 @@ interface AppointmentsTabProps {
 }
 
 export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: AppointmentsTabProps) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, doctorProfile } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, createAppointment, cancelAppointment } =
     useAppointments(selectedDate.toISOString().split('T')[0]);
@@ -31,10 +36,16 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
 
+  // OB/GYN Pre-consultation Form Modal state
+  const [showOBGynFormModal, setShowOBGynFormModal] = useState(false);
+  const [selectedAppointmentForForm, setSelectedAppointmentForForm] = useState<AppointmentWithPatient | null>(null);
+  const [appointmentOBGynFormStatus, setAppointmentOBGynFormStatus] = useState<Record<string, 'draft' | 'partial' | 'completed' | null>>({});
+
   // State for past appointments
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [pastAppointmentsLoading, setPastAppointmentsLoading] = useState(true);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
+  const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [pastAppointmentsSearch, setPastAppointmentsSearch] = useState('');
 
   // Filter past appointments based on search
@@ -50,7 +61,13 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   }, [pastAppointments, pastAppointmentsSearch]);
 
   const handleCreateAppointment = async (appointmentData: any) => {
-    await createAppointment(appointmentData);
+    // Auto-assign the logged-in doctor to the appointment
+    const appointmentWithDoctor = {
+      ...appointmentData,
+      doctor_id: doctorProfile?.id || null,
+    };
+
+    await createAppointment(appointmentWithDoctor);
     setIsFormModalOpen(false);
     setEditingAppointment(null);
     setPreFilledDate(null);
@@ -63,8 +80,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
 
   const handleCancelAppointment = async (appointment: AppointmentWithPatient) => {
     if (window.confirm(`Cancel appointment with ${appointment.patient.name}?`)) {
-      const reason = window.prompt('Reason for cancellation (optional):');
-      await cancelAppointment(appointment.id, reason || undefined);
+      await cancelAppointment(appointment.id);
     }
   };
 
@@ -79,6 +95,103 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
       setIsPatientModalOpen(false);
       // Reopen the appointment form after patient is created
       setIsFormModalOpen(true);
+    }
+  };
+
+  const handleFillPreConsultationForm = (appointment: AppointmentWithPatient) => {
+    setSelectedAppointmentForForm(appointment);
+    setShowOBGynFormModal(true);
+  };
+
+  const handleCloseOBGynFormModal = () => {
+    setShowOBGynFormModal(false);
+    setSelectedAppointmentForForm(null);
+  };
+
+  const handleOBGynFormComplete = () => {
+    // Refresh form status for this appointment
+    if (selectedAppointmentForForm) {
+      // Could refetch the status here if needed
+    }
+    handleCloseOBGynFormModal();
+  };
+
+  const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    if (!consultation) {
+      console.error('No consultation to re-summarize');
+      return;
+    }
+
+    try {
+      // Get the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      // Prepare the request body
+      const requestBody = {
+        text: consultation.consultation_text || consultation.original_transcript || '',
+        original_text: consultation.original_transcript,
+        patient_info: consultation.patient_snapshot || {
+          patient_id: appointment.patient_id,
+          patient_age: appointment.patient?.date_of_birth
+            ? `${new Date().getFullYear() - new Date(appointment.patient.date_of_birth).getFullYear()} years old`
+            : undefined,
+        },
+        is_from_transcription: true,
+        transcription_language: consultation.transcription_language || 'en'
+      };
+
+      // Call the backend summarize endpoint
+      const response = await fetch(`${apiUrl}/api/summarize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to re-summarize: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.consultation_data) {
+        throw new Error('Invalid response from summarize endpoint');
+      }
+
+      // Update the consultation in the database
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        })
+        .eq('id', consultation.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Update local state
+      setConsultationsMap((prev) => ({
+        ...prev,
+        [appointment.id]: {
+          ...consultation,
+          consultation_text: data.consultation_data.consultation_text,
+          summary_data: data.consultation_data.summary_data,
+          diagnoses: data.consultation_data.diagnoses,
+          guidelines_found: data.consultation_data.guidelines_found,
+          patient_snapshot: data.consultation_data.patient_snapshot,
+        }
+      }));
+
+      console.log('Consultation re-summarized successfully');
+    } catch (error) {
+      console.error('Error re-summarizing consultation:', error);
+      alert('Failed to re-summarize consultation. Please try again.');
     }
   };
 
@@ -103,9 +216,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           .order('scheduled_time', { ascending: false })
           .limit(isAdmin ? 50 : 10); // Admins see more appointments
 
-        // Non-admins only see their own appointments
-        if (!isAdmin) {
-          query = query.eq('user_id', user.id);
+        // Non-admins only see their own appointments (doctors see their appointments)
+        if (!isAdmin && doctorProfile) {
+          query = query.eq('doctor_id', doctorProfile.id);
         }
 
         const { data: appointments, error: appointmentsError } = await query;
@@ -164,6 +277,82 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
       return () => clearTimeout(timer);
     }
   }, [user, loading, isAdmin]); // Also depend on loading state and admin status
+
+  // Fetch OB/GYN form statuses for doctor portal
+  useEffect(() => {
+    const fetchOBGynFormStatuses = async () => {
+      if (!doctorProfile || !requiresOBGynForms(doctorProfile.specialty)) {
+        return;
+      }
+
+      try {
+        // Fetch all appointments for this doctor with specialty_subtype
+        const { data: allAppointments, error: appointmentsError } = await supabase
+          .from('appointments')
+          .select('id, patient_id, specialty_subtype')
+          .eq('doctor_id', doctorProfile.id)
+          .in('status', ['scheduled', 'in_progress']);
+
+        if (appointmentsError) throw appointmentsError;
+
+        // For each appointment, fetch the form status from the appropriate table
+        const formStatuses: Record<string, 'draft' | 'partial' | 'completed' | null> = {};
+
+        for (const apt of allAppointments || []) {
+          try {
+            // Determine which table to query based on specialty_subtype
+            if (apt.specialty_subtype === 'infertility') {
+              // Query infertility_forms table
+              const { data: formData, error: formError } = await supabase
+                .from('infertility_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
+
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
+            } else if (apt.specialty_subtype === 'antenatal') {
+              // Query antenatal_forms table
+              const { data: formData, error: formError } = await supabase
+                .from('antenatal_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
+
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
+            } else {
+              // Query obgyn_consultation_forms table for general/other subtypes
+              const { data: formData, error: formError } = await supabase
+                .from('obgyn_consultation_forms')
+                .select('status')
+                .eq('appointment_id', apt.id)
+                .eq('form_type', 'pre_consultation')
+                .single();
+
+              if (!formError && formData) {
+                formStatuses[apt.id] = formData.status;
+              }
+            }
+          } catch (err) {
+            // Form doesn't exist yet, that's ok
+          }
+        }
+
+        setAppointmentOBGynFormStatus(formStatuses);
+      } catch (err) {
+        console.error('Error fetching OB/GYN form statuses:', err);
+      }
+    };
+
+    if (!loading && user && doctorProfile) {
+      fetchOBGynFormStatuses();
+    }
+  }, [user, loading, doctorProfile]);
 
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
@@ -291,6 +480,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                       onStartConsultation={onStartConsultation}
                       onModify={handleModifyAppointment}
                       onCancel={handleCancelAppointment}
+                      onFillPreConsultationForm={handleFillPreConsultationForm}
+                      obgynFormStatus={appointmentOBGynFormStatus[appointment.id] || null}
+                      doctorSpecialty={appointment.doctor?.specialty}
                     />
                   ))}
               </div>
@@ -347,6 +539,71 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
           <DoctorAvailabilitySettings
             onClose={() => setIsAvailabilityModalOpen(false)}
           />
+        )}
+
+        {/* OB/GYN Pre-Consultation Form Modal */}
+        {showOBGynFormModal && selectedAppointmentForForm && user?.id && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+              {/* Background overlay */}
+              <div
+                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                onClick={handleCloseOBGynFormModal}
+              />
+
+              {/* Modal dialog */}
+              <div className="relative inline-block align-bottom bg-white rounded-[20px] text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:w-full sm:max-w-4xl">
+                {/* Header */}
+                <div className="bg-purple-600 px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-[18px] font-semibold text-white">
+                    {selectedAppointmentForForm.specialty_subtype === 'infertility'
+                      ? 'Infertility Pre-Consultation Form'
+                      : selectedAppointmentForForm.specialty_subtype === 'antenatal'
+                      ? 'Antenatal Care (ANC) Form'
+                      : 'OB/GYN Pre-Consultation Form'}
+                  </h3>
+                  <button
+                    onClick={handleCloseOBGynFormModal}
+                    className="text-white hover:text-purple-100 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Form Content */}
+                <div className="px-6 py-8">
+                  {/* Render specialty-specific form based on appointment subtype */}
+                  {selectedAppointmentForForm.specialty_subtype === 'infertility' ? (
+                    <InfertilityPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  ) : selectedAppointmentForForm.specialty_subtype === 'antenatal' ? (
+                    <AntenatalPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  ) : (
+                    <OBGynPreConsultationForm
+                      patientId={selectedAppointmentForForm.patient_id}
+                      appointmentId={selectedAppointmentForForm.id}
+                      filledBy="doctor"
+                      doctorUserId={user.id}
+                      onComplete={handleOBGynFormComplete}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Past Appointments Section */}
@@ -421,13 +678,25 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                   key={appointment.id}
                   appointment={appointment}
                   consultation={consultationsMap[appointment.id] || null}
-                  onAnalyze={onAnalyzeConsultation}
+                  onClick={() => setSelectedAppointmentDetail(appointment)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Appointment Detail Modal */}
+      {selectedAppointmentDetail && (
+        <AppointmentDetailModal
+          isOpen={true}
+          onClose={() => setSelectedAppointmentDetail(null)}
+          appointment={selectedAppointmentDetail}
+          consultation={consultationsMap[selectedAppointmentDetail.id] || null}
+          onAnalyze={onAnalyzeConsultation}
+          onResummarize={handleResummarize}
+        />
+      )}
     </div>
   );
 }
