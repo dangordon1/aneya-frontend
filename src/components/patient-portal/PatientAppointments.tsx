@@ -178,13 +178,31 @@ export function PatientAppointments({ onBack }: Props) {
                     appointment={appointmentWithPatient}
                     consultation={apt.consultation}
                     viewMode="patient"
-                    showOBGynForm={isOBGyn && !isPast}
-                    onOBGynFormClick={() => setSelectedOBGynForm({
-                      appointmentId: apt.id,
-                      patientId: patientProfile!.id
-                    })}
-                    obgynFormStatus={apt.obgynFormStatus}
+                    onClick={() => apt.consultation && setSelectedConsultation(apt.consultation)}
                   />
+
+                  {/* OB/GYN Pre-consultation Form Button for upcoming appointments */}
+                  {isOBGyn && !isPast && (
+                    <button
+                      onClick={() => setSelectedOBGynForm({
+                        appointmentId: apt.id,
+                        patientId: patientProfile!.id
+                      })}
+                      className={`mt-2 w-full px-4 py-3 rounded-lg border-2 transition-colors text-sm font-medium ${
+                        apt.obgynFormStatus === 'completed'
+                          ? 'bg-green-50 border-green-300 text-green-700'
+                          : apt.obgynFormStatus === 'partial'
+                          ? 'bg-amber-50 border-amber-300 text-amber-700'
+                          : 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100'
+                      }`}
+                    >
+                      {apt.obgynFormStatus === 'completed'
+                        ? '✓ Pre-consultation Form Completed'
+                        : apt.obgynFormStatus === 'partial'
+                        ? 'Continue Pre-consultation Form'
+                        : 'Complete Pre-consultation Form'}
+                    </button>
+                  )}
                 </div>
               );
             })}
