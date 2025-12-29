@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import type { Appointment, Doctor, Consultation } from '../../types/database';
+import type { Appointment, Doctor, Consultation, AppointmentWithPatient } from '../../types/database';
 import { requiresOBGynForms } from '../../utils/specialtyHelpers';
 import { OBGynPreConsultationForm } from './OBGynPreConsultationForm';
+import { PastAppointmentCard } from '../PastAppointmentCard';
 
 interface AppointmentWithDetails extends Appointment {
   doctor: Doctor | null;
@@ -98,53 +99,6 @@ export function PatientAppointments({ onBack }: Props) {
     return true;
   });
 
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return {
-      date: date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
-      time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    };
-  };
-
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      scheduled: 'bg-blue-100 text-blue-800',
-      in_progress: 'bg-green-100 text-green-800',
-      completed: 'bg-gray-100 text-gray-600',
-      cancelled: 'bg-red-100 text-red-800',
-      no_show: 'bg-yellow-100 text-yellow-800'
-    };
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100'}`}>
-        {status.replace('_', ' ')}
-      </span>
-    );
-  };
-
-  const getOBGynFormBadge = (formStatus: string | null | undefined) => {
-    if (!formStatus) return null;
-
-    const styles: Record<string, string> = {
-      draft: 'bg-orange-100 text-orange-800',
-      partial: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-    };
-
-    const labels: Record<string, string> = {
-      draft: 'Form Started',
-      partial: 'Form In Progress',
-      completed: 'Pre-consultation Form Completed',
-    };
-
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${styles[formStatus] || 'bg-gray-100'}`}>
-        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-        </svg>
-        {labels[formStatus]}
-      </span>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-aneya-cream">
@@ -208,86 +162,29 @@ export function PatientAppointments({ onBack }: Props) {
         ) : (
           <div className="space-y-4">
             {filteredAppointments.map(apt => {
-              const { date, time } = formatDateTime(apt.scheduled_time);
               const isPast = new Date(apt.scheduled_time) < now;
-              const hasConsultation = apt.consultation && apt.consultation.id;
               const isOBGyn = requiresOBGynForms(apt.doctor?.specialty);
-              const hasOBGynForm = apt.obgynFormStatus !== null && apt.obgynFormStatus !== undefined;
+
+              // Transform to AppointmentWithPatient format
+              const appointmentWithPatient: AppointmentWithPatient = {
+                ...apt,
+                patient: patientProfile!,
+                doctor: apt.doctor
+              };
 
               return (
-                <div
-                  key={apt.id}
-                  className={`bg-white rounded-xl shadow-sm overflow-hidden ${
-                    isPast ? 'opacity-80' : ''
-                  }`}
-                >
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="text-sm text-gray-500">{date}</p>
-                        <p className="text-xl font-semibold text-aneya-teal">{time}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        {getStatusBadge(apt.status)}
-                      </div>
-                    </div>
-
-                    {/* OB/GYN Form Status Badge */}
-                    {hasOBGynForm && (
-                      <div className="mb-3">
-                        {getOBGynFormBadge(apt.obgynFormStatus)}
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        <span className="text-sm text-aneya-navy font-medium">
-                          {apt.doctor?.name || 'Doctor'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="text-sm text-gray-600">
-                          {apt.duration_minutes} minutes - {apt.appointment_type.replace('_', ' ')}
-                        </span>
-                      </div>
-
-                      {apt.reason && (
-                        <div className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                          <span className="text-sm text-gray-600">{apt.reason}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* OB/GYN Pre-consultation form button */}
-                    {isOBGyn && !isPast && patientProfile && (
-                      <button
-                        onClick={() => setSelectedOBGynForm({ appointmentId: apt.id, patientId: patientProfile.id })}
-                        className="mt-3 w-full py-2 bg-purple-50 text-purple-600 rounded-lg text-sm font-medium hover:bg-purple-100 transition-colors border border-purple-200"
-                      >
-                        {hasOBGynForm ? 'Continue Pre-consultation Form' : 'Fill Pre-consultation Form'}
-                      </button>
-                    )}
-
-                    {/* Consultation summary button */}
-                    {hasConsultation && (
-                      <button
-                        onClick={() => setSelectedConsultation(apt.consultation)}
-                        className="mt-3 w-full py-2 bg-aneya-teal/10 text-aneya-teal rounded-lg text-sm font-medium hover:bg-aneya-teal/20 transition-colors"
-                      >
-                        View Consultation Summary
-                      </button>
-                    )}
-                  </div>
+                <div key={apt.id} className={isPast ? 'opacity-80' : ''}>
+                  <PastAppointmentCard
+                    appointment={appointmentWithPatient}
+                    consultation={apt.consultation}
+                    viewMode="patient"
+                    showOBGynForm={isOBGyn && !isPast}
+                    onOBGynFormClick={() => setSelectedOBGynForm({
+                      appointmentId: apt.id,
+                      patientId: patientProfile!.id
+                    })}
+                    obgynFormStatus={apt.obgynFormStatus}
+                  />
                 </div>
               );
             })}
