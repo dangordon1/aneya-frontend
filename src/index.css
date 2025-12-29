@@ -176,6 +176,94 @@ p {
   }
 }
 
+/* Large Recording Control Buttons */
+.recording-control-button {
+  min-height: 120px;
+  min-width: 140px;
+  padding: 20px 24px;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 16px;
+  border: 3px solid;
+  transition: all 0.3s ease;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  box-shadow:
+    0px 4px 16px rgba(0, 0, 0, 0.1),
+    0px 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.recording-control-button svg {
+  width: 40px;
+  height: 40px;
+}
+
+.recording-control-button:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0px 8px 24px rgba(0, 0, 0, 0.15),
+    0px 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.recording-control-button:active {
+  transform: translateY(0);
+}
+
+/* Cancel button variant */
+.recording-control-button.cancel {
+  background: white;
+  border-color: #cbd5e0;
+  color: #718096;
+}
+
+.recording-control-button.cancel:hover {
+  background: #f7fafc;
+  border-color: #a0aec0;
+  color: #4a5568;
+}
+
+/* Pause/Resume button variant */
+.recording-control-button.pause-resume {
+  background: linear-gradient(135deg, #81e6d9 0%, #4fd1c5 100%);
+  border-color: var(--aneya-teal);
+  color: var(--aneya-navy);
+}
+
+.recording-control-button.pause-resume:hover {
+  background: linear-gradient(135deg, #4fd1c5 0%, #38b2ac 100%);
+}
+
+/* Stop button variant */
+.recording-control-button.stop {
+  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+  border-color: #e53e3e;
+  color: white;
+}
+
+.recording-control-button.stop:hover {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+}
+
+/* Mobile optimization */
+@media (max-width: 640px) {
+  .recording-control-button {
+    min-height: 100px;
+    min-width: 100px;
+    font-size: 16px;
+    padding: 16px 20px;
+  }
+
+  .recording-control-button svg {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 /* Smooth transitions */
 * {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;

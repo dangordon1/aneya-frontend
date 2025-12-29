@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Patient, Consultation, AppointmentWithPatient } from '../types/database';
 import { usePatients } from '../hooks/usePatients';
 import { PastAppointmentCard } from './PastAppointmentCard';
+import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { calculateAgeString, formatDateUK } from '../utils/dateHelpers';
 import { supabase } from '../lib/supabase';
 
@@ -25,6 +26,7 @@ export function PatientDetailView({
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [isEditingMedications, setIsEditingMedications] = useState(false);
   const [isEditingConditions, setIsEditingConditions] = useState(false);
   const [medicationsValue, setMedicationsValue] = useState(patient.current_medications || '');
@@ -380,8 +382,7 @@ export function PatientDetailView({
                   key={appointment.id}
                   appointment={appointment}
                   consultation={consultationsMap[appointment.id] || null}
-                  onAnalyze={onAnalyzeConsultation}
-                  onResummarize={handleResummarize}
+                  onClick={() => setSelectedAppointmentDetail(appointment)}
                 />
               ))}
             </div>
@@ -419,6 +420,18 @@ export function PatientDetailView({
             Edit Patient
           </button>
         </div>
+
+        {/* Appointment Detail Modal */}
+        {selectedAppointmentDetail && (
+          <AppointmentDetailModal
+            isOpen={true}
+            onClose={() => setSelectedAppointmentDetail(null)}
+            appointment={selectedAppointmentDetail}
+            consultation={consultationsMap[selectedAppointmentDetail.id] || null}
+            onAnalyze={onAnalyzeConsultation}
+            onResummarize={handleResummarize}
+          />
+        )}
       </div>
     </div>
   );

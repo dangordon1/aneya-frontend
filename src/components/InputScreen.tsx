@@ -1675,84 +1675,82 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
           {/* Recording Controls - Replace button when recording */}
           {isRecording && (
-            <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4 sm:p-6">
-              <div className="flex flex-col gap-6 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
-                {/* Left: Recording indicator */}
-                <div className="flex items-center gap-3 sm:gap-4">
-                  {/* Animated mic icon */}
-                  <div className={`relative ${!isPaused ? 'animate-pulse' : ''}`}>
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
-                      <svg className={`h-5 w-5 sm:h-6 sm:w-6 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    {/* Recording dot */}
-                    {!isPaused && (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                    )}
+            <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-6 sm:p-8">
+              {/* Timer and Status - Centered at top */}
+              <div className="flex flex-col items-center gap-2 mb-8">
+                {/* Animated mic icon */}
+                <div className={`relative ${!isPaused ? 'animate-pulse' : ''}`}>
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isPaused ? 'bg-gray-100' : 'bg-red-50'}`}>
+                    <svg className={`h-8 w-8 ${isPaused ? 'text-gray-400' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                    </svg>
                   </div>
-
-                  {/* Timer and status */}
-                  <div>
-                    <div className="text-[24px] sm:text-[28px] font-mono text-aneya-navy">
-                      {formatTime(recordingTime)}
-                    </div>
-                    <div className={`text-[11px] sm:text-[12px] ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {isPaused ? 'Paused' : `Streaming${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
-                    </div>
-                  </div>
+                  {/* Recording dot */}
+                  {!isPaused && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse" />
+                  )}
                 </div>
 
-                {/* Right: Control buttons - stack on mobile */}
-                <div className="flex items-stretch justify-between sm:justify-end gap-3 sm:gap-3 w-full sm:w-auto">
-                  {/* Cancel button */}
-                  <button
-                    onClick={cancelRecording}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
-                  >
-                    <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="text-sm sm:text-[14px]">Cancel</span>
-                  </button>
+                {/* Timer */}
+                <div className="text-[32px] sm:text-[40px] font-mono text-aneya-navy font-bold">
+                  {formatTime(recordingTime)}
+                </div>
 
-                  {/* Pause/Resume button */}
-                  <button
-                    onClick={isPaused ? resumeRecording : pauseRecording}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] bg-aneya-teal/20 hover:bg-aneya-teal/30 text-aneya-navy transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
-                  >
-                    {isPaused ? (
-                      <>
-                        <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm sm:text-[14px]">Resume</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm sm:text-[14px]">Pause</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Stop button */}
-                  <button
-                    onClick={stopRecording}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-2 px-4 sm:px-4 py-8 sm:py-2 rounded-[10px] bg-red-500 hover:bg-red-600 text-white transition-colors text-base sm:text-[14px] flex-1 sm:flex-none min-h-[88px] sm:min-h-0"
-                  >
-                    <svg className="h-8 w-8 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <rect x="6" y="6" width="8" height="8" rx="1" />
-                    </svg>
-                    <span className="text-sm sm:text-[14px]">Stop</span>
-                  </button>
+                {/* Status */}
+                <div className={`text-[14px] sm:text-[16px] font-medium ${isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {isPaused ? 'Paused' : `Streaming${detectedLanguage ? ` (${detectedLanguage})` : ''}...`}
                 </div>
               </div>
 
+              {/* Large Control Buttons - Centered */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-8">
+                {/* Cancel button */}
+                <button
+                  onClick={cancelRecording}
+                  className="recording-control-button cancel"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Cancel</span>
+                </button>
+
+                {/* Pause/Resume button */}
+                <button
+                  onClick={isPaused ? resumeRecording : pauseRecording}
+                  className="recording-control-button pause-resume"
+                >
+                  {isPaused ? (
+                    <>
+                      <svg fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                      </svg>
+                      <span>Resume</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>Pause</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Stop button */}
+                <button
+                  onClick={stopRecording}
+                  className="recording-control-button stop"
+                >
+                  <svg fill="currentColor" viewBox="0 0 20 20">
+                    <rect x="6" y="6" width="8" height="8" rx="1" />
+                  </svg>
+                  <span>Stop</span>
+                </button>
+              </div>
+
               {/* Two-column transcript display during recording */}
-              <div className="hidden sm:grid sm:grid-cols-2 gap-4 mt-6">
+              <div className="hidden sm:grid sm:grid-cols-2 gap-4">
                 {/* LEFT: Real-time transcript from WebSocket */}
                 <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
                   <div className="flex items-center justify-between mb-3">

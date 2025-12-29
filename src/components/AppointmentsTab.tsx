@@ -8,6 +8,7 @@ import { PatientFormModal } from './PatientFormModal';
 import { CompactCalendar } from './CompactCalendar';
 import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
+import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
 import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
 import { InfertilityPreConsultationForm } from './patient-portal/InfertilityPreConsultationForm';
@@ -44,6 +45,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [pastAppointmentsLoading, setPastAppointmentsLoading] = useState(true);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
+  const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [pastAppointmentsSearch, setPastAppointmentsSearch] = useState('');
 
   // Filter past appointments based on search
@@ -676,14 +678,25 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
                   key={appointment.id}
                   appointment={appointment}
                   consultation={consultationsMap[appointment.id] || null}
-                  onAnalyze={onAnalyzeConsultation}
-                  onResummarize={handleResummarize}
+                  onClick={() => setSelectedAppointmentDetail(appointment)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Appointment Detail Modal */}
+      {selectedAppointmentDetail && (
+        <AppointmentDetailModal
+          isOpen={true}
+          onClose={() => setSelectedAppointmentDetail(null)}
+          appointment={selectedAppointmentDetail}
+          consultation={consultationsMap[selectedAppointmentDetail.id] || null}
+          onAnalyze={onAnalyzeConsultation}
+          onResummarize={handleResummarize}
+        />
+      )}
     </div>
   );
 }

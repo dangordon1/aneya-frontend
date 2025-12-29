@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Appointment, Patient, CreateAppointmentInput, AppointmentType, OBGYNSubtype } from '../types/database';
+import { X } from 'lucide-react';
 
 interface AppointmentFormModalProps {
   isOpen: boolean;
@@ -180,9 +181,18 @@ export function AppointmentFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8">
       <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-y-auto">
-        <h2 className="text-[24px] sm:text-[28px] text-aneya-navy mb-4 sm:mb-6">
-          {appointment ? 'Edit Appointment' : 'Create New Appointment'}
-        </h2>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-[24px] sm:text-[28px] text-aneya-navy">
+            {appointment ? 'Edit Appointment' : 'Create New Appointment'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            type="button"
+          >
+            <X className="w-6 h-6 text-gray-600" />
+          </button>
+        </div>
 
         {/* No patients message */}
         {hasNoPatients ? (
