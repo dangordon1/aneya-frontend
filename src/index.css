@@ -101,6 +101,81 @@ p {
   box-shadow: 0px 2px 8px rgba(12, 53, 85, 0.2);
 }
 
+/* Hero Record Button - Large, prominent CTA */
+.hero-record-button {
+  /* Size */
+  min-height: 120px;
+  width: 100%;
+  max-width: 400px;
+  padding: 24px 48px;
+
+  /* Typography */
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+
+  /* Colors */
+  background: linear-gradient(135deg, var(--aneya-navy) 0%, #0a2a42 100%);
+  color: white;
+  border: 3px solid var(--aneya-teal);
+  border-radius: 16px;
+
+  /* Effects */
+  box-shadow:
+    0px 8px 24px rgba(12, 53, 85, 0.25),
+    0px 2px 8px rgba(29, 158, 153, 0.3);
+  transition: all 0.3s ease;
+
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  /* Animation */
+  animation: heroFadeIn 0.6s ease-out;
+}
+
+.hero-record-button:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow:
+    0px 12px 32px rgba(12, 53, 85, 0.35),
+    0px 4px 12px rgba(29, 158, 153, 0.4);
+  border-color: var(--aneya-seagreen);
+}
+
+.hero-record-button:active:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hero-record-button:disabled {
+  background: linear-gradient(135deg, #8fa9be 0%, #a5b8c9 100%);
+  border-color: #cbd5e0;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.hero-record-button svg {
+  width: 32px;
+  height: 32px;
+}
+
+/* Mobile optimization */
+@media (max-width: 640px) {
+  .hero-record-button {
+    min-height: 100px;
+    font-size: 18px;
+    padding: 20px 32px;
+    max-width: 100%;
+  }
+
+  .hero-record-button svg {
+    width: 28px;
+    height: 28px;
+  }
+}
+
 /* Smooth transitions */
 * {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -124,6 +199,17 @@ p {
   }
   to {
     transform: scale(1);
+  }
+}
+
+@keyframes heroFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
