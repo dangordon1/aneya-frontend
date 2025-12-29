@@ -26,6 +26,8 @@ export function AppointmentDetailModal({
 }: AppointmentDetailModalProps) {
   const [isResummarizing, setIsResummarizing] = useState(false);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
+  const [isRerunningTranscription, setIsRerunningTranscription] = useState(false);
+  const [rerunProgress, setRerunProgress] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -81,6 +83,55 @@ export function AppointmentDetailModal({
 
   const handleUpdateSummaryData = (updatedData: any) => {
     console.log('Summary data updated:', updatedData);
+  };
+
+  const handleRerunTranscription = async () => {
+    if (!consultation?.id) return;
+
+    // Confirmation dialog
+    if (!window.confirm('Rerun transcription/diarization? This will replace the existing transcript.')) {
+      return;
+    }
+
+    setIsRerunningTranscription(true);
+    setRerunProgress('Downloading audio...');
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      setRerunProgress('Processing transcription (this may take 30-120s)...');
+
+      const response = await fetch(`${apiUrl}/api/rerun-transcription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consultation_id: consultation.id })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || response.statusText);
+      }
+
+      const data = await response.json();
+
+      // Update local state
+      if (consultation) {
+        consultation.original_transcript = data.transcript;
+      }
+
+      // Show success notification
+      alert(`Transcription rerun successfully in ${data.processing_time_seconds}s using ${data.provider}`);
+
+      // Refresh page to show updated transcript
+      window.location.reload();
+
+    } catch (error: any) {
+      console.error('Error rerunning transcription:', error);
+      alert(`Failed to rerun transcription: ${error.message}`);
+    } finally {
+      setIsRerunningTranscription(false);
+      setRerunProgress('');
+    }
   };
 
   const hasAiAnalysis = consultation?.diagnoses && consultation.diagnoses.length > 0;
@@ -146,7 +197,7 @@ export function AppointmentDetailModal({
         {consultation ? (
           <div className="space-y-4">
             {/* Action buttons */}
-            {viewMode === 'doctor' && (canResummarize || canAnalyze) && (
+            {viewMode === 'doctor' && (canResummarize || canAnalyze || consultation?.audio_url) && (
               <div className="flex gap-2">
                 {canResummarize && (
                   <button
@@ -163,6 +214,16 @@ export function AppointmentDetailModal({
                   >
                     <RefreshCw className={`w-4 h-4 ${isResummarizing ? 'animate-spin' : ''}`} />
                     {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
+                  </button>
+                )}
+                {consultation?.audio_url && (
+                  <button
+                    onClick={handleRerunTranscription}
+                    disabled={isRerunningTranscription}
+                    className="px-3 py-2 bg-purple-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isRerunningTranscription ? 'animate-spin' : ''}`} />
+                    {isRerunningTranscription ? rerunProgress : 'Rerun Transcription'}
                   </button>
                 )}
                 {canAnalyze && (
