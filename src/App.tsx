@@ -10,6 +10,7 @@ import { useMessages } from './hooks/useMessages';
 import { usePatientDoctors } from './hooks/usePatientDoctors';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PatientDashboard } from './components/patient-portal/PatientDashboard';
+import { getPatientAge } from './utils/dateHelpers';
 
 // Helper function for timestamped logging
 const timestamp = () => new Date().toISOString();
@@ -388,9 +389,7 @@ function MainApp() {
     setCurrentPatientDetails({
       name: appointment.patient.name,
       sex: appointment.patient.sex,
-      age: appointment.patient.date_of_birth
-        ? `${new Date().getFullYear() - new Date(appointment.patient.date_of_birth).getFullYear()} years`
-        : '',
+      age: getPatientAge(appointment.patient),
       height: appointment.patient.height_cm ? `${appointment.patient.height_cm} cm` : '',
       weight: appointment.patient.weight_kg ? `${appointment.patient.weight_kg} kg` : '',
       currentMedications: appointment.patient.current_medications || '',
@@ -414,9 +413,7 @@ function MainApp() {
   const buildPatientDetails = (patient: Patient): PatientDetails => ({
     name: patient.name,
     sex: patient.sex,
-    age: patient.date_of_birth
-      ? `${new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()} years`
-      : '',
+    age: getPatientAge(patient),
     height: patient.height_cm?.toString() || '',
     weight: patient.weight_kg?.toString() || '',
     currentMedications: patient.current_medications || '',

@@ -23,6 +23,35 @@ export function calculateAgeString(dateOfBirth: string): string {
 }
 
 /**
+ * Get age string from either DOB or stored age_years
+ * DOB takes precedence if both exist
+ */
+export function getPatientAge(patient: {
+  date_of_birth: string | null;
+  age_years: number | null;
+}): string {
+  if (patient.date_of_birth) {
+    return calculateAgeString(patient.date_of_birth);
+  } else if (patient.age_years) {
+    return `${patient.age_years} years`;
+  }
+  return 'Unknown';
+}
+
+/**
+ * Get age as integer from either DOB or stored age_years
+ */
+export function getPatientAgeNumber(patient: {
+  date_of_birth: string | null;
+  age_years: number | null;
+}): number | null {
+  if (patient.date_of_birth) {
+    return calculateAge(patient.date_of_birth);
+  }
+  return patient.age_years || null;
+}
+
+/**
  * Format date to UK format (DD/MM/YYYY)
  */
 export function formatDateUK(date: string | Date): string {
