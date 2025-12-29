@@ -156,6 +156,10 @@ export interface Consultation {
   location_detected: string | null;
   backend_api_version: string | null;
   summary_data?: SummaryData | null; // Full summarization data
+  transcription_status: 'pending' | 'processing' | 'completed' | 'failed'; // Status of async diarisation
+  transcription_error: string | null; // Error message if transcription_status is failed
+  transcription_started_at: string | null; // When async processing started
+  transcription_completed_at: string | null; // When async processing finished
 }
 
 // Summary data returned from /api/summarize endpoint
@@ -276,6 +280,8 @@ export interface CreateConsultationInput {
   location_detected?: string | null;
   backend_api_version?: string | null;
   summary_data?: SummaryData | null; // Full summarization data from /api/summarize
+  transcription_status?: 'pending' | 'processing' | 'completed' | 'failed'; // Status of async diarisation
+  transcription_error?: string | null; // Error message if failed
 }
 
 // ============================================

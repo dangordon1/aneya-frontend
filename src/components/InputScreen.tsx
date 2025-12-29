@@ -12,6 +12,7 @@ import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsulta
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
+import { useConsultationRealtime } from '../hooks/useConsultationRealtime';
 
 interface ChunkStatus {
   index: number;
@@ -232,9 +233,35 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const speakerRolesRef = useRef<Record<string, string>>({}); // Ref to access latest value
   const [lastProcessedChunkIndex, setLastProcessedChunkIndex] = useState(-1);
 
+  // Async transcription processing state
+  const [pendingConsultationId, setPendingConsultationId] = useState<string | null>(null);
+  const [showProcessingOverlay, setShowProcessingOverlay] = useState(false);
+
   // CRITICAL: Lock to prevent parallel chunk processing
   // Sarvam batch jobs take 30-120s, so we must process chunks sequentially
   const [isProcessingChunk, setIsProcessingChunk] = useState(false);
+
+  // Realtime subscription for async transcription updates
+  const { consultation: liveConsultation } = useConsultationRealtime({
+    consultationId: pendingConsultationId,
+    onStatusChange: (updated) => {
+      if (updated.transcription_status === 'completed') {
+        console.log('✅ Async transcription completed');
+        setConsultation(updated.consultation_text);
+        setShowProcessingOverlay(false);
+        setPendingConsultationId(null);
+        alert('Speaker labels processed successfully!');
+      } else if (updated.transcription_status === 'failed') {
+        console.log('❌ Async transcription failed:', updated.transcription_error);
+        setShowProcessingOverlay(false);
+        setPendingConsultationId(null);
+        alert(
+          `Processing failed: ${updated.transcription_error}\n\nYour consultation has been saved with the real-time transcript.`
+        );
+      }
+    },
+    enabled: !!pendingConsultationId
+  });
 
   // Keep refs in sync with state for accessing latest values in async functions
   useEffect(() => {
@@ -1296,84 +1323,151 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     }
   };
 
-  // Stop streaming recording
+  // Stop streaming recording (ASYNC VERSION - saves immediately, processes final chunk in background)
   const stopStreamingRecording = async () => {
+    console.log('🛑 Stopping recording...');
     stopTimer();
-
-    // Clear interim transcript
     setInterimTranscript('');
 
-    // NEW: Stop MediaRecorder
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    // Stop MediaRecorder
+    if (mediaRecorderRef.current?.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-
-      // Wait for final data to be collected
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         if (mediaRecorderRef.current) {
           mediaRecorderRef.current.onstop = () => resolve();
         } else {
           resolve();
         }
       });
-
       mediaRecorderRef.current = null;
     }
 
-    // Process final partial chunk if any remaining audio exists
+    // Extract final chunk info (if any remaining audio)
     const finalChunkInfo = extractFinalChunk(
       audioChunksRef.current,
       lastProcessedChunkIndex,
       recordingTime
     );
 
-    if (finalChunkInfo) {
-      console.log(`🎬 Processing FINAL chunk ${finalChunkInfo.index}...`);
-      await processChunk(finalChunkInfo);
-      console.log('✅ Final chunk API call completed, waiting for state updates...');
+    // Upload audio to GCS first (to get audio_url before saving)
+    let audioGcsUrl: string | null = null;
+    if (audioChunksRef.current.length > 0) {
+      try {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', audioBlob, `recording-${Date.now()}.webm`);
 
-      // Wait a bit for React state updates to propagate
-      // processChunk updates diarizedSegments via setState, which is async
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        const res = await fetch(`${API_URL}/api/upload-audio`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          audioGcsUrl = result.gcs_uri;
+          console.log('✅ Audio uploaded to GCS:', audioGcsUrl);
+        }
+      } catch (e) {
+        console.error('❌ Audio upload failed:', e);
+      }
     }
 
-    // Use chunked diarization results if available (read from ref to get latest value)
-    const latestSegments = diarizedSegmentsRef.current;
+    // Determine consultation text and status
+    const segments = diarizedSegmentsRef.current;
+    let consultationText: string;
+    let status: 'pending' | 'completed';
 
-    if (latestSegments.length > 0) {
-      console.log('✅ Using chunked diarization results');
-      console.log(`📝 Total diarized segments: ${latestSegments.length}`);
-
-      // Format segments as "Doctor: text\nPatient: text" transcript
-      const formattedTranscript = latestSegments
+    if (segments.length > 0 && !finalChunkInfo) {
+      // Already have full diarization from chunked processing (no final chunk)
+      consultationText = segments
         .sort((a, b) => a.start_time - b.start_time)
-        .map(seg => {
-          // Use speaker_role if available (e.g., "Doctor", "Patient"), otherwise use speaker_id
-          const speaker = seg.speaker_role || seg.speaker_id;
-          return `${speaker}: ${seg.text}`;
-        })
+        .map(s => `${s.speaker_role || s.speaker_id}: ${s.text}`)
         .join('\n\n');
-
-      setConsultation(formattedTranscript);
-      console.log('✅ Speaker-labeled transcript set as consultation');
-
-      // Optional: Upload audio to GCS for storage (non-blocking)
-      if (audioChunksRef.current.length > 0) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        uploadAudioToGCS(audioBlob);
-      }
+      status = 'completed';
+      console.log('✅ Using existing diarized segments, marking as completed');
     } else {
-      console.log('ℹ️  No chunked diarization segments - using real-time transcript');
-      // Real-time transcript is already in consultation state from Sarvam WebSocket
+      // Use real-time transcript, mark as pending if we have a final chunk to process
+      consultationText = consultation || 'Recording completed';
+      status = finalChunkInfo ? 'pending' : 'completed';
+      console.log(`ℹ️  Using real-time transcript, status: ${status}`);
     }
 
     // Clean up audio resources
     cleanupAudio();
-
     setIsRecording(false);
     setIsPaused(false);
     setRecordingTime(0);
 
-    console.log('🎙️ Streaming recording stopped');
+    // Prepare patient snapshot
+    const patientSnapshot = selectedPatient ? {
+      name: selectedPatient.name,
+      age: getPatientAge(selectedPatient),
+      sex: selectedPatient.sex,
+      allergies: selectedPatient.allergies,
+      current_medications: selectedPatient.current_medications,
+      current_conditions: selectedPatient.current_conditions
+    } : null;
+
+    // Save consultation IMMEDIATELY (don't wait for diarization)
+    console.log('💾 Saving consultation immediately...');
+    try {
+      const saved = await onSaveConsultation({
+        patient_id: selectedPatient!.id,
+        appointment_id: selectedAppointment?.id || null,
+        consultation_text: consultationText,
+        original_transcript: originalTranscript || consultation,
+        transcription_language: consultationLanguage,
+        audio_url: audioGcsUrl,
+        patient_snapshot: patientSnapshot,
+        consultation_duration_seconds: recordingTime,
+        transcription_status: status
+      });
+
+      if (!saved) {
+        alert('Failed to save consultation');
+        return;
+      }
+
+      console.log(`✅ Consultation saved (id: ${saved.id}, status: ${status})`);
+
+      // If pending, trigger async processing
+      if (finalChunkInfo && status === 'pending') {
+        console.log('🚀 Triggering async final chunk processing...');
+
+        const formData = new FormData();
+        formData.append('audio', finalChunkInfo.audioBlob);
+        formData.append('consultation_id', saved.id);
+        formData.append('chunk_index', finalChunkInfo.index.toString());
+        formData.append('chunk_start', finalChunkInfo.startTime.toString());
+        formData.append('chunk_end', finalChunkInfo.endTime.toString());
+        formData.append('language', consultationLanguage);
+
+        try {
+          const res = await fetch(`${API_URL}/api/process-final-chunk-async`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            const result = await res.json();
+            console.log('✅ Async processing queued:', result);
+            setPendingConsultationId(saved.id);
+            setShowProcessingOverlay(true);
+          } else {
+            console.error('❌ Failed to queue async processing:', await res.text());
+          }
+        } catch (e) {
+          console.error('❌ Failed to trigger async processing:', e);
+        }
+      }
+
+      setConsultation(consultationText);
+    } catch (err) {
+      console.error('❌ Failed to save consultation:', err);
+      alert('Failed to save consultation. Please try again.');
+    }
+
+    console.log('🎙️ Recording stopped and saved');
   };
 
   // Helper: Upload audio blob to GCS
@@ -1806,7 +1900,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 </div>
 
                 {/* RIGHT: Diarized segments appearing progressively */}
-                <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4">
+                <div className="bg-white border-2 border-aneya-teal rounded-[10px] p-4 relative">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-[14px] font-medium text-aneya-navy">
                       Speaker-Labeled Transcript
@@ -1844,6 +1938,43 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                       ))
                     )}
                   </div>
+
+                  {/* Processing overlay - shown when async transcription is running */}
+                  {showProcessingOverlay && (
+                    <div className="absolute inset-0 bg-aneya-cream/90 backdrop-blur-sm flex items-center justify-center z-10 rounded-[10px]">
+                      <div className="text-center px-4">
+                        <svg className="h-12 w-12 animate-spin text-aneya-teal mx-auto mb-4" viewBox="0 0 24 24">
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="none"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+
+                        <h3 className="text-[18px] font-semibold text-aneya-navy mb-2">
+                          Processing speaker labels...
+                        </h3>
+                        <p className="text-[14px] text-gray-600 mb-4">
+                          {consultationLanguage.startsWith('en')
+                            ? 'This will take 5-10 seconds'
+                            : 'This may take up to 2 minutes'}
+                        </p>
+                        <p className="text-[12px] text-gray-500 italic">
+                          Your consultation is saved.<br />
+                          You can navigate away if needed.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
