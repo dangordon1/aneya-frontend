@@ -28,11 +28,12 @@ const DoctorMessages = lazy(() => import('./components/doctor-portal/DoctorMessa
 const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorProfileTab').then(m => ({ default: m.DoctorProfileTab })));
 const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
+const InfertilityDuringConsultationForm = lazy(() => import('./components/doctor-portal/InfertilityDuringConsultationForm').then(m => ({ default: m.InfertilityDuringConsultationForm })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors' | 'infertility-form';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -668,14 +669,9 @@ function MainApp() {
   };
 
   // Handler for analyzing consultations from PatientDetailView (uses selectedPatient from state)
-  const handleAnalyzeConsultationFromPatientView = async (consultation: Consultation) => {
-    if (!selectedPatient) {
-      alert('No patient selected');
-      return;
-    }
-
-    // Build patient details from selected patient
-    const patientDetails = buildPatientDetails(selectedPatient);
+  const handleAnalyzeConsultationFromPatientView = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
+    // Build patient details from appointment patient data
+    const patientDetails = buildPatientDetails(appointment.patient);
 
     // Get the text to analyze
     const textToAnalyze = consultation.original_transcript || consultation.consultation_text || '';
@@ -991,7 +987,7 @@ function MainApp() {
     }
   };
 
-  const handleSaveConsultationOnly = async (transcript: string, summaryResponse: any, patientDetails: PatientDetails) => {
+  const handleSaveConsultationOnly = async (transcript: string, summaryResponse: any, patientDetails: PatientDetails, audioUrl?: string | null) => {
     if (!selectedPatient) {
       alert('Please select a patient first');
       return;
@@ -1023,6 +1019,7 @@ function MainApp() {
         consultation_text: formattedConsultationText || apiConsultationData?.consultation_text || transcript,
         original_transcript: apiConsultationData?.original_transcript || originalTranscript || transcript || null,
         transcription_language: apiConsultationData?.transcription_language || transcriptionLanguage || null,
+        audio_url: audioUrl || null,
         patient_snapshot: patientDetails,
         // AI Analysis fields - explicitly null/empty until analyze is called
         analysis_result: null,
@@ -1156,6 +1153,8 @@ function MainApp() {
                   duration_minutes: 30,
                   status: 'scheduled',
                   appointment_type: 'general',
+                  specialty: 'general',
+                  specialty_subtype: null,
                   reason: null,
                   notes: null,
                   created_at: new Date().toISOString(),
@@ -1195,6 +1194,21 @@ function MainApp() {
               appointmentContext={selectedAppointment || undefined}
               locationOverride={locationOverride}
               onLocationChange={setLocationOverride}
+              onOpenInfertilityForm={() => setCurrentScreen('infertility-form')}
+            />
+          )}
+
+          {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
+            <InfertilityDuringConsultationForm
+              patientId={selectedPatient.id}
+              appointmentId={selectedAppointment.id}
+              doctorUserId={user?.id}
+              onBack={() => setCurrentScreen('input')}
+              onComplete={() => {
+                // Refresh appointments and return to input screen
+                setAppointmentsRefreshKey(prev => prev + 1);
+                setCurrentScreen('input');
+              }}
             />
           )}
 

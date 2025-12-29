@@ -37,7 +37,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
 
         let query = supabase
           .from('appointments')
-          .select('*, patient:patients(*)')
+          .select('*, patient:patients(*), doctor:doctors(*)')
           .in('status', ['scheduled', 'in_progress']) // Only fetch active appointments
           .order('scheduled_time', { ascending: true });
 
@@ -62,6 +62,17 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         const { data, error: fetchError } = await query;
         const queryEnd = performance.now();
         console.log(`⏱️ Active appointments query: ${(queryEnd - queryStart).toFixed(0)}ms (${data?.length || 0} records)`);
+
+        // Debug: Log doctor data for each appointment
+        console.log('🔍 useAppointments: Fetched appointments with doctor data:',
+          data?.map(apt => ({
+            id: apt.id,
+            patient_name: (apt as any).patient?.name,
+            doctor_id: apt.doctor_id,
+            doctor_name: (apt as any).doctor?.name,
+            doctor_specialty: (apt as any).doctor?.specialty
+          }))
+        );
 
         if (fetchError) throw fetchError;
 
@@ -97,7 +108,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
             status: 'scheduled',
             created_by: user.id,
           })
-          .select('*, patient:patients(*)')
+          .select('*, patient:patients(*), doctor:doctors(*)')
           .single();
 
         if (createError) throw createError;
@@ -138,8 +149,8 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
           query = query.eq('created_by', user.id);
         }
 
-        const { data, error: updateError } = await query
-          .select('*, patient:patients(*)')
+        const { data, error: updateError} = await query
+          .select('*, patient:patients(*), doctor:doctors(*)')
           .single();
 
         if (updateError) throw updateError;
@@ -183,7 +194,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         }
 
         const { data, error: cancelError } = await query
-          .select('*, patient:patients(*)')
+          .select('*, patient:patients(*), doctor:doctors(*)')
           .single();
 
         if (cancelError) throw cancelError;
