@@ -3,7 +3,7 @@ import { Patient, Consultation, AppointmentWithPatient } from '../types/database
 import { usePatients } from '../hooks/usePatients';
 import { PastAppointmentCard } from './PastAppointmentCard';
 import { AppointmentDetailModal } from './AppointmentDetailModal';
-import { calculateAgeString, formatDateUK } from '../utils/dateHelpers';
+import { getPatientAge, formatDateUK } from '../utils/dateHelpers';
 import { supabase } from '../lib/supabase';
 
 interface PatientDetailViewProps {
@@ -116,7 +116,7 @@ export function PatientDetailView({
         original_text: consultation.original_transcript,
         patient_info: consultation.patient_snapshot || {
           patient_id: patient.id,
-          patient_age: calculateAgeString(patient.date_of_birth),
+          patient_age: getPatientAge(patient),
         },
         is_from_transcription: true,
         transcription_language: consultation.transcription_language || 'en'
@@ -201,7 +201,7 @@ export function PatientDetailView({
             <div>
               <div className="text-[12px] text-gray-600 mb-1">Age</div>
               <div className="text-[14px] text-aneya-navy font-medium">
-                {calculateAgeString(patient.date_of_birth)}
+                {getPatientAge(patient)}
               </div>
             </div>
             <div>
@@ -211,7 +211,7 @@ export function PatientDetailView({
             <div>
               <div className="text-[12px] text-gray-600 mb-1">Date of Birth</div>
               <div className="text-[14px] text-aneya-navy font-medium">
-                {formatDateUK(patient.date_of_birth)}
+                {patient.date_of_birth ? formatDateUK(patient.date_of_birth) : 'Age only recorded'}
               </div>
             </div>
             <div>

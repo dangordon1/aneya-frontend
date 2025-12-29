@@ -16,6 +16,7 @@ import { AntenatalPreConsultationForm } from './patient-portal/AntenatalPreConsu
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
+import { getPatientAgeNumber } from '../utils/dateHelpers';
 
 interface AppointmentsTabProps {
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
@@ -132,9 +133,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation }: 
         original_text: consultation.original_transcript,
         patient_info: consultation.patient_snapshot || {
           patient_id: appointment.patient_id,
-          patient_age: appointment.patient?.date_of_birth
-            ? `${new Date().getFullYear() - new Date(appointment.patient.date_of_birth).getFullYear()} years old`
-            : undefined,
+          patient_age: appointment.patient && getPatientAgeNumber(appointment.patient)
+            ? `${getPatientAgeNumber(appointment.patient)} years old`
+            : 'Age unknown',
         },
         is_from_transcription: true,
         transcription_language: consultation.transcription_language || 'en'

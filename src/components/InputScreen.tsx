@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PrimaryButton } from './PrimaryButton';
 import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LANGUAGES, isSarvamLanguage } from '../types/database';
-import { formatTime24 } from '../utils/dateHelpers';
+import { formatTime24, getPatientAge } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
@@ -11,6 +11,7 @@ import { requiresOBGynForms } from '../utils/specialtyHelpers';
 import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
+import { consultationEventBus } from '../lib/consultationEventBus';
 
 interface ChunkStatus {
   index: number;
@@ -154,6 +155,25 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
   currentConditions: 'Type 2 Diabetes Mellitus, Hypertension',
 };
 
+/**
+ * Determine form type based on doctor's specialty
+ * Returns 'obgyn', 'infertility', 'antenatal', or null if no specialty-specific form
+ */
+function determineFormType(doctorSpecialty: string | undefined, appointmentType?: string): 'obgyn' | 'infertility' | 'antenatal' | null {
+  if (!doctorSpecialty) return null;
+
+  // Check if OBGyn specialty
+  if (requiresOBGynForms(doctorSpecialty as any)) {
+    // Check appointment subtype if available
+    if (appointmentType === 'obgyn_infertility') return 'infertility';
+    if (appointmentType === 'obgyn_antenatal') return 'antenatal';
+    // Default to general obgyn
+    return 'obgyn';
+  }
+
+  return null;
+}
+
 export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange, onOpenInfertilityForm }: InputScreenProps) {
   const { user } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
@@ -167,9 +187,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const initialPatientDetails: PatientDetails = preFilledPatient ? {
     name: preFilledPatient.name,
     sex: preFilledPatient.sex,
-    age: preFilledPatient.date_of_birth
-      ? `${new Date().getFullYear() - new Date(preFilledPatient.date_of_birth).getFullYear()} years`
-      : '',
+    age: getPatientAge(preFilledPatient),
     height: preFilledPatient.height_cm ? `${preFilledPatient.height_cm} cm` : '',
     weight: preFilledPatient.weight_kg ? `${preFilledPatient.weight_kg} kg` : '',
     currentMedications: preFilledPatient.current_medications || '',
@@ -439,6 +457,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       // Update last processed chunk index
       setLastProcessedChunkIndex(nextIndex);
+
+      // Emit event for form auto-fill if doctor has specialty-specific forms
+      const formType = determineFormType(user?.specialty, appointmentContext?.appointment_type);
+      if (formType && labeledSegments.length > 0) {
+        console.log(`📋 Emitting diarization event for ${formType} form auto-fill (chunk #${nextIndex})`);
+        consultationEventBus.emit('diarization_chunk_complete', {
+          segments: labeledSegments,
+          chunk_index: nextIndex,
+          form_type: formType,
+          patient_id: preFilledPatient?.id || appointmentContext?.patient_id
+        });
+      }
 
     } catch (error) {
       console.error(`❌ Chunk processing error:`, error);

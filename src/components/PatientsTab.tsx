@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePatients } from '../hooks/usePatients';
 import { Patient } from '../types/database';
 import { PatientFormModal } from './PatientFormModal';
-import { calculateAge, formatDateUK, formatTime24 } from '../utils/dateHelpers';
+import { getPatientAge, formatDateUK, formatTime24 } from '../utils/dateHelpers';
 
 interface PatientsTabProps {
   onSelectPatient: (patient: Patient) => void;
@@ -176,7 +176,7 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                     <div>
                       <h3 className="text-[16px] font-semibold text-aneya-navy">{patient.name}</h3>
                       <p className="text-[14px] text-gray-600">
-                        {calculateAge(patient.date_of_birth)} • {patient.sex}
+                        {getPatientAge(patient)} • {patient.sex}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -262,7 +262,7 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                         {patient.name}
                       </td>
                       <td className="px-6 py-4 text-[14px] text-aneya-navy">
-                        {calculateAge(patient.date_of_birth)}
+                        {getPatientAge(patient)}
                       </td>
                       <td className="px-6 py-4 text-[14px] text-aneya-navy">{patient.sex}</td>
                       <td className="px-6 py-4 text-[14px] text-aneya-navy">

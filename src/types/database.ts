@@ -67,7 +67,8 @@ export interface Patient {
   updated_at: string;
   name: string;
   sex: 'Male' | 'Female' | 'Other';
-  date_of_birth: string; // ISO date string (YYYY-MM-DD)
+  date_of_birth: string | null; // ISO date string (YYYY-MM-DD), nullable - can use age_years instead
+  age_years: number | null; // Age in years when exact DOB is unknown
   height_cm: number | null;
   weight_kg: number | null;
   current_medications: string | null;
@@ -208,21 +209,23 @@ export interface ConsultationDataFromSummary {
 export interface CreatePatientInput {
   name: string;
   sex: Patient['sex'];
-  date_of_birth: string;
-  email: string; // Required - used for patient portal login and messaging
+  date_of_birth?: string | null; // Optional - can use age_years instead
+  age_years?: number | null; // Age in years when exact DOB is unknown
+  phone: string; // Required - primary identifier (10-digit Indian mobile)
+  email?: string | null; // Optional - used for patient portal login and messaging if provided
   height_cm?: number | null;
   weight_kg?: number | null;
   current_medications?: string | null;
   current_conditions?: string | null;
   allergies?: string | null;
-  phone?: string | null;
   consultation_language?: ConsultationLanguage;
 }
 
 export interface UpdatePatientInput {
   name?: string;
   sex?: Patient['sex'];
-  date_of_birth?: string;
+  date_of_birth?: string | null;
+  age_years?: number | null;
   height_cm?: number | null;
   weight_kg?: number | null;
   current_medications?: string | null;
