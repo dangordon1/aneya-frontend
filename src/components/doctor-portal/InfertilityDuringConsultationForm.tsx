@@ -19,7 +19,6 @@ export function InfertilityDuringConsultationForm({
   patientId,
   appointmentId,
   onComplete,
-  onBack,
   filledBy = 'doctor',
   doctorUserId,
 }: InfertilityDuringConsultationFormProps) {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAntenatalForms } from '../../hooks/useAntenatalForms';
-import { Checkbox } from '../common';
 import {
   CreateAntenatalFormInput,
   UpdateAntenatalFormInput,
