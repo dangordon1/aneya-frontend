@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Patient, Consultation, AppointmentWithPatient } from '../types/database';
 import { usePatients } from '../hooks/usePatients';
 import { PastAppointmentCard } from './PastAppointmentCard';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAgeString, formatDateUK } from '../utils/dateHelpers';
 import { supabase } from '../lib/supabase';
 
@@ -26,7 +25,6 @@ export function PatientDetailView({
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
-  const [isAppointmentsExpanded, setIsAppointmentsExpanded] = useState(true);
   const [isEditingMedications, setIsEditingMedications] = useState(false);
   const [isEditingConditions, setIsEditingConditions] = useState(false);
   const [medicationsValue, setMedicationsValue] = useState(patient.current_medications || '');
@@ -353,48 +351,39 @@ export function PatientDetailView({
         </section>
 
         {/* Past Appointments */}
-        <section className="mb-6">
-          <button
-            onClick={() => setIsAppointmentsExpanded(!isAppointmentsExpanded)}
-            className="w-full flex items-center justify-between p-4 bg-white border-2 border-aneya-teal rounded-[10px] hover:border-aneya-navy transition-colors mb-3"
-          >
-            <div className="flex items-center gap-3">
-              <h2 className="text-[20px] text-aneya-navy">Past Appointments</h2>
-              <span className="text-[14px] text-gray-500">
-                ({pastAppointments.length} {pastAppointments.length === 1 ? 'appointment' : 'appointments'})
+        <section className="mt-12 border-t border-gray-300 pt-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-[24px] text-aneya-navy font-semibold">
+              Past Appointments
+            </h2>
+            {pastAppointments.length > 0 && (
+              <span className="text-sm text-gray-500">
+                {pastAppointments.length} of {pastAppointments.length}
               </span>
-            </div>
-            {isAppointmentsExpanded ? (
-              <ChevronUp className="w-5 h-5 text-aneya-navy" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-aneya-navy" />
             )}
-          </button>
+          </div>
 
-          {isAppointmentsExpanded && (
-            <div className="space-y-3">
-              {appointmentsLoading ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 mx-auto mb-2 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
-                  <p className="text-[14px] text-gray-600">Loading past appointments...</p>
-                </div>
-              ) : pastAppointments.length === 0 ? (
-                <div className="bg-white rounded-[16px] p-8 text-center border-2 border-gray-200">
-                  <p className="text-[15px] text-gray-600">
-                    No past appointments on record
-                  </p>
-                </div>
-              ) : (
-                pastAppointments.map((appointment) => (
-                  <PastAppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    consultation={consultationsMap[appointment.id] || null}
-                    onAnalyze={onAnalyzeConsultation}
-                    onResummarize={handleResummarize}
-                  />
-                ))
-              )}
+          {appointmentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-aneya-teal border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pastAppointments.length === 0 ? (
+            <div className="bg-gray-50 rounded-[16px] p-8 text-center border border-gray-200">
+              <p className="text-[14px] text-gray-600">
+                No completed or cancelled appointments yet
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto space-y-4 pr-2">
+              {pastAppointments.map((appointment) => (
+                <PastAppointmentCard
+                  key={appointment.id}
+                  appointment={appointment}
+                  consultation={consultationsMap[appointment.id] || null}
+                  onAnalyze={onAnalyzeConsultation}
+                  onResummarize={handleResummarize}
+                />
+              ))}
             </div>
           )}
         </section>
