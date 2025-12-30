@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -7,11 +7,25 @@ import {
   CreatePatientInput,
   UpdatePatientInput,
 } from '../types/database';
+import {
+  getCachedPatients,
+  cachePatients,
+  cachePatient,
+  isLocalId,
+} from '../lib/offlineDb';
+import {
+  queuePatientCreate,
+  queuePatientUpdate,
+  queuePatientDelete,
+  getServerIdForLocalId,
+} from '../lib/syncService';
 
 interface UsePatientsReturn {
   patients: PatientWithAppointments[];
   loading: boolean;
   error: string | null;
+  isOffline: boolean;
+  hasPendingChanges: boolean;
   createPatient: (input: CreatePatientInput) => Promise<Patient | null>;
   updatePatient: (id: string, input: UpdatePatientInput) => Promise<Patient | null>;
   deletePatient: (id: string) => Promise<boolean>;
@@ -23,6 +37,23 @@ export function usePatients(): UsePatientsReturn {
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const initialLoadDone = useRef(false);
+
+  // Track network status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const fetchPatients = useCallback(async () => {
     if (!user) {
@@ -35,6 +66,33 @@ export function usePatients(): UsePatientsReturn {
       setLoading(true);
       setError(null);
 
+      // Always try to load from cache first for instant display
+      if (!initialLoadDone.current) {
+        try {
+          const cachedData = await getCachedPatients(user.id);
+          if (cachedData.length > 0) {
+            console.log(`📦 Loaded ${cachedData.length} patients from cache`);
+            setPatients(cachedData);
+            setLoading(false);
+          }
+        } catch (cacheErr) {
+          console.warn('Failed to load from cache:', cacheErr);
+        }
+      }
+
+      // If offline, use cached data only
+      if (!navigator.onLine) {
+        console.log('📵 Offline - using cached patient data');
+        setIsOffline(true);
+        if (initialLoadDone.current) {
+          const cachedData = await getCachedPatients(user.id);
+          setPatients(cachedData);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Fetch from network
       let query = supabase
         .from('patients')
         .select(`
@@ -83,11 +141,35 @@ export function usePatients(): UsePatientsReturn {
         };
       });
 
-      setPatients(patientsWithAppointments);
+      // Merge with any local-only patients (created offline, not yet synced)
+      const localPatients = patients.filter(p => isLocalId(p.id));
+      const mergedPatients = [...localPatients, ...patientsWithAppointments];
+
+      setPatients(mergedPatients);
+
+      // Cache the network data
+      await cachePatients(patientsWithAppointments);
+      console.log(`✅ Fetched and cached ${patientsWithAppointments.length} patients from network`);
+
+      initialLoadDone.current = true;
     } catch (err) {
       console.error('Error fetching patients:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch patients');
-      setPatients([]);
+
+      // If network error, try to use cached data
+      if (!navigator.onLine || (err as any)?.message?.includes('network')) {
+        setIsOffline(true);
+        try {
+          const cachedData = await getCachedPatients(user.id);
+          setPatients(cachedData);
+          setError('Offline - showing cached data');
+        } catch (cacheErr) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch patients');
+          setPatients([]);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to fetch patients');
+        setPatients([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -107,6 +189,46 @@ export function usePatients(): UsePatientsReturn {
       try {
         setError(null);
 
+        // If offline, create locally and queue for sync
+        if (!navigator.onLine) {
+          console.log('📵 Creating patient offline...');
+          const localId = await queuePatientCreate(input, user.id);
+
+          const localPatient: PatientWithAppointments = {
+            id: localId,
+            ...input,
+            created_by: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            archived: false,
+            user_id: null,
+            consultation_language: input.consultation_language || 'en-IN',
+            date_of_birth: input.date_of_birth || null,
+            age_years: input.age_years || null,
+            height_cm: input.height_cm || null,
+            weight_kg: input.weight_kg || null,
+            current_medications: input.current_medications || null,
+            current_conditions: input.current_conditions || null,
+            allergies: input.allergies || null,
+            email: input.email || null,
+            phone: input.phone || null,
+            last_visit: null,
+            next_appointment: null,
+          };
+
+          // Add to local state
+          setPatients((prev) => [localPatient, ...prev]);
+
+          // Cache locally
+          await cachePatient(localPatient);
+
+          setHasPendingChanges(true);
+          console.log('✅ Patient created offline with local ID:', localId);
+
+          return localPatient;
+        }
+
+        // Online - create directly in Supabase
         const { data, error: createError } = await supabase
           .from('patients')
           .insert({
@@ -137,12 +259,56 @@ export function usePatients(): UsePatientsReturn {
           }
         }
 
-        // Add to local state (cast to PatientWithAppointments for local state)
-        setPatients((prev) => [{ ...data, last_visit: null, next_appointment: null } as PatientWithAppointments, ...prev]);
+        const patientWithAppointments: PatientWithAppointments = {
+          ...data,
+          last_visit: null,
+          next_appointment: null,
+        };
+
+        // Add to local state
+        setPatients((prev) => [patientWithAppointments, ...prev]);
+
+        // Cache the new patient
+        await cachePatient(patientWithAppointments);
 
         return data;
       } catch (err) {
         console.error('Error creating patient:', err);
+
+        // If network error, fall back to offline creation
+        if ((err as any)?.message?.includes('network') || (err as any)?.message?.includes('fetch')) {
+          console.log('📵 Network error - creating patient offline...');
+          const localId = await queuePatientCreate(input, user.id);
+
+          const localPatient: PatientWithAppointments = {
+            id: localId,
+            ...input,
+            created_by: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            archived: false,
+            user_id: null,
+            consultation_language: input.consultation_language || 'en-IN',
+            date_of_birth: input.date_of_birth || null,
+            age_years: input.age_years || null,
+            height_cm: input.height_cm || null,
+            weight_kg: input.weight_kg || null,
+            current_medications: input.current_medications || null,
+            current_conditions: input.current_conditions || null,
+            allergies: input.allergies || null,
+            email: input.email || null,
+            phone: input.phone || null,
+            last_visit: null,
+            next_appointment: null,
+          };
+
+          setPatients((prev) => [localPatient, ...prev]);
+          await cachePatient(localPatient);
+          setHasPendingChanges(true);
+
+          return localPatient;
+        }
+
         setError(err instanceof Error ? err.message : 'Failed to create patient');
         return null;
       }
@@ -157,13 +323,37 @@ export function usePatients(): UsePatientsReturn {
         return null;
       }
 
+      // Resolve local ID if needed
+      const serverId = getServerIdForLocalId(id) || id;
+
       try {
         setError(null);
 
+        // Optimistically update local state first
+        setPatients((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, ...input, updated_at: new Date().toISOString() } : p))
+        );
+
+        // If offline, queue for sync
+        if (!navigator.onLine || isLocalId(id)) {
+          console.log('📵 Updating patient offline...');
+          await queuePatientUpdate(id, input, user.id);
+
+          // Update cache
+          const existingPatient = patients.find(p => p.id === id);
+          if (existingPatient) {
+            await cachePatient({ ...existingPatient, ...input, updated_at: new Date().toISOString() });
+          }
+
+          setHasPendingChanges(true);
+          return existingPatient ? { ...existingPatient, ...input } : null;
+        }
+
+        // Online - update in Supabase
         let query = supabase
           .from('patients')
           .update(input)
-          .eq('id', id);
+          .eq('id', serverId);
 
         // Admins can update any patient, non-admins only their own
         if (!isAdmin) {
@@ -176,19 +366,42 @@ export function usePatients(): UsePatientsReturn {
 
         if (updateError) throw updateError;
 
-        // Update local state - preserve existing appointment data
+        // Update local state with server data
+        const existingPatient = patients.find(p => p.id === id);
+        const updatedPatient: PatientWithAppointments = {
+          ...data,
+          last_visit: existingPatient?.last_visit || null,
+          next_appointment: existingPatient?.next_appointment || null,
+        };
+
         setPatients((prev) =>
-          prev.map((p) => (p.id === id ? { ...data, last_visit: p.last_visit, next_appointment: p.next_appointment } as PatientWithAppointments : p))
+          prev.map((p) => (p.id === id ? updatedPatient : p))
         );
+
+        // Update cache
+        await cachePatient(updatedPatient);
 
         return data;
       } catch (err) {
         console.error('Error updating patient:', err);
+
+        // If network error, queue for sync
+        if ((err as any)?.message?.includes('network') || (err as any)?.message?.includes('fetch')) {
+          console.log('📵 Network error - queuing patient update...');
+          await queuePatientUpdate(id, input, user.id);
+          setHasPendingChanges(true);
+
+          const existingPatient = patients.find(p => p.id === id);
+          return existingPatient ? { ...existingPatient, ...input } : null;
+        }
+
+        // Revert optimistic update on error
+        fetchPatients();
         setError(err instanceof Error ? err.message : 'Failed to update patient');
         return null;
       }
     },
-    [user, isAdmin]
+    [user, isAdmin, patients, fetchPatients]
   );
 
   const deletePatient = useCallback(
@@ -198,33 +411,57 @@ export function usePatients(): UsePatientsReturn {
         return false;
       }
 
+      const serverId = getServerIdForLocalId(id) || id;
+
       try {
         setError(null);
 
+        // Optimistically remove from local state
+        setPatients((prev) => prev.filter((p) => p.id !== id));
+
+        // If offline or local ID, queue for sync
+        if (!navigator.onLine || isLocalId(id)) {
+          console.log('📵 Deleting patient offline...');
+          await queuePatientDelete(id, user.id);
+          setHasPendingChanges(true);
+          return true;
+        }
+
+        // Online - delete from Supabase
         const { error: deleteError } = await supabase
           .from('patients')
           .delete()
-          .eq('id', id);
+          .eq('id', serverId);
 
         if (deleteError) throw deleteError;
-
-        // Remove from local state
-        setPatients((prev) => prev.filter((p) => p.id !== id));
 
         return true;
       } catch (err) {
         console.error('Error deleting patient:', err);
+
+        // If network error, queue for sync
+        if ((err as any)?.message?.includes('network') || (err as any)?.message?.includes('fetch')) {
+          console.log('📵 Network error - queuing patient deletion...');
+          await queuePatientDelete(id, user.id);
+          setHasPendingChanges(true);
+          return true;
+        }
+
+        // Revert optimistic delete on error
+        fetchPatients();
         setError(err instanceof Error ? err.message : 'Failed to delete patient');
         return false;
       }
     },
-    [user]
+    [user, fetchPatients]
   );
 
   return {
     patients,
     loading,
     error,
+    isOffline,
+    hasPendingChanges,
     createPatient,
     updatePatient,
     deletePatient,

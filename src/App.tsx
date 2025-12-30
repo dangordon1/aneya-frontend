@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { OfflineProvider } from './contexts/OfflineContext';
 import { TabNavigation, DoctorTab } from './components/TabNavigation';
 import { LocationSelector } from './components/LocationSelector';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
@@ -11,6 +12,7 @@ import { usePatientDoctors } from './hooks/usePatientDoctors';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PatientDashboard } from './components/patient-portal/PatientDashboard';
 import { getPatientAge } from './utils/dateHelpers';
+import { OfflineStatusBar } from './components/OfflineStatusBar';
 
 // Helper function for timestamped logging
 const timestamp = () => new Date().toISOString();
@@ -1275,7 +1277,10 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <MainApp />
+        <OfflineProvider>
+          <OfflineStatusBar />
+          <MainApp />
+        </OfflineProvider>
       </AuthProvider>
     </ErrorBoundary>
   );
