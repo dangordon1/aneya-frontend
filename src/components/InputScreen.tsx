@@ -175,7 +175,7 @@ function determineFormType(doctorSpecialty: string | undefined, appointmentType?
 }
 
 export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange, onOpenInfertilityForm }: InputScreenProps) {
-  const { user } = useAuth();
+  const { user, doctorProfile } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
@@ -459,7 +459,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       setLastProcessedChunkIndex(nextIndex);
 
       // Emit event for form auto-fill if doctor has specialty-specific forms
-      const formType = determineFormType(user?.specialty, appointmentContext?.appointment_type);
+      const formType = determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
       if (formType && labeledSegments.length > 0) {
         console.log(`📋 Emitting diarization event for ${formType} form auto-fill (chunk #${nextIndex})`);
         consultationEventBus.emit('diarization_chunk_complete', {
