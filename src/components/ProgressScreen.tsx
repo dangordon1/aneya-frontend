@@ -88,9 +88,18 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
       setElapsedTime(Math.floor(elapsed));
 
       // Calculate progress percentage with easing
-      // Progress slows down as it approaches 95% (never quite reaches 100 until complete)
+      // Progress slows down as it approaches 99% (never quite reaches 100 until complete)
+      // If time exceeds estimate, stay at 99%
       const rawProgress = (elapsed / ESTIMATED_DIAGNOSIS_TIME) * 100;
-      const easedProgress = Math.min(95, rawProgress * (1 - rawProgress / 200));
+      let easedProgress;
+      if (rawProgress >= 100) {
+        // If we've exceeded the estimated time, stay at 99%
+        easedProgress = 99;
+      } else {
+        // Ease in-out: fast at start, slows down as it approaches 99%
+        // Using a power curve for smooth acceleration/deceleration
+        easedProgress = 99 * Math.pow(rawProgress / 100, 0.7);
+      }
       setProgress(easedProgress);
     }, 100);
 
