@@ -65,11 +65,11 @@ export function calculateOverlapStats(
 }
 
 /**
- * Match speakers across chunks based on overlap statistics
+ * Match speakers across chunks based on overlap statistics (supports 3+ speakers)
  *
  * Compares speaker activity in the shared audio region between chunks.
- * Matches speakers by ranking them by activity (duration) and calculating
- * similarity scores.
+ * Finds best match for each current speaker among unmatched previous speakers.
+ * Handles cases where speaker count differs between chunks (new speakers joining).
  */
 export function matchSpeakersAcrossChunks(
   prevOverlap: Record<string, SpeakerStats>,
@@ -81,23 +81,39 @@ export function matchSpeakersAcrossChunks(
   const sortedPrev = Object.values(prevOverlap).sort((a, b) => b.duration - a.duration);
   const sortedCurr = Object.values(currOverlap).sort((a, b) => b.duration - a.duration);
 
-  // Match speakers by rank
-  for (let i = 0; i < Math.min(sortedPrev.length, sortedCurr.length); i++) {
-    const prevSpeaker = sortedPrev[i];
-    const currSpeaker = sortedCurr[i];
+  // Track which previous speakers have been matched
+  const matchedPrevSpeakers = new Set<string>();
 
-    // Calculate similarity score (0-1)
-    const similarity = calculateSimilarity(prevSpeaker, currSpeaker);
+  // Match each current speaker to best available previous speaker
+  for (const currSpeaker of sortedCurr) {
+    let bestMatch: SpeakerStats | null = null;
+    let bestSimilarity = 0.0;
 
-    if (similarity > 0.7) {
-      // Map current speaker ID → previous (canonical) speaker ID
-      mapping.set(currSpeaker.speaker_id, prevSpeaker.speaker_id);
+    // Find best match among unmatched previous speakers
+    for (const prevSpeaker of sortedPrev) {
+      if (matchedPrevSpeakers.has(prevSpeaker.speaker_id)) {
+        continue;  // Already matched
+      }
 
-      console.log(`✓ Matched ${currSpeaker.speaker_id} → ${prevSpeaker.speaker_id} (${(similarity * 100).toFixed(0)}%)`);
+      const similarity = calculateSimilarity(prevSpeaker, currSpeaker);
+
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestMatch = prevSpeaker;
+      }
+    }
+
+    // Apply match if confidence threshold met (lowered from 0.7 to 0.5 for 3+ speakers)
+    if (bestMatch && bestSimilarity > 0.5) {
+      mapping.set(currSpeaker.speaker_id, bestMatch.speaker_id);
+      matchedPrevSpeakers.add(bestMatch.speaker_id);
+
+      console.log(`✓ Matched ${currSpeaker.speaker_id} → ${bestMatch.speaker_id} (${(bestSimilarity * 100).toFixed(0)}%)`);
     } else {
-      console.warn(`⚠️  Low confidence match: ${currSpeaker.speaker_id} → ${prevSpeaker.speaker_id} (${(similarity * 100).toFixed(0)}%)`);
-      // Still apply mapping even with low confidence
-      mapping.set(currSpeaker.speaker_id, prevSpeaker.speaker_id);
+      // No good match found - this is a NEW speaker joining the conversation
+      console.warn(`⚠️  No match for ${currSpeaker.speaker_id} - treating as new speaker`);
+      // Keep original ID (new speaker in current chunk)
+      mapping.set(currSpeaker.speaker_id, currSpeaker.speaker_id);
     }
   }
 
