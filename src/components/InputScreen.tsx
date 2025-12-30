@@ -6,9 +6,12 @@ import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
 import { LocationSelector } from './LocationSelector';
+import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
 import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
+import { InfertilityDuringConsultationForm } from './doctor-portal/InfertilityDuringConsultationForm';
+import { AntenatalDuringConsultationForm } from './doctor-portal/AntenatalDuringConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -50,7 +53,17 @@ interface InputScreenProps {
     transcript?: string,
     summary?: string
   ) => void;
-  onSaveConsultation?: (transcript: string, summaryResponse: any, patientDetails: PatientDetails, audioUrl?: string | null) => Promise<void>;
+  onSaveConsultation?: (consultationData: {
+    patient_id: string;
+    appointment_id: string | null;
+    consultation_text: string;
+    original_transcript: string;
+    transcription_language: string | null;
+    audio_url: string | null;
+    patient_snapshot: any;
+    consultation_duration_seconds: number;
+    transcription_status: 'pending' | 'processing' | 'completed' | 'failed';
+  }) => Promise<{ id: string } | undefined>;
   onUpdateConsultation?: (summaryResponse: any) => Promise<void>;
   onCloseConsultation?: () => void;
   onBack?: () => void;
@@ -58,7 +71,6 @@ interface InputScreenProps {
   appointmentContext?: AppointmentWithPatient;
   locationOverride?: string | null;
   onLocationChange?: (location: string | null) => void;
-  onOpenInfertilityForm?: () => void;
 }
 
 const SAMPLE_CONSULTATION_TEXT = `Doctor: Good morning, Mr. Thompson. I'm Dr. Patel. What brings you in today?
@@ -157,26 +169,27 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
 };
 
 /**
- * Determine form type based on doctor's specialty
+ * Determine form type based on doctor's specialty and appointment type
  * Returns 'obgyn', 'infertility', 'antenatal', or null if no specialty-specific form
  */
 function determineFormType(doctorSpecialty: string | undefined, appointmentType?: string): 'obgyn' | 'infertility' | 'antenatal' | null {
-  if (!doctorSpecialty) return null;
-
-  // Check if OBGyn specialty
-  if (requiresOBGynForms(doctorSpecialty as any)) {
-    // Check appointment subtype if available
+  // First, try to determine from appointment type (most reliable)
+  if (appointmentType) {
     if (appointmentType === 'obgyn_infertility') return 'infertility';
     if (appointmentType === 'obgyn_antenatal') return 'antenatal';
-    // Default to general obgyn
+    if (appointmentType === 'obgyn_general_obgyn' || appointmentType.startsWith('obgyn_')) return 'obgyn';
+  }
+
+  // Fallback to doctor specialty if appointment type not available
+  if (doctorSpecialty && requiresOBGynForms(doctorSpecialty as any)) {
     return 'obgyn';
   }
 
   return null;
 }
 
-export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange, onOpenInfertilityForm }: InputScreenProps) {
-  const { user } = useAuth();
+export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
+  const { user, doctorProfile } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
@@ -199,9 +212,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [isPatientDetailsExpanded, setIsPatientDetailsExpanded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false); // Ref for MediaRecorder callback access
   const [recordingTime, setRecordingTime] = useState(0);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ready' | 'error'>('checking');
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, string>>({});
 
   // Background save tracking
   const [isSavingInBackground, setIsSavingInBackground] = useState(false);
@@ -230,6 +245,13 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [diarizedSegments, setDiarizedSegments] = useState<DiarizedSegment[]>([]);
   const diarizedSegmentsRef = useRef<DiarizedSegment[]>([]); // Ref to access latest value
   const [speakerRoles, setSpeakerRoles] = useState<Record<string, string>>({});
+
+  // NEW: Multi-speaker identification state
+  const [pendingSegments, setPendingSegments] = useState<DiarizedSegment[]>([]);
+  const [detectedSpeakerList, setDetectedSpeakerList] = useState<string[]>([]);
+  const [speakerRoleMapping, setSpeakerRoleMapping] = useState<Record<string, string>>({});
+  const [speakerConfidenceScores, setSpeakerConfidenceScores] = useState<Record<string, number>>({});
+  const [speakerReasoning, setSpeakerReasoning] = useState<Record<string, string>>({});
   const speakerRolesRef = useRef<Record<string, string>>({}); // Ref to access latest value
   const [lastProcessedChunkIndex, setLastProcessedChunkIndex] = useState(-1);
 
@@ -241,8 +263,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Sarvam batch jobs take 30-120s, so we must process chunks sequentially
   const [isProcessingChunk, setIsProcessingChunk] = useState(false);
 
+  // Consultation type determination from first chunk
+  const [determinedConsultationType, setDeterminedConsultationType] = useState<string | null>(null);
+
   // Realtime subscription for async transcription updates
-  const { consultation: liveConsultation } = useConsultationRealtime({
+  const { consultation: _liveConsultation } = useConsultationRealtime({
     consultationId: pendingConsultationId,
     onStatusChange: (updated) => {
       if (updated.transcription_status === 'completed') {
@@ -297,7 +322,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [showConsentModal, setShowConsentModal] = useState(false);
 
   // OB/GYN during-consultation form state
-  const [showOBGynForm, setShowOBGynForm] = useState(false);
+  // Track which form type is selected (null = none, 'obgyn', 'infertility', 'antenatal')
+  const [selectedFormType, setSelectedFormType] = useState<'obgyn' | 'infertility' | 'antenatal' | null>(null);
 
   // Audio recording refs
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -306,6 +332,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const websocketRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isAudioInitializedRef = useRef(false);
+  const isStoppingRef = useRef(false); // Prevent multiple simultaneous stop calls
 
   // NEW: MediaRecorder for speaker diarization (parallel audio blob capture)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -320,14 +347,25 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Check backend health on page load
   useEffect(() => {
     const checkBackendHealth = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+
       try {
-        const response = await fetch(`${API_URL}/health`);
+        const response = await fetch(`${API_URL}/health`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (response.ok) {
           setBackendStatus('ready');
         } else {
           setBackendStatus('error');
         }
-      } catch {
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.warn('Backend health check timed out after 2 seconds');
+        }
         setBackendStatus('error');
       }
     };
@@ -384,7 +422,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       formData.append('chunk_end', chunkInfo.endTime.toString());
       formData.append('language', consultationLanguage);
 
-      // Send to backend for diarization
+      // NEW: Add consultation context for form extraction
+      if (appointmentContext?.id) {
+        formData.append('consultation_id', appointmentContext.id);
+      }
+      if (preFilledPatient?.id) {
+        formData.append('patient_id', preFilledPatient.id);
+      }
+      if (doctorProfile?.specialty) {
+        formData.append('doctor_specialty', doctorProfile.specialty);
+      }
+
+      // Send to backend for diarization + form extraction (combined)
       const response = await fetch(`${API_URL}/api/diarize-chunk`, {
         method: 'POST',
         body: formData
@@ -396,6 +445,16 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       const data = await response.json();
       console.log(`✅ Chunk ${nextIndex} diarized: ${data.detected_speakers.length} speakers, ${data.segments.length} segments`);
+
+      // NEW: Backend now returns form_type, form_updates, and form_confidence
+      if (data.form_type) {
+        console.log(`📋 Form type from backend: ${data.form_type}`);
+        setDeterminedConsultationType(data.form_type);
+      }
+      if (data.form_updates && Object.keys(data.form_updates).length > 0) {
+        console.log(`📝 Received ${Object.keys(data.form_updates).length} form field updates from backend`);
+        console.log(`   Fields: ${Object.keys(data.form_updates).join(', ')}`);
+      }
 
       // Update chunk status to completed
       setChunkStatuses(prev =>
@@ -485,16 +544,95 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Update last processed chunk index
       setLastProcessedChunkIndex(nextIndex);
 
-      // Emit event for form auto-fill if doctor has specialty-specific forms
-      const formType = determineFormType(user?.specialty, appointmentContext?.appointment_type);
+      // REMOVED: Separate consultation type determination call
+      // (now integrated into /api/diarize-chunk response as data.form_type)
+
+      // Emit event for form auto-fill with backend-provided form data
+      // Use form_type from backend if available, otherwise fall back to specialty-based determination
+      const formType = data.form_type || determinedConsultationType || determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
+      console.log(`🔍 Using form type: ${formType} (from_backend=${!!data.form_type}, determined=${determinedConsultationType !== null})`);
+
       if (formType && labeledSegments.length > 0) {
-        console.log(`📋 Emitting diarization event for ${formType} form auto-fill (chunk #${nextIndex})`);
-        consultationEventBus.emit('diarization_chunk_complete', {
+        const eventPayload = {
           segments: labeledSegments,
           chunk_index: nextIndex,
           form_type: formType,
-          patient_id: preFilledPatient?.id || appointmentContext?.patient_id
+          patient_id: preFilledPatient?.id || appointmentContext?.patient_id,
+          // NEW: Include form updates from backend
+          field_updates: data.form_updates || {},
+          confidence_scores: data.form_confidence || {}
+        };
+
+        const subscriberCount = consultationEventBus.getSubscriberCount('diarization_chunk_complete');
+        console.log(`📋 Emitting diarization event for ${formType} form auto-fill (chunk #${nextIndex})`, {
+          form_type: eventPayload.form_type,
+          patient_id: eventPayload.patient_id,
+          segments_count: eventPayload.segments.length,
+          field_updates_count: Object.keys(eventPayload.field_updates).length,
+          subscriber_count: subscriberCount
         });
+
+        consultationEventBus.emit('diarization_chunk_complete', eventPayload);
+
+        // NEW: Identify speaker roles on first chunk with LLM
+        if (nextIndex === 0 && labeledSegments.length > 0) {
+          try {
+            console.log('🎭 Identifying speaker roles with LLM...');
+
+            const roleResponse = await fetch(`${API_URL}/api/identify-speaker-roles`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                segments: labeledSegments.map(seg => ({
+                  speaker_id: seg.speaker_id,
+                  text: seg.text,
+                  start_time: seg.start_time,
+                  end_time: seg.end_time
+                })),
+                language: consultationLanguage,
+                confidence_threshold: 0.7
+              })
+            });
+
+            if (roleResponse.ok) {
+              const roleData = await roleResponse.json();
+
+              console.log(`✅ Speaker roles identified:`, roleData.role_mapping);
+              console.log(`   Confidence scores:`, roleData.confidence_scores);
+
+              setSpeakerRoleMapping(roleData.role_mapping);
+              setSpeakerConfidenceScores(roleData.confidence_scores);
+              setSpeakerReasoning(roleData.reasoning || {});
+
+              // Check if manual assignment required
+              if (roleData.requires_manual_assignment) {
+                console.log(`⚠️  Low confidence for speakers: ${roleData.low_confidence_speakers.join(', ')}`);
+                console.log(`   Prompting user for manual assignment...`);
+
+                // Store segments and show modal
+                setPendingSegments(labeledSegments);
+                setDetectedSpeakerList(data.detected_speakers || []);
+                setShowSpeakerMapping(true);
+
+                // Pause chunk processing until user confirms
+                // (modal handlers will resume processing)
+                return;
+              } else {
+                // High confidence: apply roles automatically
+                console.log(`✓ High confidence - applying roles automatically`);
+                setSpeakerRoles(roleData.role_mapping);
+                speakerRolesRef.current = roleData.role_mapping;
+              }
+            } else {
+              console.warn('⚠️  Speaker role identification failed, using speaker IDs');
+            }
+          } catch (error) {
+            console.error('❌ Speaker role identification error:', error);
+            // Continue with speaker IDs
+          }
+        }
+      } else {
+        console.log(`⏭️  Not emitting event: formType=${formType}, segments=${labeledSegments.length}`);
       }
 
     } catch (error) {
@@ -533,13 +671,19 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Chunk processing timer - process chunks every 30 seconds during recording
   // CRITICAL: Only process one chunk at a time (sequential, not parallel)
   useEffect(() => {
+    console.log(`⏱️  Recording monitor: isRecording=${isRecording}, time=${recordingTime}s, lastChunk=${lastProcessedChunkIndex}, processing=${isProcessingChunk}`);
+
     if (isRecording && recordingTime > 0) {
       // Don't start new chunk if one is already processing
       if (isProcessingChunk) {
+        console.log(`⏸️  Chunk processing already in progress, waiting...`);
         return;
       }
 
-      if (shouldProcessNextChunk(recordingTime, lastProcessedChunkIndex)) {
+      const shouldProcess = shouldProcessNextChunk(recordingTime, lastProcessedChunkIndex);
+      console.log(`🤔 Should process next chunk? ${shouldProcess} (time=${recordingTime}s >= ${(lastProcessedChunkIndex + 2) * 60}s)`);
+
+      if (shouldProcess) {
         console.log(`🔒 Acquiring processing lock for chunk ${lastProcessedChunkIndex + 1}`);
         processNextChunk();
       }
@@ -622,16 +766,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         }
       }
 
-      // Save consultation before analyzing
-      if (onSaveConsultation && summaryData) {
-        try {
-          await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
-          console.log('✅ Consultation saved before analysis');
-        } catch (saveError) {
-          console.error('Failed to save consultation:', saveError);
-          // Continue with analysis even if save fails
-        }
-      }
+      // NOTE: Saving is now handled in stopRecording() for the diarization flow
+      // Old signature save calls removed to match new interface
 
       // Extract summary text from structured data or use legacy string
       const summaryText = summaryData
@@ -659,6 +795,51 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       alert('Failed to analyze consultation. Please try again.');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleFeedback = async (
+    feedbackType: string,
+    sentiment: 'positive' | 'negative',
+    data: any
+  ) => {
+    if (!pendingConsultationId) {
+      console.warn('Cannot submit feedback: No consultation ID available');
+      return;
+    }
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+    try {
+      const payload = {
+        consultation_id: pendingConsultationId,
+        feedback_type: feedbackType,
+        feedback_sentiment: sentiment,
+        ...data
+      };
+
+      const response = await fetch(`${API_URL}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to submit feedback');
+      }
+
+      const result = await response.json();
+      console.log('✅ Feedback submitted:', result);
+
+      setFeedbackSubmitted(prev => ({
+        ...prev,
+        [data.component_identifier || feedbackType]: sentiment
+      }));
+
+    } catch (error) {
+      console.error('❌ Failed to submit feedback:', error);
+      throw error;
     }
   };
 
@@ -697,16 +878,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         setConsultationSummary(data);
         console.log('✅ Consultation summarized');
 
-        // Auto-save the consultation after summarizing
-        if (onSaveConsultation) {
-          try {
-            await onSaveConsultation(consultation, data, patientDetails, audioUrl);
-            console.log('✅ Consultation saved after summarization');
-          } catch (saveError) {
-            console.error('Failed to save consultation:', saveError);
-            // Don't alert - summarization succeeded, just log the save error
-          }
-        }
+        // NOTE: Saving is now handled in stopRecording() for the diarization flow
+        // Old signature save call removed to match new interface
       } else {
         throw new Error('Invalid response from summarization endpoint');
       }
@@ -752,11 +925,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         }
       }
 
-      // Step 2: Save consultation
-      if (onSaveConsultation && summaryData) {
-        await onSaveConsultation(consultation, summaryData, patientDetails, audioUrl);
-        console.log('✅ Background save completed');
-      }
+      // NOTE: Saving is now handled in stopRecording() for the diarization flow
+      // Old signature save call removed to match new interface
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.log('Background save aborted');
@@ -1265,24 +1435,30 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       processor.connect(audioContext.destination);
 
       // NEW: Start MediaRecorder for audio blob capture (for speaker diarization)
+      console.log('🎬 Attempting to start MediaRecorder for chunked diarization...');
       try {
         audioChunksRef.current = []; // Reset chunks
         resetWebMInitSegment(); // Reset WebM init segment for new recording
+        console.log('🎬 Creating MediaRecorder with stream:', stream);
         const mediaRecorder = new MediaRecorder(stream, {
           mimeType: 'audio/webm;codecs=opus'
         });
+        console.log('🎬 MediaRecorder created successfully');
 
         mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
+          if (e.data.size > 0 && !isPausedRef.current) {
             audioChunksRef.current.push(e.data);
+            console.log(`📦 Audio chunk collected: ${e.data.size} bytes (total: ${audioChunksRef.current.length} chunks)`);
+          } else if (e.data.size > 0 && isPausedRef.current) {
+            console.log(`⏸️  Skipping paused chunk: ${e.data.size} bytes`);
           }
         };
 
-        mediaRecorder.start(1000); // Collect chunks every 1 second
+        mediaRecorder.start(60000); // Collect chunks every 60 seconds
         mediaRecorderRef.current = mediaRecorder;
-        console.log('🎬 MediaRecorder started for diarization');
+        console.log('✅ MediaRecorder started for diarization - will collect 60-second chunks');
       } catch (err) {
-        console.error('MediaRecorder failed (diarization won\'t work):', err);
+        console.error('❌ MediaRecorder failed (diarization won\'t work):', err);
         // Don't fail the whole recording - just skip diarization
       }
 
@@ -1325,21 +1501,36 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
   // Stop streaming recording (ASYNC VERSION - saves immediately, processes final chunk in background)
   const stopStreamingRecording = async () => {
+    // Guard against multiple calls
+    if (isStoppingRef.current) {
+      console.log('⚠️ Already stopping...');
+      return;
+    }
+
+    isStoppingRef.current = true;
     console.log('🛑 Stopping recording...');
+
+    // IMMEDIATE state updates to change UI before async operations
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordingTime(0);
+
     stopTimer();
     setInterimTranscript('');
 
     // Stop MediaRecorder
     if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      await new Promise<void>(resolve => {
-        if (mediaRecorderRef.current) {
-          mediaRecorderRef.current.onstop = () => resolve();
-        } else {
-          resolve();
-        }
-      });
-      mediaRecorderRef.current = null;
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+        await new Promise<void>(resolve => {
+          if (mediaRecorderRef.current) {
+            mediaRecorderRef.current.onstop = () => resolve();
+          } else {
+            resolve();
+          }
+        });
+        mediaRecorderRef.current = null;
+      }
     }
 
     // Extract final chunk info (if any remaining audio)
@@ -1394,26 +1585,37 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     // Clean up audio resources
     cleanupAudio();
-    setIsRecording(false);
-    setIsPaused(false);
-    setRecordingTime(0);
 
     // Prepare patient snapshot
-    const patientSnapshot = selectedPatient ? {
-      name: selectedPatient.name,
-      age: getPatientAge(selectedPatient),
-      sex: selectedPatient.sex,
-      allergies: selectedPatient.allergies,
-      current_medications: selectedPatient.current_medications,
-      current_conditions: selectedPatient.current_conditions
+    const patientSnapshot = preFilledPatient ? {
+      name: preFilledPatient.name,
+      age: getPatientAge(preFilledPatient),
+      sex: preFilledPatient.sex,
+      allergies: preFilledPatient.allergies,
+      current_medications: preFilledPatient.current_medications,
+      current_conditions: preFilledPatient.current_conditions
     } : null;
+
+    // Check consultation duration and log warning if < 60 seconds
+    if (recordingTime < 60) {
+      console.warn(
+        `⚠️ Short consultation detected: ${recordingTime} seconds (< 60 seconds). ` +
+        `All processing will continue normally.`
+      );
+    }
 
     // Save consultation IMMEDIATELY (don't wait for diarization)
     console.log('💾 Saving consultation immediately...');
     try {
+      if (!onSaveConsultation || !preFilledPatient) {
+        console.error('❌ Cannot save consultation: missing onSaveConsultation or preFilledPatient');
+        isStoppingRef.current = false; // Reset guard before early return
+        return;
+      }
+
       const saved = await onSaveConsultation({
-        patient_id: selectedPatient!.id,
-        appointment_id: selectedAppointment?.id || null,
+        patient_id: preFilledPatient.id,
+        appointment_id: appointmentContext?.id || null,
         consultation_text: consultationText,
         original_transcript: originalTranscript || consultation,
         transcription_language: consultationLanguage,
@@ -1425,6 +1627,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       if (!saved) {
         alert('Failed to save consultation');
+        isStoppingRef.current = false; // Reset guard before early return
         return;
       }
 
@@ -1465,9 +1668,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     } catch (err) {
       console.error('❌ Failed to save consultation:', err);
       alert('Failed to save consultation. Please try again.');
+      isStoppingRef.current = false; // Reset guard after error
     }
 
     console.log('🎙️ Recording stopped and saved');
+    isStoppingRef.current = false; // Reset guard
   };
 
   // Helper: Upload audio blob to GCS
@@ -1575,6 +1780,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       audioStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = false;
       });
+      isPausedRef.current = true;
       setIsPaused(true);
       stopTimer();
       console.log('⏸️ Recording paused');
@@ -1586,6 +1792,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       audioStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = true;
       });
+      isPausedRef.current = false;
       setIsPaused(false);
       startTimer();
       console.log('▶️ Recording resumed');
@@ -1598,8 +1805,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     await startStreamingRecording();
   };
 
-  const stopRecording = () => {
-    stopStreamingRecording();
+  const stopRecording = async () => {
+    await stopStreamingRecording();
   };
 
   // Show error screen if backend is not available
@@ -1614,14 +1821,34 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           </div>
           <h2 className="text-[24px] text-aneya-navy font-medium mb-2">Unable to Connect</h2>
           <p className="text-[14px] text-gray-600 mb-6">
-            Cannot connect to the backend server. Please ensure the server is running and try again.
+            Unable to connect to the Aneya backend server. This may be due to:
+          </p>
+          <ul className="text-[14px] text-gray-600 mb-6 list-disc list-inside text-left max-w-md mx-auto">
+            <li>Backend server is starting up (usually takes 5-10 seconds)</li>
+            <li>Network connectivity issues</li>
+            <li>Backend service is temporarily unavailable</li>
+          </ul>
+          <p className="text-[14px] text-gray-600 mb-6">
+            Please wait a moment and try reconnecting.
           </p>
           <button
             onClick={() => {
               setBackendStatus('checking');
-              fetch(`${API_URL}/health`)
-                .then(res => res.ok ? setBackendStatus('ready') : setBackendStatus('error'))
-                .catch(() => setBackendStatus('error'));
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+              fetch(`${API_URL}/health`, { signal: controller.signal })
+                .then(res => {
+                  clearTimeout(timeoutId);
+                  return res.ok ? setBackendStatus('ready') : setBackendStatus('error');
+                })
+                .catch((error) => {
+                  clearTimeout(timeoutId);
+                  if (error.name === 'AbortError') {
+                    console.warn('Backend health check timed out after 2 seconds');
+                  }
+                  setBackendStatus('error');
+                });
             }}
             className="px-6 py-3 bg-aneya-navy hover:bg-aneya-navy-hover text-white rounded-[10px] font-medium text-[14px] transition-colors"
           >
@@ -1648,25 +1875,47 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
   // NEW: Handler for speaker mapping confirmation
   const handleSpeakerMappingConfirm = (mapping: Record<string, string>) => {
-    if (!diarizationData) return;
+    console.log('✅ User confirmed speaker mapping:', mapping);
+    setSpeakerRoleMapping(mapping);
+    setSpeakerRoles(mapping);
+    speakerRolesRef.current = mapping;
 
-    // Build labeled transcript
-    const labeledTranscript = diarizationData.segments
-      .map((seg: any) => `${mapping[seg.speaker_id]}: ${seg.text}`)
-      .join('\n\n');
+    // Apply mapping to pending segments
+    const updatedSegments = pendingSegments.map(seg => ({
+      ...seg,
+      speaker_role: mapping[seg.speaker_id] || seg.speaker_id,
+      speaker_role_confidence: 1.0  // User confirmation = 100% confidence
+    }));
 
-    setConsultation(labeledTranscript);
+    // Add to diarized segments
+    setDiarizedSegments(prev => [...prev, ...updatedSegments]);
+    diarizedSegmentsRef.current = [...diarizedSegmentsRef.current, ...updatedSegments];
+
+    // Close modal and clear pending state
     setShowSpeakerMapping(false);
-    setDiarizationData(null);
-    console.log('✅ Speaker-labeled transcript applied');
+    setPendingSegments([]);
+
+    console.log('✅ Speaker mapping applied, resuming chunk processing');
   };
 
-  // NEW: Handler for skipping diarization
+  // NEW: Handler for skipping/canceling speaker mapping
   const handleSkipDiarization = () => {
+    console.log('❌ User skipped speaker mapping');
+
+    // Use fallback speaker IDs for pending segments
+    const fallbackSegments = pendingSegments.map(seg => ({
+      ...seg,
+      speaker_role: seg.speaker_id,
+      speaker_role_confidence: 0.0
+    }));
+
+    setDiarizedSegments(prev => [...prev, ...fallbackSegments]);
+    diarizedSegmentsRef.current = [...diarizedSegmentsRef.current, ...fallbackSegments];
+
     setShowSpeakerMapping(false);
-    setDiarizationData(null);
-    setIsDiarizing(false);
-    console.log('⏭️ Diarization skipped - using realtime transcript');
+    setPendingSegments([]);
+
+    console.log('⏭️ Speaker mapping skipped, using speaker IDs');
   };
 
   return (
@@ -2136,23 +2385,99 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               </div>
               <div className="flex-1">
                 <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
-                <p className="text-[13px] text-gray-600 mb-4">Fill out the specialized clinical assessment form for this OB/GYN consultation during the appointment.</p>
-                <button
-                  onClick={() => {
-                    // Check if this is an infertility appointment
-                    if (appointmentContext?.specialty_subtype === 'infertility' && onOpenInfertilityForm) {
-                      onOpenInfertilityForm();
-                    } else {
-                      setShowOBGynForm(true);
-                    }
-                  }}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-purple-600 text-white rounded-[8px] font-medium text-[14px] hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Open Assessment Form
-                </button>
+                <p className="text-[13px] text-gray-600 mb-2">
+                  {determinedConsultationType
+                    ? `Suggested form type: ${determinedConsultationType === 'antenatal' ? 'Antenatal' : determinedConsultationType === 'infertility' ? 'Infertility' : 'General OB/GYN'}`
+                    : 'Select consultation form type:'}
+                </p>
+
+                {/* Three form buttons - all visible, determined type highlighted */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* General OB/GYN Form Button */}
+                  <button
+                    onClick={() => setSelectedFormType(selectedFormType === 'obgyn' ? null : 'obgyn')}
+                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
+                      selectedFormType === 'obgyn'
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                        : determinedConsultationType === 'obgyn'
+                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
+                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
+                    }`}
+                  >
+                    {selectedFormType === 'obgyn' && '✓ '}
+                    {determinedConsultationType === 'obgyn' && selectedFormType !== 'obgyn' && '★ '}
+                    General OB/GYN
+                  </button>
+
+                  {/* Infertility Form Button */}
+                  <button
+                    onClick={() => setSelectedFormType(selectedFormType === 'infertility' ? null : 'infertility')}
+                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
+                      selectedFormType === 'infertility'
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                        : determinedConsultationType === 'infertility'
+                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
+                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
+                    }`}
+                  >
+                    {selectedFormType === 'infertility' && '✓ '}
+                    {determinedConsultationType === 'infertility' && selectedFormType !== 'infertility' && '★ '}
+                    Infertility
+                  </button>
+
+                  {/* Antenatal Form Button */}
+                  <button
+                    onClick={() => setSelectedFormType(selectedFormType === 'antenatal' ? null : 'antenatal')}
+                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
+                      selectedFormType === 'antenatal'
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                        : determinedConsultationType === 'antenatal'
+                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
+                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
+                    }`}
+                  >
+                    {selectedFormType === 'antenatal' && '✓ '}
+                    {determinedConsultationType === 'antenatal' && selectedFormType !== 'antenatal' && '★ '}
+                    Antenatal (ANC)
+                  </button>
+                </div>
+
+                {/* Inline Embedded Forms - Display below buttons */}
+                {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
+                  <div className="mt-6 bg-purple-50 border-2 border-purple-300 rounded-[10px] p-6">
+                    {selectedFormType === 'obgyn' && (
+                      <OBGynDuringConsultationForm
+                        patientId={preFilledPatient.id}
+                        appointmentId={appointmentContext.id}
+                        displayMode="flat"
+                        onComplete={() => {
+                          setSelectedFormType(null);
+                        }}
+                      />
+                    )}
+
+                    {selectedFormType === 'infertility' && (
+                      <InfertilityDuringConsultationForm
+                        patientId={preFilledPatient.id}
+                        appointmentId={appointmentContext.id}
+                        onComplete={() => {
+                          setSelectedFormType(null);
+                        }}
+                      />
+                    )}
+
+                    {selectedFormType === 'antenatal' && (
+                      <AntenatalDuringConsultationForm
+                        patientId={preFilledPatient.id}
+                        appointmentId={appointmentContext.id}
+                        displayMode="flat"
+                        onComplete={() => {
+                          setSelectedFormType(null);
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2173,14 +2498,28 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 <label htmlFor="consultation" className="text-[14px] font-medium text-aneya-navy">
                   Consultation Transcript
                 </label>
-                {isAdmin && (
-                  <button
-                    onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
-                    className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
-                  >
-                    Load Sample Text
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {consultation && pendingConsultationId && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-aneya-text-secondary">Rate transcription:</span>
+                      <FeedbackButton
+                        onFeedback={(sentiment) => handleFeedback('transcription', sentiment, {
+                          component_identifier: 'transcription'
+                        })}
+                        size="sm"
+                        initialSentiment={feedbackSubmitted['transcription'] as 'positive' | 'negative' | null}
+                      />
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
+                      className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
+                    >
+                      Load Sample Text
+                    </button>
+                  )}
+                </div>
               </div>
               <textarea
                 id="consultation"
@@ -2253,6 +2592,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               onConfirmFieldSave={onUpdateConsultation ? async (updated) => {
                 await onUpdateConsultation(updated);
               } : undefined}
+              consultationId={pendingConsultationId}
+              onFeedback={handleFeedback}
+              feedbackSubmitted={feedbackSubmitted}
             />
           </div>
         )}
@@ -2333,13 +2675,16 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       </div>
 
       {/* NEW: Speaker Mapping Modal */}
-      {diarizationData && (
+      {showSpeakerMapping && (
         <SpeakerMappingModal
           isOpen={showSpeakerMapping}
-          speakers={diarizationData.detected_speakers || []}
-          segments={diarizationData.segments || []}
+          speakers={detectedSpeakerList}
+          segments={pendingSegments}
           onConfirm={handleSpeakerMappingConfirm}
           onCancel={handleSkipDiarization}
+          suggestedRoles={speakerRoleMapping}
+          confidenceScores={speakerConfidenceScores}
+          reasoning={speakerReasoning}
         />
       )}
 
@@ -2389,35 +2734,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         </div>
       )}
 
-      {/* OB/GYN During-consultation Form Modal */}
-      {showOBGynForm && appointmentContext && preFilledPatient && appointmentContext.id && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="bg-purple-600 text-white p-4 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">OB/GYN Clinical Assessment Form</h2>
-              <button
-                onClick={() => setShowOBGynForm(false)}
-                className="text-white/80 hover:text-white text-xl"
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <OBGynDuringConsultationForm
-                patientId={preFilledPatient.id}
-                appointmentId={appointmentContext.id}
-                displayMode="flat"
-                onComplete={() => {
-                  setShowOBGynForm(false);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

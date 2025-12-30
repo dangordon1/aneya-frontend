@@ -13,6 +13,9 @@ interface SpeakerMappingModalProps {
   segments: SpeakerSegment[];
   onConfirm: (mapping: Record<string, string>) => void;
   onCancel: () => void;
+  suggestedRoles?: Record<string, string>;  // LLM suggestions for each speaker
+  confidenceScores?: Record<string, number>;  // Confidence scores (0.0-1.0)
+  reasoning?: Record<string, string>;  // LLM reasoning for each assignment
 }
 
 const SPEAKER_ROLES = [
@@ -29,13 +32,17 @@ export function SpeakerMappingModal({
   speakers,
   segments,
   onConfirm,
-  onCancel
+  onCancel,
+  suggestedRoles,
+  confidenceScores,
+  reasoning
 }: SpeakerMappingModalProps) {
-  // Initialize mapping with empty values
+  // Initialize mapping with suggested roles (or empty if not provided)
   const [speakerMapping, setSpeakerMapping] = useState<Record<string, string>>(() => {
     const initialMapping: Record<string, string> = {};
     speakers.forEach((speaker) => {
-      initialMapping[speaker] = '';
+      // Pre-fill with LLM suggestion if available
+      initialMapping[speaker] = suggestedRoles?.[speaker] || '';
     });
     return initialMapping;
   });
@@ -101,6 +108,31 @@ export function SpeakerMappingModal({
                   "{getSampleText(speakerId)}"
                 </p>
               </div>
+
+              {/* LLM Suggestion (if available) */}
+              {suggestedRoles && suggestedRoles[speakerId] && (
+                <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-[12px] text-gray-600 mb-1">
+                    AI Suggestion: <span className="font-medium text-aneya-navy">
+                      {suggestedRoles[speakerId]}
+                    </span>
+                    {confidenceScores && confidenceScores[speakerId] !== undefined && (
+                      <span className={`ml-2 text-[11px] px-2 py-0.5 rounded ${
+                        confidenceScores[speakerId] >= 0.7
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {(confidenceScores[speakerId] * 100).toFixed(0)}% confident
+                      </span>
+                    )}
+                  </p>
+                  {reasoning && reasoning[speakerId] && (
+                    <p className="text-[11px] text-gray-500 italic mt-1">
+                      {reasoning[speakerId]}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Role Selection */}
               <div>
