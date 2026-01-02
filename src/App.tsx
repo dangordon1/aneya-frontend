@@ -30,9 +30,8 @@ const DoctorMessages = lazy(() => import('./components/doctor-portal/DoctorMessa
 const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorProfileTab').then(m => ({ default: m.DoctorProfileTab })));
 const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
-const InfertilityDuringConsultationForm = lazy(() => import('./components/doctor-portal/InfertilityDuringConsultationForm').then(m => ({ default: m.InfertilityDuringConsultationForm })));
-const OBGynDuringConsultationForm = lazy(() => import('./components/doctor-portal/OBGynDuringConsultationForm').then(m => ({ default: m.OBGynDuringConsultationForm })));
-const AntenatalDuringConsultationForm = lazy(() => import('./components/doctor-portal/AntenatalDuringConsultationForm').then(m => ({ default: m.AntenatalDuringConsultationForm })));
+// ✨ NEW: Single dynamic form component for all consultation types
+const DynamicConsultationForm = lazy(() => import('./components/doctor-portal/DynamicConsultationForm').then(m => ({ default: m.DynamicConsultationForm })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
@@ -1207,7 +1206,8 @@ function MainApp() {
           )}
 
           {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
-            <InfertilityDuringConsultationForm
+            <DynamicConsultationForm
+              formType="infertility"
               patientId={selectedPatient.id}
               appointmentId={selectedAppointment.id}
               doctorUserId={user?.id}
@@ -1241,32 +1241,17 @@ function MainApp() {
                   final: formType
                 });
 
-                if (formType === 'infertility') {
-                  return (
-                    <InfertilityDuringConsultationForm
-                      patientId={appointmentForFormView.patient_id}
-                      appointmentId={appointmentForFormView.id}
-                      onBack={handleBackFromConsultationForm}
-                    />
-                  );
-                } else if (formType === 'antenatal') {
-                  return (
-                    <AntenatalDuringConsultationForm
-                      patientId={appointmentForFormView.patient_id}
-                      appointmentId={appointmentForFormView.id}
-                      displayMode="flat"
-                      onBack={handleBackFromConsultationForm}
-                    />
-                  );
-                } else {
-                  return (
-                    <OBGynDuringConsultationForm
-                      patientId={appointmentForFormView.patient_id}
-                      appointmentId={appointmentForFormView.id}
-                      displayMode="flat"
-                    />
-                  );
-                }
+                // ✨ NEW: Single dynamic form component handles all form types
+                return (
+                  <DynamicConsultationForm
+                    formType={formType}
+                    patientId={appointmentForFormView.patient_id}
+                    appointmentId={appointmentForFormView.id}
+                    doctorUserId={user?.id}
+                    displayMode="flat"
+                    onBack={handleBackFromConsultationForm}
+                  />
+                );
               })()}
             </div>
           )}
