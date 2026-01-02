@@ -9,9 +9,7 @@ import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
-import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
-import { InfertilityDuringConsultationForm } from './doctor-portal/InfertilityDuringConsultationForm';
-import { AntenatalDuringConsultationForm } from './doctor-portal/AntenatalDuringConsultationForm';
+import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -2534,37 +2532,16 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {/* Inline Embedded Forms - Display below buttons */}
                 {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
                   <div className="mt-6 bg-purple-50 border-2 border-purple-300 rounded-[10px] p-6">
-                    {selectedFormType === 'obgyn' && (
-                      <OBGynDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        displayMode="flat"
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
-
-                    {selectedFormType === 'infertility' && (
-                      <InfertilityDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
-
-                    {selectedFormType === 'antenatal' && (
-                      <AntenatalDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        displayMode="flat"
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
+                    <DynamicConsultationForm
+                      formType={selectedFormType}
+                      patientId={preFilledPatient.id}
+                      appointmentId={appointmentContext.id}
+                      doctorUserId={user?.id}
+                      displayMode="flat"
+                      onComplete={() => {
+                        setSelectedFormType(null);
+                      }}
+                    />
                   </div>
                 )}
               </div>
