@@ -1,10 +1,70 @@
-import { useState, useEffect, useCallback } from 'react';
-import Form from '@rjsf/core';
-import validator from '@rjsf/validator-ajv8';
-import { RJSFSchema, UiSchema } from '@rjsf/utils';
+import { useState, useEffect } from 'react';
+import { Model } from 'survey-core';
+import { Survey } from 'survey-react-ui';
+import 'survey-core/survey-core.min.css';
 import { consultationEventBus } from '../../lib/consultationEventBus';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Custom CSS for Aneya styling
+const surveyStyles = `
+  .sd-root-modern {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-title,
+  .sd-root-modern .sd-page__title,
+  .sd-root-modern .sd-question__title {
+    font-family: Georgia, 'Times New Roman', serif !important;
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-body,
+  .sd-root-modern .sd-question,
+  .sd-root-modern .sd-input,
+  .sd-root-modern .sd-text {
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-input {
+    border-color: #d1d5db !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+
+  .sd-root-modern .sd-input:focus {
+    border-color: #1d9e99 !important;
+    ring-color: #1d9e99 !important;
+  }
+
+  /* Hide progress bar */
+  .sd-progress {
+    display: none !important;
+  }
+
+  /* Style the complete button */
+  .sd-btn {
+    background-color: #1d9e99 !important;
+    color: white !important;
+    border: none !important;
+  }
+
+  .sd-btn:hover {
+    background-color: #178f8a !important;
+  }
+`;
+
+// Aneya theme for SurveyJS
+const aneyaTheme = {
+  cssVariables: {
+    '--primary': '#1d9e99', // aneya-teal
+    '--primary-light': '#42c2bd',
+    '--background': '#f6f5ee', // aneya-cream
+    '--background-dim': '#ffffff',
+    '--foreground': '#0c3555', // aneya-navy
+    '--base-unit': '8px',
+  },
+};
 
 interface DynamicConsultationFormProps {
   formType: string; // Fully dynamic - any form type from database
@@ -27,82 +87,97 @@ export function DynamicConsultationForm({
   doctorUserId,
   displayMode = 'flat',
 }: DynamicConsultationFormProps) {
-  const [schema, setSchema] = useState<RJSFSchema | null>(null);
-  const [uiSchema, setUiSchema] = useState<UiSchema>({});
-  const [formData, setFormData] = useState<any>({});
+  const [survey, setSurvey] = useState<Model | null>(null);
   const [formId, setFormId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
 
-  // Convert backend schema to JSON Schema format
-  const convertToJSONSchema = (backendSchema: any): RJSFSchema => {
-    const properties: any = {};
-    const required: string[] = [];
+  // Inject custom CSS for Aneya styling
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'aneya-survey-styles';
+    styleElement.textContent = surveyStyles;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      const existingStyle = document.getElementById('aneya-survey-styles');
+      if (existingStyle) {
+        document.head.removeChild(existingStyle);
+      }
+    };
+  }, []);
+
+  // Convert backend schema to SurveyJS format
+  const convertToSurveyJS = (backendSchema: any, title: string): any => {
+    const elements: any[] = [];
 
     for (const [fieldName, fieldDef] of Object.entries(backendSchema as Record<string, any>)) {
       if (fieldDef.type === 'object' && fieldDef.fields) {
-        // Nested object
-        properties[fieldName] = convertToJSONSchema(fieldDef.fields);
+        // Nested object - create a panel
+        const nestedElements = Object.entries(fieldDef.fields).map(([nestedFieldName, nestedFieldDef]: [string, any]) => {
+          return convertFieldToElement(`${fieldName}.${nestedFieldName}`, nestedFieldDef);
+        });
+
+        elements.push({
+          type: 'panel',
+          name: fieldName,
+          title: fieldDef.description || fieldName,
+          elements: nestedElements,
+        });
       } else {
         // Simple field
-        const fieldSchema: any = {
-          title: fieldDef.description || fieldName,
-        };
-
-        switch (fieldDef.type) {
-          case 'string':
-            fieldSchema.type = 'string';
-            if (fieldDef.format === 'date') {
-              fieldSchema.format = 'date';
-            }
-            if (fieldDef.max_length) {
-              fieldSchema.maxLength = fieldDef.max_length;
-            }
-            break;
-          case 'number':
-            fieldSchema.type = 'number';
-            if (fieldDef.range) {
-              fieldSchema.minimum = fieldDef.range[0];
-              fieldSchema.maximum = fieldDef.range[1];
-            }
-            break;
-          case 'boolean':
-            fieldSchema.type = 'boolean';
-            break;
-          default:
-            fieldSchema.type = 'string';
-        }
-
-        properties[fieldName] = fieldSchema;
+        elements.push(convertFieldToElement(fieldName, fieldDef));
       }
     }
 
     return {
-      type: 'object',
-      properties,
-      required,
+      showProgressBar: 'off',
+      showQuestionNumbers: 'off',
+      pages: [
+        {
+          name: 'page1',
+          elements: elements,
+        },
+      ],
     };
   };
 
-  // Generate UI schema for better presentation
-  const generateUISchema = (backendSchema: any): UiSchema => {
-    const uiSchema: UiSchema = {};
+  const convertFieldToElement = (fieldName: string, fieldDef: any): any => {
+    const element: any = {
+      name: fieldName,
+      title: fieldDef.description || fieldName,
+      isRequired: fieldDef.required || false,
+    };
 
-    for (const [fieldName, fieldDef] of Object.entries(backendSchema as Record<string, any>)) {
-      if (fieldDef.type === 'string' && fieldDef.max_length && fieldDef.max_length > 200) {
-        // Use textarea for long text fields
-        uiSchema[fieldName] = {
-          'ui:widget': 'textarea',
-          'ui:options': {
-            rows: 4,
-          },
-        };
-      }
+    switch (fieldDef.type) {
+      case 'string':
+        if (fieldDef.format === 'date') {
+          element.type = 'text';
+          element.inputType = 'date';
+        } else if (fieldDef.max_length && fieldDef.max_length > 200) {
+          element.type = 'comment';
+          element.rows = 4;
+        } else {
+          element.type = 'text';
+        }
+        break;
+      case 'number':
+        element.type = 'text';
+        element.inputType = 'number';
+        if (fieldDef.range) {
+          element.min = fieldDef.range[0];
+          element.max = fieldDef.range[1];
+        }
+        break;
+      case 'boolean':
+        element.type = 'boolean';
+        break;
+      default:
+        element.type = 'text';
     }
 
-    return uiSchema;
+    return element;
   };
 
   // Fetch schema from backend
@@ -124,11 +199,23 @@ export function DynamicConsultationForm({
 
         setFormTitle(title);
 
-        const jsonSchema = convertToJSONSchema(data.schema);
-        const ui = generateUISchema(data.schema);
+        const surveyJSON = convertToSurveyJS(data.schema, title);
+        const surveyModel = new Model(surveyJSON);
 
-        setSchema(jsonSchema);
-        setUiSchema(ui);
+        // Apply Aneya theme
+        surveyModel.applyTheme(aneyaTheme);
+
+        // Handle survey completion
+        surveyModel.onComplete.add((sender: Model) => {
+          handleSubmit(sender.data);
+        });
+
+        // Auto-save on value changes
+        surveyModel.onValueChanged.add((sender: Model) => {
+          handleAutoSave(sender.data);
+        });
+
+        setSurvey(surveyModel);
       } catch (error) {
         console.error('❌ Failed to fetch schema:', error);
       } finally {
@@ -141,6 +228,8 @@ export function DynamicConsultationForm({
 
   // Fetch existing form data
   useEffect(() => {
+    if (!survey) return;
+
     const fetchFormData = async () => {
       try {
         const response = await fetch(
@@ -152,7 +241,7 @@ export function DynamicConsultationForm({
           if (data.form) {
             console.log(`📝 Loaded existing form:`, data.form);
             setFormId(data.form.id);
-            setFormData(data.form.form_data || {});
+            survey.data = data.form.form_data || {};
           }
         }
       } catch (error) {
@@ -161,24 +250,21 @@ export function DynamicConsultationForm({
     };
 
     fetchFormData();
-  }, [appointmentId, formType]);
+  }, [appointmentId, formType, survey]);
 
   // Subscribe to auto-fill events
   useEffect(() => {
     console.log(`🔔 Dynamic Form: Subscribing to diarization events for ${formType}`);
 
     const subscription = consultationEventBus.subscribe('diarization_chunk_complete', (event) => {
-      if (event.form_type === formType && event.patient_id === patientId) {
+      if (event.form_type === formType && event.patient_id === patientId && survey) {
         console.log(`✅ Dynamic Form: Processing auto-fill for ${formType}`);
 
         if (event.field_updates && Object.keys(event.field_updates).length > 0) {
           console.log(`📝 Applying ${Object.keys(event.field_updates).length} field updates:`, event.field_updates);
 
-          // Merge auto-filled data into form
-          setFormData((prev: any) => ({
-            ...prev,
-            ...event.field_updates,
-          }));
+          // Merge auto-filled data into survey
+          survey.mergeData(event.field_updates);
 
           // Track auto-filled fields
           setAutoFilledFields((prev) => {
@@ -194,60 +280,57 @@ export function DynamicConsultationForm({
       console.log(`🔕 Dynamic Form: Unsubscribing from diarization events`);
       subscription.unsubscribe();
     };
-  }, [formType, patientId]);
+  }, [formType, patientId, survey]);
 
   // Auto-save debounced
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (Object.keys(formData).length > 0) {
-        handleAutoSave();
+  let autoSaveTimer: NodeJS.Timeout | null = null;
+
+  const handleAutoSave = async (data: any) => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    autoSaveTimer = setTimeout(async () => {
+      try {
+        const payload = {
+          patient_id: patientId,
+          appointment_id: appointmentId,
+          form_type: formType,
+          form_data: data,
+          status: 'draft',
+          created_by: doctorUserId,
+          updated_by: doctorUserId,
+          filled_by: filledBy === 'doctor' ? doctorUserId : null,
+        };
+
+        const url = formId
+          ? `${API_URL}/api/consultation-form/${formId}`
+          : `${API_URL}/api/consultation-form`;
+
+        const method = formId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          if (!formId) {
+            setFormId(responseData.form.id);
+          }
+          console.log(`💾 Auto-saved ${formType} form`);
+        }
+      } catch (error) {
+        console.error('❌ Auto-save failed:', error);
       }
     }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [formData]);
-
-  const handleAutoSave = async () => {
-    try {
-      const payload = {
-        patient_id: patientId,
-        appointment_id: appointmentId,
-        form_type: formType,
-        form_data: formData,
-        status: 'draft',
-        created_by: doctorUserId,
-        updated_by: doctorUserId,
-        filled_by: filledBy === 'doctor' ? doctorUserId : null,
-      };
-
-      const url = formId
-        ? `${API_URL}/api/consultation-form/${formId}`
-        : `${API_URL}/api/consultation-form`;
-
-      const method = formId ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (!formId) {
-          setFormId(data.form.id);
-        }
-        console.log(`💾 Auto-saved ${formType} form`);
-      }
-    } catch (error) {
-      console.error('❌ Auto-save failed:', error);
-    }
   };
 
-  const handleSubmit = async ({ formData: submittedData }: any) => {
-    setIsSaving(true);
+  const handleSubmit = async (submittedData: any) => {
     try {
       const payload = {
         patient_id: patientId,
@@ -280,12 +363,10 @@ export function DynamicConsultationForm({
       }
     } catch (error) {
       console.error('❌ Submit failed:', error);
-    } finally {
-      setIsSaving(false);
     }
   };
 
-  if (isLoading || !schema) {
+  if (isLoading || !survey) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-aneya-cream">
         <div className="text-center">
@@ -306,36 +387,22 @@ export function DynamicConsultationForm({
           </h2>
         </div>
 
-        {/* React JSON Schema Form */}
+        {/* SurveyJS Form */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <Form
-            schema={schema}
-            uiSchema={uiSchema}
-            formData={formData}
-            validator={validator}
-            onChange={(e) => setFormData(e.formData)}
-            onSubmit={handleSubmit}
-            disabled={isSaving}
-          >
-            <div className="flex gap-4 mt-6 pt-6 border-t border-gray-200">
-              {onBack && (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-                >
-                  Back
-                </button>
-              )}
+          <Survey model={survey} />
+
+          {/* Back button */}
+          {onBack && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
               <button
-                type="submit"
-                disabled={isSaving}
-                className="px-6 py-2 bg-aneya-teal text-white rounded-md hover:bg-aneya-teal/90 disabled:opacity-50"
+                type="button"
+                onClick={onBack}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
               >
-                {isSaving ? 'Saving...' : 'Submit Form'}
+                Back
               </button>
             </div>
-          </Form>
+          )}
         </div>
 
         {/* Auto-fill indicator */}
