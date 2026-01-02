@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAntenatalForms } from '../../hooks/useAntenatalForms';
+import { useFormAutoFill, applyFieldUpdatesToState, getAutoFillFieldClasses } from '../../hooks/useFormAutoFill';
+import { consultationEventBus } from '../../lib/consultationEventBus';
 import {
   CreateAntenatalFormInput,
   UpdateAntenatalFormInput,
@@ -18,6 +20,7 @@ interface AntenatalDuringConsultationFormProps {
   onBack?: () => void;
   filledBy?: 'patient' | 'doctor';
   doctorUserId?: string;
+  displayMode?: 'wizard' | 'flat';
 }
 
 export function AntenatalDuringConsultationForm({
@@ -27,6 +30,7 @@ export function AntenatalDuringConsultationForm({
   onBack,
   filledBy = 'doctor',
   doctorUserId,
+  displayMode = 'wizard',
 }: AntenatalDuringConsultationFormProps) {
   const { createForm, updateForm, getFormByAppointment, createVisit, getVisitsByForm } = useAntenatalForms(patientId);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
@@ -46,6 +50,99 @@ export function AntenatalDuringConsultationForm({
     visit_number: 1,
     visit_date: new Date().toISOString().split('T')[0],
   });
+
+  // Auto-fill hook for real-time field extraction
+  const { processTranscriptChunk, markManualOverride, autoFilledFields } = useFormAutoFill({
+    formType: 'antenatal',
+    patientContext: {
+      patient_id: patientId,
+    },
+    currentFormState: {
+      ...formData,
+      ...visitData,
+    },
+    onFieldsUpdated: (updates) => {
+      console.log(`🔄 Auto-filling ${Object.keys(updates.field_updates).length} antenatal form fields`);
+
+      // Apply field updates to combined state
+      const updatedState = applyFieldUpdatesToState(
+        { ...formData, ...visitData },
+        updates.field_updates
+      );
+
+      // Separate updates for formData and visitData
+      // Visit-specific fields go to visitData, general pregnancy fields to formData
+      // Some fields like gestational_age_weeks go to BOTH
+      const visitOnlyFields = ['fundal_height', 'fetal_heart_rate', 'fetal_movements', 'edema', 'presentation',
+                               'weight_kg', 'blood_pressure', 'urine_albumin', 'urine_sugar'];
+      const sharedFields = ['gestational_age_weeks']; // Goes to both formData and visitData
+
+      const updatedFormData: any = {};
+      const updatedVisitData: any = {};
+
+      for (const [key, value] of Object.entries(updatedState)) {
+        if (sharedFields.some(sf => key.includes(sf))) {
+          // Set in both
+          updatedFormData[key] = value;
+          updatedVisitData[key] = value;
+        } else if (visitOnlyFields.some(vf => key.includes(vf))) {
+          updatedVisitData[key] = value;
+        } else {
+          updatedFormData[key] = value;
+        }
+      }
+
+      // Update state
+      if (Object.keys(updatedFormData).length > 0) {
+        setFormData(prev => ({ ...prev, ...updatedFormData }));
+      }
+      if (Object.keys(updatedVisitData).length > 0) {
+        setVisitData(prev => ({ ...prev, ...updatedVisitData }));
+      }
+    },
+  });
+
+  // Subscribe to diarization events for auto-fill
+  useEffect(() => {
+    console.log(`🔔 Antenatal Form: Subscribing to diarization events for patientId=${patientId}`);
+
+    const subscription = consultationEventBus.subscribe('diarization_chunk_complete', (event) => {
+      console.log(`🔔 Antenatal Form: Received event`, {
+        event_form_type: event.form_type,
+        event_patient_id: event.patient_id,
+        this_patient_id: patientId,
+        form_type_match: event.form_type === 'antenatal',
+        patient_id_match: event.patient_id === patientId,
+        has_field_updates: !!event.field_updates && Object.keys(event.field_updates).length > 0,
+        will_process: event.form_type === 'antenatal' && event.patient_id === patientId
+      });
+
+      // Only process if this is an antenatal form
+      if (event.form_type === 'antenatal' && event.patient_id === patientId) {
+        console.log(`✅ Antenatal Form: Processing chunk #${event.chunk_index}`);
+
+        // NEW: Directly apply field updates from backend if available
+        if (event.field_updates && Object.keys(event.field_updates).length > 0) {
+          console.log(`📝 Applying ${Object.keys(event.field_updates).length} field updates from backend:`, event.field_updates);
+
+          // Apply field updates using the existing processTranscriptChunk callback
+          // which calls applyFieldUpdatesToState internally
+          processTranscriptChunk(event.field_updates, event.chunk_index);
+        } else {
+          // Fallback: Process segments if no field_updates provided
+          console.log(`⚠️  No field_updates in event, falling back to segment processing`);
+          processTranscriptChunk(event.segments, event.chunk_index);
+        }
+      } else {
+        console.log(`⏭️  Antenatal Form: Skipping event (form_type=${event.form_type}, patient_id match=${event.patient_id === patientId})`);
+      }
+    });
+
+    return () => {
+      console.log(`🔕 Antenatal Form: Unsubscribing from diarization events`);
+      subscription.unsubscribe();
+    };
+  }, [processTranscriptChunk, patientId]);
 
   // Load existing form if it exists
   useEffect(() => {
@@ -250,14 +347,15 @@ export function AntenatalDuringConsultationForm({
     setFormData(prev => ({ ...prev, referrals: referrals }));
   };
 
-  const renderStep = () => {
-    switch (currentStep) {
+  const renderStepByNumber = (stepNumber: number) => {
+    switch (stepNumber) {
       case 1:
-        // Review Pre-Consultation Data
+        // Previous Consultation Data
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold text-gray-900">Review Pre-Consultation Data</h3>
+            {/* Current Pregnancy Summary Card */}
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Current Pregnancy Summary</h4>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="font-medium">LMP:</span> {formData.lmp || 'Not provided'}
@@ -266,14 +364,15 @@ export function AntenatalDuringConsultationForm({
                   <span className="font-medium">EDD:</span> {formData.edd || 'Not provided'}
                 </div>
                 <div>
-                  <span className="font-medium">Gestational Age:</span> {formData.gestational_age_weeks || 'Not calculated'} weeks
+                  <span className="font-medium">Gestational Age:</span> {formData.gestational_age_weeks || visitData.gestational_age_weeks || 'Not calculated'} weeks
                 </div>
                 <div>
                   <span className="font-medium">GPLA:</span> G{formData.gravida || 0} P{formData.para || 0} L{formData.live || 0} A{formData.abortions || 0}
                 </div>
               </div>
             </div>
-            <p className="text-sm text-gray-600">Review the pre-consultation data and proceed to enter visit details.</p>
+
+            <p className="text-sm text-gray-600">Review the previous consultation data and proceed to enter visit details.</p>
           </div>
         );
 
@@ -355,13 +454,23 @@ export function AntenatalDuringConsultationForm({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Fundal Height (cm)
+                  {autoFilledFields.has('fundal_height') && (
+                    <span className="ml-2 text-[11px] text-blue-600 font-normal">● Auto-filled</span>
+                  )}
                 </label>
                 <input
                   type="number"
                   step="0.1"
                   value={visitData.fundal_height_cm ?? ''}
-                  onChange={(e) => setVisitData(prev => ({ ...prev, fundal_height_cm: e.target.value ? parseFloat(e.target.value) : null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                  onChange={(e) => {
+                    markManualOverride('fundal_height');
+                    setVisitData(prev => ({ ...prev, fundal_height_cm: e.target.value ? parseFloat(e.target.value) : null }));
+                  }}
+                  className={getAutoFillFieldClasses(
+                    'fundal_height',
+                    autoFilledFields,
+                    'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
+                  )}
                 />
               </div>
               <div>
@@ -1266,6 +1375,50 @@ export function AntenatalDuringConsultationForm({
     }
   };
 
+  const renderStep = () => renderStepByNumber(currentStep);
+
+  // Flat mode rendering - show all steps on one page
+  if (displayMode === 'flat') {
+    const stepTitles = [
+      'Previous Consultation Data',
+      'Current Visit Details',
+      'Physical Examination',
+      'Investigations & Lab Results',
+      'USG Scans',
+      'Antepartum Surveillance',
+      'Risk Assessment & Diagnosis',
+      'Referrals & Clinical Notes'
+    ];
+
+    return (
+      <div className="w-full bg-white rounded-[20px] p-8">
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Render all steps as sections */}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((step) => (
+            <div key={step} className="pb-8 border-b border-gray-200 last:border-b-0 last:pb-0">
+              <h3 className="text-[18px] font-semibold text-aneya-navy mb-4">
+                {stepTitles[step - 1]}
+              </h3>
+              <div>{renderStepByNumber(step)}</div>
+            </div>
+          ))}
+
+          {/* Complete Button */}
+          <div className="mt-8 pt-6 border-t border-gray-200 flex items-center justify-end">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-6 py-3 bg-aneya-teal text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isSaving ? 'Saving...' : 'Complete Form'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Wizard mode rendering (original)
   return (
     <div className="w-full max-w-4xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-6">

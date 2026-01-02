@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PrimaryButton } from './PrimaryButton';
 import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LANGUAGES, isSarvamLanguage } from '../types/database';
-import { formatTime24, getPatientAge } from '../utils/dateHelpers';
+import { getPatientAge } from '../utils/dateHelpers';
 import { SpeakerMappingModal } from './SpeakerMappingModal';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
@@ -16,6 +16,9 @@ import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebM
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
 import { useConsultationRealtime } from '../hooks/useConsultationRealtime';
+import { usePreviousAppointment } from '../hooks/usePreviousAppointment';
+import { PreviousAppointmentSidebar } from './PreviousAppointmentSidebar';
+import { AppointmentDetailModal } from './AppointmentDetailModal';
 
 interface ChunkStatus {
   index: number;
@@ -288,6 +291,13 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     enabled: !!pendingConsultationId
   });
 
+  // Previous appointment data for returning patients
+  const { previousAppointment, consultation: previousConsultation, loading: previousAppointmentLoading } =
+    usePreviousAppointment(preFilledPatient?.id, appointmentContext?.id);
+
+  // Modal state for viewing previous appointment details
+  const [showPreviousAppointmentDetail, setShowPreviousAppointmentDetail] = useState(false);
+
   // Keep refs in sync with state for accessing latest values in async functions
   useEffect(() => {
     diarizedSegmentsRef.current = diarizedSegments;
@@ -424,13 +434,14 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       // NEW: Add consultation context for form extraction
       if (appointmentContext?.id) {
-        formData.append('consultation_id', appointmentContext.id);
+        formData.append('appointment_id', appointmentContext.id);
       }
       if (preFilledPatient?.id) {
         formData.append('patient_id', preFilledPatient.id);
       }
-      if (doctorProfile?.specialty) {
-        formData.append('doctor_specialty', doctorProfile.specialty);
+      if (appointmentContext?.appointment_type) {
+        formData.append('appointment_type', appointmentContext.appointment_type);
+        console.log(`📋 Sending appointment_type to backend: ${appointmentContext.appointment_type}`);
       }
 
       // Send to backend for diarization + form extraction (combined)
@@ -551,7 +562,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Use form_type from backend if available, otherwise fall back to specialty-based determination
       const formType = data.form_type || determinedConsultationType || determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
       console.log(`🔍 Using form type: ${formType} (from_backend=${!!data.form_type}, determined=${determinedConsultationType !== null})`);
+      console.log(`🔍 Form auto-fill check:`, {
+        formType,
+        labeledSegments_length: labeledSegments.length,
+        preFilledPatient_id: preFilledPatient?.id,
+        appointmentContext_patient_id: appointmentContext?.patient_id,
+        doctorProfile_specialty: doctorProfile?.specialty,
+        will_emit: !!(formType && labeledSegments.length > 0)
+      });
 
+      // TEMPORARILY DISABLED: Real-time form filling during recording
+      // TODO: Re-enable after fixing backend field extraction reliability
+      /*
       if (formType && labeledSegments.length > 0) {
         const eventPayload = {
           segments: labeledSegments,
@@ -634,6 +656,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       } else {
         console.log(`⏭️  Not emitting event: formType=${formType}, segments=${labeledSegments.length}`);
       }
+      */
 
     } catch (error) {
       console.error(`❌ Chunk processing error:`, error);
@@ -740,13 +763,25 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // If no summary exists, run summarization first
       let summaryData = consultationSummary;
       if (!summaryData) {
-        // Send both original and translated text for summarization
-        const requestBody: { text: string; original_text?: string } = {
-          text: consultation
+        // Prepare request body with full parameters to match PatientDetailView implementation
+        const requestBody = {
+          text: consultation,
+          original_text: originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()
+            ? originalTranscript
+            : undefined,
+          patient_info: {
+            patient_id: preFilledPatient?.id,
+            patient_age: patientDetails?.age,
+            patient_name: patientDetails?.name,
+            sex: patientDetails?.sex,
+            height: patientDetails?.height,
+            weight: patientDetails?.weight,
+            current_medications: patientDetails?.currentMedications,
+            current_conditions: patientDetails?.currentConditions
+          },
+          is_from_transcription: true,
+          transcription_language: consultationLanguage || 'en'
         };
-        if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
-          requestBody.original_text = originalTranscript;
-        }
 
         const response = await fetch(`${API_URL}/api/summarize`, {
           method: 'POST',
@@ -851,16 +886,25 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
     setIsSummarizing(true);
     try {
-      // Send both original and translated text to the backend
-      // If we have an original transcript (non-English), send it for better summarization
-      const requestBody: { text: string; original_text?: string } = {
-        text: consultation  // This is the translated (English) version
+      // Prepare request body with full parameters to match PatientDetailView implementation
+      const requestBody = {
+        text: consultation,  // This is the translated (English) version
+        original_text: originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()
+          ? originalTranscript
+          : undefined,
+        patient_info: {
+          patient_id: preFilledPatient?.id,
+          patient_age: patientDetails?.age,
+          patient_name: patientDetails?.name,
+          sex: patientDetails?.sex,
+          height: patientDetails?.height,
+          weight: patientDetails?.weight,
+          current_medications: patientDetails?.currentMedications,
+          current_conditions: patientDetails?.currentConditions
+        },
+        is_from_transcription: true,
+        transcription_language: consultationLanguage || 'en'
       };
-
-      // If we have original language transcript that's different from the consultation
-      if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
-        requestBody.original_text = originalTranscript;
-      }
 
       const response = await fetch(`${API_URL}/api/summarize`, {
         method: 'POST',
@@ -880,6 +924,45 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
         // NOTE: Saving is now handled in stopRecording() for the diarization flow
         // Old signature save call removed to match new interface
+
+        // NEW: Trigger form auto-fill if we have diarized segments
+        const segments = diarizedSegmentsRef.current;
+        console.log(`🔍 Post-summarize form auto-fill check:`, {
+          segments_length: segments?.length || 0,
+          preFilledPatient_id: preFilledPatient?.id,
+          determinedConsultationType,
+          doctorProfile_specialty: doctorProfile?.specialty,
+          appointmentContext_type: appointmentContext?.appointment_type
+        });
+
+        if (segments && segments.length > 0 && preFilledPatient?.id) {
+          const formType = determinedConsultationType || determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
+          console.log(`🔍 Computed formType: ${formType}`);
+
+          if (formType) {
+            const subscriberCount = consultationEventBus.getSubscriberCount('diarization_chunk_complete');
+            console.log(`📋 Emitting diarization event for ${formType} form auto-fill after summarization (${subscriberCount} subscribers)`);
+
+            consultationEventBus.emit('diarization_chunk_complete', {
+              segments,
+              chunk_index: 999, // Use a high number to indicate this is a summary-triggered event
+              form_type: formType,
+              patient_id: preFilledPatient.id,
+              speaker_role_mapping: speakerRolesRef.current,
+              field_updates: {},  // Let the form extract fields from segments
+              confidence_scores: {}
+            });
+
+            console.log(`✅ Form auto-fill event emitted with ${segments.length} segments`);
+          } else {
+            console.warn(`⚠️  Cannot emit event: formType is null`);
+          }
+        } else {
+          console.warn(`⚠️  Cannot emit event: missing required data`, {
+            has_segments: !!(segments && segments.length > 0),
+            has_patient_id: !!preFilledPatient?.id
+          });
+        }
       } else {
         throw new Error('Invalid response from summarization endpoint');
       }
@@ -900,13 +983,25 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Step 1: Summarize if not already done
       let summaryData = consultationSummary;
       if (!summaryData) {
-        const requestBody: { text: string; original_text?: string } = {
-          text: consultation
+        // Prepare request body with full parameters to match PatientDetailView implementation
+        const requestBody = {
+          text: consultation,
+          original_text: originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()
+            ? originalTranscript
+            : undefined,
+          patient_info: {
+            patient_id: preFilledPatient?.id,
+            patient_age: patientDetails?.age,
+            patient_name: patientDetails?.name,
+            sex: patientDetails?.sex,
+            height: patientDetails?.height,
+            weight: patientDetails?.weight,
+            current_medications: patientDetails?.currentMedications,
+            current_conditions: patientDetails?.currentConditions
+          },
+          is_from_transcription: true,
+          transcription_language: consultationLanguage || 'en'
         };
-
-        if (originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()) {
-          requestBody.original_text = originalTranscript;
-        }
 
         const response = await fetch(`${API_URL}/api/summarize`, {
           method: 'POST',
@@ -1944,26 +2039,20 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <span className="text-[14px] font-medium">Back</span>
             </button>
           )}
-          <h1 className="text-[24px] sm:text-[32px] leading-[30px] sm:leading-[38px] text-aneya-navy">Consultation</h1>
+          <h1 className="text-[24px] sm:text-[32px] leading-[30px] sm:leading-[38px] text-aneya-navy">
+            Consultation for {appointmentContext?.patient.name || preFilledPatient?.name || 'Patient'}
+          </h1>
         </div>
 
-        {/* Appointment Context Banner */}
-        {appointmentContext && (
-          <div className="mb-6 bg-aneya-teal/10 border-2 border-aneya-teal rounded-[10px] p-4">
-            <div className="flex items-center gap-3">
-              <svg className="h-5 w-5 text-aneya-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <div>
-                <div className="text-[14px] text-aneya-navy font-medium">
-                  Consultation for: {appointmentContext.patient.name}
-                </div>
-                <div className="text-[12px] text-gray-600">
-                  Appointment at {formatTime24(new Date(appointmentContext.scheduled_time))} - {appointmentContext.duration_minutes} min
-                  {appointmentContext.reason && ` • ${appointmentContext.reason}`}
-                </div>
-              </div>
-            </div>
+        {/* Previous Appointment Sidebar */}
+        {previousAppointment && (
+          <div className="mb-6">
+            <PreviousAppointmentSidebar
+              appointment={previousAppointment}
+              consultation={previousConsultation}
+              loading={previousAppointmentLoading}
+              onAppointmentClick={() => setShowPreviousAppointmentDetail(true)}
+            />
           </div>
         )}
 
@@ -2732,6 +2821,17 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             </div>
           </div>
         </div>
+      )}
+
+      {/* Previous Appointment Detail Modal */}
+      {showPreviousAppointmentDetail && previousAppointment && (
+        <AppointmentDetailModal
+          isOpen={true}
+          onClose={() => setShowPreviousAppointmentDetail(false)}
+          appointment={previousAppointment}
+          consultation={previousConsultation || null}
+          viewMode="doctor"
+        />
       )}
 
     </div>

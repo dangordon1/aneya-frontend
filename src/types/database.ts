@@ -86,7 +86,7 @@ export type AppointmentStatus = 'scheduled' | 'in_progress' | 'completed' | 'can
 
 // Multi-specialty appointment system (2-level: Specialty → Subtype)
 export type MedicalSpecialty = 'general' | 'obgyn' | 'cardiology' | 'neurology' | 'dermatology';
-export type OBGYNSubtype = 'infertility' | 'antenatal' | 'general_obgyn';
+export type OBGYNSubtype = 'infertility' | 'antenatal' | 'general_obgyn' | 'unknown';
 
 // Backward compatible with existing types + new specialty subtypes
 export type AppointmentType =
@@ -145,12 +145,14 @@ export interface Consultation {
   patient_id: string;
   consultation_text: string; // Translated/final consultation text (English)
   original_transcript: string | null; // Original language transcript before translation
+  translated_transcript?: string | null; // Raw English translation (before summarization), null if original was already in English
   transcription_language: string | null;
   audio_url: string | null; // GCS URL for the consultation audio recording
   patient_snapshot: Record<string, any> | null;
   analysis_result: Record<string, any> | null; // AI analysis - null until analyze is called
   diagnoses: Record<string, any>[] | null; // AI diagnoses - empty until analyze is called
   guidelines_found: Record<string, any>[] | null; // AI guidelines - empty until analyze is called
+  prescriptions?: Prescription[] | null; // Array of prescriptions extracted from consultation
   consultation_duration_seconds: number | null;
   performed_by: string;
   location_detected: string | null;
@@ -160,6 +162,7 @@ export interface Consultation {
   transcription_error: string | null; // Error message if transcription_status is failed
   transcription_started_at: string | null; // When async processing started
   transcription_completed_at: string | null; // When async processing finished
+  detected_consultation_type?: 'obgyn' | 'infertility' | 'antenatal' | null; // AI-detected consultation type from form auto-fill
 }
 
 // Summary data returned from /api/summarize endpoint
@@ -193,6 +196,16 @@ export interface SummaryData {
   key_concerns?: string[];
   recommendations_given?: string[];
   follow_up?: string;
+  prescriptions?: Prescription[];
+}
+
+// Prescription extracted from consultation transcript
+export interface Prescription {
+  drug_name: string;
+  amount: string | null;
+  method: string | null;
+  frequency: string | null;
+  duration: string | null;
 }
 
 // Unified consultation data format from /api/summarize
@@ -204,6 +217,7 @@ export interface ConsultationDataFromSummary {
   analysis_result: null; // NA until analyze is called
   diagnoses: []; // Empty until analyze is called
   guidelines_found: []; // Empty until analyze is called
+  prescriptions?: Prescription[] | null; // Prescriptions extracted from consultation
   consultation_duration_seconds: number | null;
   location_detected: string | null;
   backend_api_version: string;
@@ -276,6 +290,7 @@ export interface CreateConsultationInput {
   analysis_result?: Record<string, any> | null; // AI analysis - null until analyze is called
   diagnoses?: Record<string, any>[] | null; // AI diagnoses - empty until analyze is called
   guidelines_found?: Record<string, any>[] | null; // AI guidelines - empty until analyze is called
+  prescriptions?: Prescription[] | null; // Prescriptions extracted from consultation
   consultation_duration_seconds?: number | null;
   location_detected?: string | null;
   backend_api_version?: string | null;
@@ -315,6 +330,7 @@ export interface Doctor {
   license_number: string | null;
   clinic_name: string | null;
   clinic_address: string | null;
+  clinic_logo_url: string | null; // Public URL to clinic logo in GCS (appears on PDF reports)
   default_appointment_duration: number;
   timezone: string;
   is_active: boolean;
@@ -329,6 +345,7 @@ export interface CreateDoctorInput {
   license_number?: string | null;
   clinic_name?: string | null;
   clinic_address?: string | null;
+  clinic_logo_url?: string | null;
   default_appointment_duration?: number;
   timezone?: string;
 }
@@ -341,6 +358,7 @@ export interface UpdateDoctorInput {
   license_number?: string | null;
   clinic_name?: string | null;
   clinic_address?: string | null;
+  clinic_logo_url?: string | null;
   default_appointment_duration?: number;
   timezone?: string;
   is_active?: boolean;

@@ -1,21 +1,27 @@
 import React, { useState } from 'react';
-import { FileText, Users, Clock, AlertCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, Clock, AlertCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { EditableSection } from './EditableSection';
 import { SummaryData } from '../types/database';
+import { FeedbackButton } from './FeedbackButton';
 
 interface StructuredSummaryDisplayProps {
   summaryData: SummaryData;
   onUpdate: (updatedData: SummaryData) => void;
   onConfirmFieldSave?: (updatedData: SummaryData) => Promise<void>;
+  consultationId?: string | null;
+  onFeedback?: (type: string, sentiment: 'positive' | 'negative', data: any) => Promise<void>;
+  feedbackSubmitted?: Record<string, string>;
 }
 
 export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> = ({
   summaryData,
   onUpdate,
-  onConfirmFieldSave
+  onConfirmFieldSave,
+  consultationId,
+  onFeedback,
+  feedbackSubmitted
 }) => {
   const [expandedSections, setExpandedSections] = useState({
-    metadata: false,
     reviewOfSystems: false,
     plan: true,
     timeline: false,
@@ -59,75 +65,32 @@ export const StructuredSummaryDisplay: React.FC<StructuredSummaryDisplayProps> =
   };
 
   const clinical = summaryData.clinical_summary || {};
-  const metadata = summaryData.metadata || {};
   const timeline = summaryData.timeline || [];
   const keyConcerns = summaryData.key_concerns || [];
   const recommendations = summaryData.recommendations_given || [];
 
   return (
     <div className="space-y-4">
-      {/* Metadata Section - Collapsible */}
-      {metadata && Object.keys(metadata).length > 0 && (
-        <div className="border-2 border-indigo-200 rounded-lg overflow-hidden">
-          <button
-            onClick={() => toggleSection('metadata')}
-            className="w-full flex items-center justify-between p-3 bg-indigo-50 hover:bg-indigo-100 transition-colors"
-          >
+      {/* SOAP Notes Section - Always Visible, Primary Focus with integrated feedback */}
+      <div className="border-2 border-blue-200 rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between p-3 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-aneya-teal" />
+            <h4 className="text-[16px] font-semibold text-aneya-navy">SOAP Notes</h4>
+          </div>
+          {consultationId && onFeedback && (
             <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-aneya-teal" />
-              <h4 className="text-[16px] font-semibold text-aneya-navy">Consultation Information</h4>
-            </div>
-            {expandedSections.metadata ? (
-              <ChevronUp className="w-5 h-5 text-aneya-navy" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-aneya-navy" />
-            )}
-          </button>
-
-          {expandedSections.metadata && (
-            <div className="p-4 bg-white space-y-2">
-              {metadata.location && (
-                <div className="flex gap-2">
-                  <span className="text-[14px] font-medium text-aneya-navy">Location:</span>
-                  <span className="text-[14px] text-aneya-navy">{metadata.location}</span>
-                </div>
-              )}
-              {metadata.consultation_duration_seconds && (
-                <div className="flex gap-2">
-                  <span className="text-[14px] font-medium text-aneya-navy">Duration:</span>
-                  <span className="text-[14px] text-aneya-navy">
-                    {Math.floor(metadata.consultation_duration_seconds / 60)}m {Math.floor(metadata.consultation_duration_seconds % 60)}s
-                  </span>
-                </div>
-              )}
-              {metadata.patient_info && Object.keys(metadata.patient_info).length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-[14px] font-medium text-aneya-navy">Patient Info:</span>
-                  {Object.entries(metadata.patient_info).map(([key, value]) => (
-                    <div key={key} className="pl-4 text-[13px] text-aneya-navy">
-                      {key}: {String(value)}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {summaryData.speakers && Object.keys(summaryData.speakers).length > 0 && (
-                <div className="flex gap-2">
-                  <span className="text-[14px] font-medium text-aneya-navy">Speakers:</span>
-                  <span className="text-[14px] text-aneya-navy">
-                    {Object.entries(summaryData.speakers).map(([role, name]) => `${role} (${name})`).join(', ')}
-                  </span>
-                </div>
-              )}
+              <span className="text-xs text-aneya-text-secondary">Rate summary:</span>
+              <FeedbackButton
+                onFeedback={(sentiment) => onFeedback('summary', sentiment, {
+                  component_identifier: 'soap_summary',
+                  summary_data: summaryData
+                })}
+                size="sm"
+                initialSentiment={feedbackSubmitted?.['soap_summary'] as 'positive' | 'negative' | null}
+              />
             </div>
           )}
-        </div>
-      )}
-
-      {/* SOAP Notes Section - Always Visible, Primary Focus */}
-      <div className="border-2 border-blue-200 rounded-lg overflow-hidden">
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border-b border-blue-200">
-          <FileText className="w-5 h-5 text-aneya-teal" />
-          <h4 className="text-[16px] font-semibold text-aneya-navy">SOAP Notes</h4>
         </div>
 
         <div className="p-4 space-y-4 bg-white">

@@ -1,0 +1,329 @@
+import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+interface UploadResult {
+  success: boolean;
+  form_id?: string;
+  form_name: string;
+  specialty: string;
+  field_count?: number;
+  section_count?: number;
+  error?: string;
+}
+
+export function CustomFormUpload() {
+  const { session } = useAuth();
+  const [files, setFiles] = useState<File[]>([]);
+  const [formName, setFormName] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [description, setDescription] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const fileList = Array.from(e.target.files);
+
+      // Validate file count
+      if (fileList.length < 2) {
+        setError('Please select at least 2 images');
+        return;
+      }
+      if (fileList.length > 10) {
+        setError('Maximum 10 images allowed');
+        return;
+      }
+
+      // Validate file sizes
+      const oversizedFiles = fileList.filter(f => f.size > 10 * 1024 * 1024);
+      if (oversizedFiles.length > 0) {
+        setError(`Some files exceed 10MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`);
+        return;
+      }
+
+      setFiles(fileList);
+      setError(null);
+    }
+  };
+
+  const handleUpload = async () => {
+    // Validate inputs
+    if (!formName.trim()) {
+      setError('Form name is required');
+      return;
+    }
+
+    if (!specialty) {
+      setError('Please select a specialty');
+      return;
+    }
+
+    if (files.length < 2) {
+      setError('Please select at least 2 images');
+      return;
+    }
+
+    // Validate form name format (snake_case)
+    if (!/^[a-z0-9_]+$/.test(formName)) {
+      setError('Form name must be in snake_case (lowercase letters, numbers, underscores only)');
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setUploadResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('form_name', formName.toLowerCase());
+      formData.append('specialty', specialty);
+      formData.append('description', description);
+      formData.append('is_public', isPublic.toString());
+
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+
+      const response = await fetch(`${API_URL}/api/custom-forms/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          // Add auth token if available
+          ...(session?.access_token && { 'Authorization': `Bearer ${session.access_token}` })
+        }
+      });
+
+      const result: UploadResult = await response.json();
+
+      if (result.success) {
+        setUploadResult(result);
+        // Reset form
+        setFiles([]);
+        setFormName('');
+        setSpecialty('');
+        setDescription('');
+        setIsPublic(false);
+
+        // Reset file input
+        const fileInput = document.getElementById('form-images') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+      } else {
+        setError(result.error || 'Upload failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Success Message */}
+      {uploadResult && uploadResult.success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h4 className="font-medium text-green-900">Form Created Successfully!</h4>
+              <p className="text-sm text-green-700 mt-1">
+                "{uploadResult.form_name}" has been generated with {uploadResult.field_count} fields in {uploadResult.section_count} sections.
+              </p>
+              <p className="text-sm text-green-700 mt-1">
+                The form is in draft status. Review it in "My Forms" and activate it when ready.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Form Name */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Form Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={formName}
+          onChange={(e) => setFormName(e.target.value)}
+          placeholder="e.g., neurology_assessment"
+          className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          disabled={uploading}
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Use snake_case (lowercase letters, numbers, underscores only)
+        </p>
+      </div>
+
+      {/* Specialty */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Specialty <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={specialty}
+          onChange={(e) => setSpecialty(e.target.value)}
+          className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          disabled={uploading}
+        >
+          <option value="">Select specialty...</option>
+          <option value="cardiology">Cardiology</option>
+          <option value="neurology">Neurology</option>
+          <option value="pediatrics">Pediatrics</option>
+          <option value="orthopedics">Orthopedics</option>
+          <option value="dermatology">Dermatology</option>
+          <option value="psychiatry">Psychiatry</option>
+          <option value="internal_medicine">Internal Medicine</option>
+          <option value="emergency_medicine">Emergency Medicine</option>
+          <option value="surgery">Surgery</option>
+          <option value="obstetrics_gynecology">Obstetrics & Gynecology</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Description (Optional)
+        </label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Brief description of what this form is used for..."
+          rows={3}
+          className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          disabled={uploading}
+        />
+      </div>
+
+      {/* File Upload */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Form Images <span className="text-red-500">*</span>
+        </label>
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-aneya-teal transition-colors">
+          <input
+            id="form-images"
+            type="file"
+            multiple
+            accept=".heic,.jpg,.jpeg,.png,.HEIC,.JPG,.JPEG,.PNG"
+            onChange={handleFileChange}
+            className="hidden"
+            disabled={uploading}
+          />
+          <label
+            htmlFor="form-images"
+            className="cursor-pointer flex flex-col items-center"
+          >
+            <svg className="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p className="text-sm text-gray-600 font-medium">Click to upload form images</p>
+            <p className="text-xs text-gray-500 mt-1">HEIC, JPEG, or PNG (2-10 images, max 10MB each)</p>
+          </label>
+        </div>
+
+        {files.length > 0 && (
+          <div className="mt-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">
+              {files.length} file{files.length > 1 ? 's' : ''} selected:
+            </p>
+            <div className="space-y-1">
+              {files.map((file, index) => (
+                <div key={index} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>{file.name}</span>
+                  <span className="text-gray-400">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Public Sharing */}
+      <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-lg">
+        <input
+          type="checkbox"
+          id="is_public"
+          checked={isPublic}
+          onChange={(e) => setIsPublic(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-aneya-teal focus:ring-aneya-teal"
+          disabled={uploading}
+        />
+        <div>
+          <label htmlFor="is_public" className="text-sm font-medium text-gray-700">
+            Make this form public
+          </label>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Allow other doctors to discover and use this form template
+          </p>
+        </div>
+      </div>
+
+      {/* Upload Button */}
+      <div className="flex gap-3 justify-end pt-4">
+        <button
+          onClick={handleUpload}
+          disabled={!formName || !specialty || files.length < 2 || uploading}
+          className="px-6 py-3 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {uploading ? (
+            <>
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Generating Form... (30-60s)
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload & Generate Form
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Info Box */}
+      {uploading && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h4 className="font-medium text-blue-900">AI Analysis in Progress</h4>
+              <p className="text-sm text-blue-700 mt-1">
+                Our AI is analyzing your form images to extract fields and structure.
+                This typically takes 30-60 seconds.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

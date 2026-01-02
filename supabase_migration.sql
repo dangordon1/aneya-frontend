@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.consultations (
   analysis_result JSONB,
   diagnoses JSONB,
   guidelines_found JSONB,
+  prescriptions JSONB DEFAULT NULL, -- Prescriptions extracted from consultation
 
   -- Metadata
   consultation_duration_seconds INTEGER,

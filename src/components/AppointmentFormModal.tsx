@@ -37,8 +37,8 @@ export function AppointmentFormModal({
   const doctorSpecialty = doctorProfile?.specialty || 'general';
   const isOBGynDoctor = doctorSpecialty === 'obgyn';
 
-  // Only subtype selection for OB/GYN doctors
-  const [subtype, setSubtype] = useState<OBGYNSubtype>('general_obgyn');
+  // Subtype will be determined during consultation, default to unknown
+  const subtype: OBGYNSubtype = 'unknown';
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -75,16 +75,7 @@ export function AppointmentFormModal({
         notes: appointment.notes || '',
       });
 
-      // Parse existing appointment to set subtype (specialty comes from doctor profile)
-      if (appointment.specialty_subtype) {
-        setSubtype(appointment.specialty_subtype as OBGYNSubtype);
-      } else if (appointment.appointment_type.startsWith('obgyn_')) {
-        // Legacy: parse from appointment_type
-        const subtypeStr = appointment.appointment_type.replace('obgyn_', '') as OBGYNSubtype;
-        setSubtype(subtypeStr);
-      } else {
-        setSubtype('general_obgyn');
-      }
+      // Subtype is determined during consultation, not at appointment creation
     } else if (preFilledDate) {
       const dateStr = preFilledDate.toISOString().split('T')[0];
       setFormData({
@@ -95,7 +86,6 @@ export function AppointmentFormModal({
         reason: '',
         notes: '',
       });
-      setSubtype('general_obgyn');
     } else {
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
@@ -107,7 +97,6 @@ export function AppointmentFormModal({
         reason: '',
         notes: '',
       });
-      setSubtype('general_obgyn');
     }
     setErrors({});
   }, [appointment, preFilledDate, isOpen]);
@@ -316,43 +305,22 @@ export function AppointmentFormModal({
             </div>
           </div>
 
-          {/* Duration and OB/GYN Subtype */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <div>
-              <label htmlFor="duration" className="block mb-1 text-[12px] text-gray-600">
-                Duration
-              </label>
-              <select
-                id="duration"
-                value={formData.duration_minutes}
-                onChange={(e) => updateField('duration_minutes', Number(e.target.value))}
-                className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
-              >
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={45}>45 minutes</option>
-                <option value={60}>60 minutes</option>
-              </select>
-            </div>
-
-            {/* OB/GYN Subtype Selection (only for OB/GYN doctors) */}
-            {isOBGynDoctor && (
-              <div>
-                <label htmlFor="subtype" className="block mb-1 text-[12px] text-gray-600">
-                  Appointment Type
-                </label>
-                <select
-                  id="subtype"
-                  value={subtype}
-                  onChange={(e) => setSubtype(e.target.value as OBGYNSubtype)}
-                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
-                >
-                  <option value="general_obgyn">General OB/GYN</option>
-                  <option value="infertility">Infertility</option>
-                  <option value="antenatal">Antenatal Care (ANC)</option>
-                </select>
-              </div>
-            )}
+          {/* Duration */}
+          <div>
+            <label htmlFor="duration" className="block mb-1 text-[12px] text-gray-600">
+              Duration
+            </label>
+            <select
+              id="duration"
+              value={formData.duration_minutes}
+              onChange={(e) => updateField('duration_minutes', Number(e.target.value))}
+              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-aneya-teal transition-colors text-[14px] text-aneya-navy"
+            >
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={45}>45 minutes</option>
+              <option value={60}>60 minutes</option>
+            </select>
           </div>
 
           {/* Reason */}

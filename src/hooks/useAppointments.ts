@@ -7,6 +7,8 @@ import {
   UpdateAppointmentInput,
 } from '../types/database';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 interface UseAppointmentsReturn {
   appointments: AppointmentWithPatient[];
   loading: boolean;
@@ -14,11 +16,12 @@ interface UseAppointmentsReturn {
   createAppointment: (input: CreateAppointmentInput) => Promise<AppointmentWithPatient | null>;
   updateAppointment: (id: string, input: UpdateAppointmentInput) => Promise<AppointmentWithPatient | null>;
   cancelAppointment: (id: string, reason?: string) => Promise<AppointmentWithPatient | null>;
+  deleteAppointment: (id: string) => Promise<boolean>;
   refetch: (date?: string) => Promise<void>;
 }
 
 export function useAppointments(initialDate?: string): UseAppointmentsReturn {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, getIdToken } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentWithPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -213,6 +216,44 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
     [user, isAdmin]
   );
 
+  const deleteAppointment = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!user) {
+        setError('User not authenticated');
+        return false;
+      }
+
+      if (!isAdmin) {
+        setError('Only admins can delete appointments');
+        return false;
+      }
+
+      try {
+        setError(null);
+        const token = await getIdToken();
+
+        const response = await fetch(`${API_URL}/api/appointments/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to delete appointment');
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Error deleting appointment:', err);
+        setError(err instanceof Error ? err.message : 'Failed to delete appointment');
+        return false;
+      }
+    },
+    [user, isAdmin, getIdToken]
+  );
+
   return {
     appointments,
     loading,
@@ -220,6 +261,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
     createAppointment,
     updateAppointment,
     cancelAppointment,
+    deleteAppointment,
     refetch: fetchAppointments,
   };
 }

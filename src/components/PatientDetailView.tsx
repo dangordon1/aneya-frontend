@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Patient, Consultation, AppointmentWithPatient } from '../types/database';
 import { usePatients } from '../hooks/usePatients';
+import { useAuth } from '../contexts/AuthContext';
+import { useAppointments } from '../hooks/useAppointments';
 import { PastAppointmentCard } from './PastAppointmentCard';
 import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { getPatientAge, formatDateUK } from '../utils/dateHelpers';
@@ -22,6 +24,8 @@ export function PatientDetailView({
   onAnalyzeConsultation,
 }: PatientDetailViewProps) {
   const { updatePatient } = usePatients();
+  const { isAdmin } = useAuth();
+  const { deleteAppointment } = useAppointments();
 
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
@@ -164,6 +168,55 @@ export function PatientDetailView({
     } catch (error) {
       console.error('Error re-summarizing consultation:', error);
       alert('Failed to re-summarize consultation. Please try again.');
+    }
+  };
+
+  const handleRerunTranscription = async (
+    appointment: AppointmentWithPatient,
+    consultation: Consultation,
+    newTranscript: string
+  ) => {
+    try {
+      // Update database
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({ original_transcript: newTranscript })
+        .eq('id', consultation.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setConsultationsMap((prev) => ({
+        ...prev,
+        [appointment.id]: {
+          ...consultation,
+          original_transcript: newTranscript,
+        }
+      }));
+
+      console.log('Consultation transcript updated successfully');
+    } catch (error) {
+      console.error('Error updating transcript:', error);
+      alert('Failed to update transcript in database. Please try again.');
+      throw error;
+    }
+  };
+
+  const handleDeleteAppointment = async (appointmentId: string) => {
+    const success = await deleteAppointment(appointmentId);
+    if (success) {
+      // Remove from local state
+      setPastAppointments(prev => prev.filter(apt => apt.id !== appointmentId));
+
+      // Remove from consultations map
+      setConsultationsMap(prev => {
+        const updated = { ...prev };
+        delete updated[appointmentId];
+        return updated;
+      });
+
+      // Close modal
+      setSelectedAppointmentDetail(null);
     }
   };
 
@@ -430,6 +483,9 @@ export function PatientDetailView({
             consultation={consultationsMap[selectedAppointmentDetail.id] || null}
             onAnalyze={onAnalyzeConsultation}
             onResummarize={handleResummarize}
+            onRerunTranscription={handleRerunTranscription}
+            isAdmin={isAdmin}
+            onDelete={handleDeleteAppointment}
           />
         )}
       </div>

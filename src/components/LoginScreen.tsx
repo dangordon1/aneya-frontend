@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+
+// Map database specialty values to display names
+const SPECIALTY_DISPLAY_NAMES: Record<string, string> = {
+  'general': 'General Practice',
+  'obgyn': 'OB/GYN',
+  'cardiology': 'Cardiology',
+  'neurology': 'Neurology',
+  'dermatology': 'Dermatology',
+  'other': 'Other'
+};
 
 export function LoginScreen() {
   const [loginMode, setLoginMode] = useState<'doctor' | 'patient'>('doctor');
@@ -19,6 +30,11 @@ export function LoginScreen() {
   const [specialty, setSpecialty] = useState('');
   const [clinicName, setClinicName] = useState('');
 
+  // Specialty dropdown state
+  const [availableSpecialties, setAvailableSpecialties] = useState<string[]>([]);
+  const [showNewSpecialtyInput, setShowNewSpecialtyInput] = useState(false);
+  const [newSpecialtyInput, setNewSpecialtyInput] = useState('');
+
   // Patient-specific signup fields
   const [patientName, setPatientName] = useState('');
 
@@ -34,6 +50,34 @@ export function LoginScreen() {
       // Store token for later use
       sessionStorage.setItem('invitationToken', inviteToken);
     }
+  }, []);
+
+  // Fetch existing specialties from the database
+  useEffect(() => {
+    const fetchSpecialties = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('doctors')
+          .select('specialty')
+          .not('specialty', 'is', null);
+
+        if (error) {
+          console.error('Error fetching specialties:', error);
+          return;
+        }
+
+        // Extract unique specialties and sort them
+        const uniqueSpecialties = Array.from(
+          new Set(data.map((d) => d.specialty).filter(Boolean))
+        ).sort();
+
+        setAvailableSpecialties(uniqueSpecialties);
+      } catch (err) {
+        console.error('Error fetching specialties:', err);
+      }
+    };
+
+    fetchSpecialties();
   }, []);
 
   const handleGoogleSignIn = async () => {
@@ -53,7 +97,7 @@ export function LoginScreen() {
           if (name) {
             profileData = {
               name,
-              specialty: specialty.trim() || undefined,
+              specialty: (showNewSpecialtyInput ? newSpecialtyInput.trim() : specialty.trim()) || undefined,
               clinic_name: clinicName.trim() || undefined
             };
           }
@@ -121,7 +165,11 @@ export function LoginScreen() {
 
         // Build profile data based on role
         const profileData = loginMode === 'doctor'
-          ? { name: doctorName.trim(), specialty: specialty.trim() || undefined, clinic_name: clinicName.trim() || undefined }
+          ? {
+              name: doctorName.trim(),
+              specialty: (showNewSpecialtyInput ? newSpecialtyInput.trim() : specialty.trim()) || undefined,
+              clinic_name: clinicName.trim() || undefined
+            }
           : { name: patientName.trim() };
 
         const result = await signUp(email, password, loginMode, profileData);
@@ -172,6 +220,9 @@ export function LoginScreen() {
     setSpecialty('');
     setClinicName('');
     setPatientName('');
+    // Clear specialty dropdown state
+    setShowNewSpecialtyInput(false);
+    setNewSpecialtyInput('');
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -462,16 +513,48 @@ export function LoginScreen() {
                       <label htmlFor="specialty" className="block text-sm font-medium text-aneya-navy mb-2">
                         Specialty
                       </label>
-                      <input
+                      <select
                         id="specialty"
-                        type="text"
                         value={specialty}
-                        onChange={(e) => setSpecialty(e.target.value)}
-                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
-                        placeholder="General Practice"
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSpecialty(value);
+                          if (value === '__add_new__') {
+                            setShowNewSpecialtyInput(true);
+                            setSpecialty('');
+                          } else {
+                            setShowNewSpecialtyInput(false);
+                            setNewSpecialtyInput('');
+                          }
+                        }}
+                        className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all bg-white"
                         disabled={loading}
-                      />
+                      >
+                        <option value="">Select a specialty</option>
+                        {availableSpecialties.map((spec) => (
+                          <option key={spec} value={spec}>
+                            {SPECIALTY_DISPLAY_NAMES[spec] || spec.charAt(0).toUpperCase() + spec.slice(1)}
+                          </option>
+                        ))}
+                        <option value="__add_new__">Add new specialty...</option>
+                      </select>
                     </div>
+                    {showNewSpecialtyInput && (
+                      <div>
+                        <label htmlFor="newSpecialty" className="block text-sm font-medium text-aneya-navy mb-2">
+                          New Specialty Name
+                        </label>
+                        <input
+                          id="newSpecialty"
+                          type="text"
+                          value={newSpecialtyInput}
+                          onChange={(e) => setNewSpecialtyInput(e.target.value)}
+                          className="w-full px-4 py-3 border border-aneya-navy/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-aneya-teal focus:border-transparent transition-all"
+                          placeholder="Enter specialty (e.g., Cardiology)"
+                          disabled={loading}
+                        />
+                      </div>
+                    )}
                     <div>
                       <label htmlFor="clinicName" className="block text-sm font-medium text-aneya-navy mb-2">
                         Clinic/Hospital Name
