@@ -58,6 +58,25 @@ export function PastAppointmentCard({
       {appointment.reason && (
         <p className="text-[13px] text-gray-500">Reason: {appointment.reason}</p>
       )}
+
+      {consultation?.prescriptions && consultation.prescriptions.length > 0 && (
+        <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <p className="text-[13px] font-semibold text-aneya-navy mb-2">Prescriptions</p>
+          <div className="space-y-2">
+            {consultation.prescriptions.map((prescription, index) => (
+              <div key={index} className="text-[12px] text-gray-700">
+                <p className="font-medium text-aneya-navy">{prescription.drug_name}</p>
+                <div className="ml-2 text-gray-600">
+                  {prescription.amount && <span>{prescription.amount}</span>}
+                  {prescription.method && <span> • {prescription.method}</span>}
+                  {prescription.frequency && <span> • {prescription.frequency}</span>}
+                  {prescription.duration && <span> • {prescription.duration}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </button>
   );
 }

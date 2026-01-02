@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AppointmentWithPatient, Consultation } from '../types/database';
-import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Download, Trash2 } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
@@ -12,7 +12,11 @@ interface AppointmentDetailModalProps {
   consultation: Consultation | null;
   onAnalyze?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
   onResummarize?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => Promise<void>;
+  onRerunTranscription?: (appointment: AppointmentWithPatient, consultation: Consultation, newTranscript: string) => Promise<void>;
+  onViewConsultationForm?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => void;
   viewMode?: 'doctor' | 'patient';
+  isAdmin?: boolean;
+  onDelete?: (appointmentId: string) => Promise<void>;
 }
 
 export function AppointmentDetailModal({
@@ -22,12 +26,20 @@ export function AppointmentDetailModal({
   consultation,
   onAnalyze,
   onResummarize,
+  onRerunTranscription,
+  onViewConsultationForm,
   viewMode = 'doctor',
+  isAdmin,
+  onDelete,
 }: AppointmentDetailModalProps) {
   const [isResummarizing, setIsResummarizing] = useState(false);
-  const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
+  const [isOriginalTranscriptExpanded, setIsOriginalTranscriptExpanded] = useState(false);
+  const [isEnglishTranscriptExpanded, setIsEnglishTranscriptExpanded] = useState(false);
   const [isRerunningTranscription, setIsRerunningTranscription] = useState(false);
   const [rerunProgress, setRerunProgress] = useState<string>('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, string>>({});
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -85,6 +97,51 @@ export function AppointmentDetailModal({
     console.log('Summary data updated:', updatedData);
   };
 
+  const handleFeedback = async (
+    feedbackType: string,
+    sentiment: 'positive' | 'negative',
+    data: any
+  ) => {
+    if (!consultation?.id) {
+      console.warn('Cannot submit feedback: No consultation ID available');
+      return;
+    }
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+    try {
+      const payload = {
+        consultation_id: consultation.id,
+        feedback_type: feedbackType,
+        feedback_sentiment: sentiment,
+        ...data
+      };
+
+      const response = await fetch(`${API_URL}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to submit feedback');
+      }
+
+      const result = await response.json();
+      console.log('✅ Feedback submitted:', result);
+
+      setFeedbackSubmitted(prev => ({
+        ...prev,
+        [data.component_identifier || feedbackType]: sentiment
+      }));
+
+    } catch (error) {
+      console.error('❌ Failed to submit feedback:', error);
+      throw error;
+    }
+  };
+
   const handleRerunTranscription = async () => {
     if (!consultation?.id) return;
 
@@ -114,16 +171,13 @@ export function AppointmentDetailModal({
 
       const data = await response.json();
 
-      // Update local state
-      if (consultation) {
-        consultation.original_transcript = data.transcript;
+      // Call parent callback to update state
+      if (onRerunTranscription) {
+        await onRerunTranscription(appointment, consultation, data.transcript);
       }
 
       // Show success notification
       alert(`Transcription rerun successfully in ${data.processing_time_seconds}s using ${data.provider}`);
-
-      // Refresh page to show updated transcript
-      window.location.reload();
 
     } catch (error: any) {
       console.error('Error rerunning transcription:', error);
@@ -134,9 +188,79 @@ export function AppointmentDetailModal({
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!appointment.consultation_id) return;
+
+    setGeneratingPdf(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(
+        `${API_URL}/api/appointments/${appointment.id}/consultation-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate PDF');
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consultation_${appointment.patient.name.replace(/\s+/g, '_')}_${formattedDate.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const patientName = appointment.patient?.name || 'Unknown Patient';
+    const confirmMessage = `Delete appointment with ${patientName}?\n\n` +
+      `Date: ${formattedDate} at ${formattedTime}\n` +
+      `Type: ${appointment.appointment_type}\n\n` +
+      `Warning: This will permanently delete the appointment record.\n` +
+      `Consultation data will be preserved but unlinked.\n\n` +
+      `This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      if (onDelete) {
+        await onDelete(appointment.id);
+      }
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+      alert('Failed to delete appointment. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const hasAiAnalysis = consultation?.diagnoses && consultation.diagnoses.length > 0;
   const canAnalyze = !hasAiAnalysis && onAnalyze && consultation;
   const canResummarize = onResummarize && consultation;
+  const canRerunTranscription = onRerunTranscription && consultation?.audio_url;
+  const canDownloadPdf = appointment.consultation_id && appointment.status === 'completed';
+
+  // Show consultation form button for all completed appointments with consultations
+  // The form component will determine which form type to show based on detected consultation type
+  const canViewConsultationForm = onViewConsultationForm &&
+    consultation &&
+    appointment.status === 'completed';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4 sm:py-8">
@@ -197,8 +321,27 @@ export function AppointmentDetailModal({
         {consultation ? (
           <div className="space-y-4">
             {/* Action buttons */}
-            {viewMode === 'doctor' && (canResummarize || canAnalyze || consultation?.audio_url) && (
-              <div className="flex gap-2">
+            {viewMode === 'doctor' && (canResummarize || canAnalyze || canRerunTranscription || canViewConsultationForm || canDownloadPdf) && (
+              <div className="flex gap-2 flex-wrap">
+                {canViewConsultationForm && (
+                  <button
+                    onClick={() => onViewConsultationForm && onViewConsultationForm(appointment, consultation)}
+                    className="px-3 py-2 bg-green-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    View Consultation Form
+                  </button>
+                )}
+                {canDownloadPdf && (
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={generatingPdf}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
+                  </button>
+                )}
                 {canResummarize && (
                   <button
                     onClick={async () => {
@@ -216,7 +359,7 @@ export function AppointmentDetailModal({
                     {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
                   </button>
                 )}
-                {consultation?.audio_url && (
+                {canRerunTranscription && (
                   <button
                     onClick={handleRerunTranscription}
                     disabled={isRerunningTranscription}
@@ -233,6 +376,16 @@ export function AppointmentDetailModal({
                   >
                     <Brain className="w-4 h-4" />
                     Run AI Analysis
+                  </button>
+                )}
+                {isAdmin && onDelete && (
+                  <button
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-3 py-2 bg-red-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Trash2 className={`w-4 h-4 ${isDeleting ? 'animate-pulse' : ''}`} />
+                    {isDeleting ? 'Deleting...' : 'Delete Appointment'}
                   </button>
                 )}
               </div>
@@ -252,40 +405,121 @@ export function AppointmentDetailModal({
             )}
 
             {/* Content Display */}
-            {consultation.summary_data ? (
-              <StructuredSummaryDisplay
-                summaryData={consultation.summary_data}
-                onUpdate={handleUpdateSummaryData}
-              />
-            ) : (transcript || summary) ? (
+            {consultation.summary_data || consultation.original_transcript || transcript || summary ? (
               <div className="space-y-4">
-                {/* Consultation Transcript - Collapsible */}
-                {transcript && (
-                  <div className="bg-gray-50 rounded-[12px] overflow-hidden">
+                {/* Structured Summary (SOAP Notes) */}
+                {consultation.summary_data && (
+                  <StructuredSummaryDisplay
+                    summaryData={consultation.summary_data}
+                    onUpdate={handleUpdateSummaryData}
+                    consultationId={consultation.id}
+                    onFeedback={handleFeedback}
+                    feedbackSubmitted={feedbackSubmitted}
+                  />
+                )}
+
+                {/* Transcript Section - Show both if different, otherwise just one */}
+                {consultation.original_transcript && consultation.translated_transcript && consultation.original_transcript.trim() !== consultation.translated_transcript.trim() ? (
+                  <>
+                    {/* Original Transcript (Diarized in Native Language) */}
+                    <div className="bg-purple-50 rounded-[12px] overflow-hidden border border-purple-200">
+                      <button
+                        onClick={() => setIsOriginalTranscriptExpanded(!isOriginalTranscriptExpanded)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-purple-100 transition-colors"
+                        type="button"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-purple-700" />
+                          <h5 className="text-[14px] text-purple-700 font-semibold">
+                            Original Transcript (Diarized)
+                          </h5>
+                          {consultation.transcription_language && (
+                            <span className="text-[11px] px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full font-medium">
+                              {consultation.transcription_language}
+                            </span>
+                          )}
+                          <span className="text-[12px] text-gray-500">
+                            ({consultation.original_transcript.split(/\s+/).length} words)
+                          </span>
+                        </div>
+                        {isOriginalTranscriptExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-purple-700" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-purple-700" />
+                        )}
+                      </button>
+                      {isOriginalTranscriptExpanded && (
+                        <div className="px-4 pb-4">
+                          <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
+                            {consultation.original_transcript}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* English Translation */}
+                    <div className="bg-gray-50 rounded-[12px] overflow-hidden">
+                      <button
+                        onClick={() => setIsEnglishTranscriptExpanded(!isEnglishTranscriptExpanded)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition-colors"
+                        type="button"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-aneya-navy" />
+                          <h5 className="text-[14px] text-aneya-navy font-semibold">
+                            English Translation (Raw Transcript)
+                          </h5>
+                          <span className="text-[12px] text-gray-500">
+                            ({consultation.translated_transcript.split(/\s+/).length} words)
+                          </span>
+                        </div>
+                        {isEnglishTranscriptExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-aneya-navy" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-aneya-navy" />
+                        )}
+                      </button>
+                      {isEnglishTranscriptExpanded && (
+                        <div className="px-4 pb-4">
+                          <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
+                            {consultation.translated_transcript}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (consultation.original_transcript || transcript) && (
+                  /* Single Transcript Section (when both are the same or only one exists) */
+                  <div className="bg-gray-50 rounded-[12px] overflow-hidden border border-gray-200">
                     <button
-                      onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
+                      onClick={() => setIsOriginalTranscriptExpanded(!isOriginalTranscriptExpanded)}
                       className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition-colors"
                       type="button"
                     >
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-aneya-navy" />
                         <h5 className="text-[14px] text-aneya-navy font-semibold">
-                          Consultation Transcript
+                          Consultation Transcript (Diarized)
                         </h5>
+                        {consultation.transcription_language && (
+                          <span className="text-[11px] px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full font-medium">
+                            {consultation.transcription_language}
+                          </span>
+                        )}
                         <span className="text-[12px] text-gray-500">
-                          ({transcript.split(/\s+/).length} words)
+                          ({(consultation.original_transcript || transcript || '').split(/\s+/).length} words)
                         </span>
                       </div>
-                      {isTranscriptExpanded ? (
+                      {isOriginalTranscriptExpanded ? (
                         <ChevronUp className="w-4 h-4 text-aneya-navy" />
                       ) : (
                         <ChevronDown className="w-4 h-4 text-aneya-navy" />
                       )}
                     </button>
-                    {isTranscriptExpanded && (
+                    {isOriginalTranscriptExpanded && (
                       <div className="px-4 pb-4">
                         <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
-                          {transcript}
+                          {consultation.original_transcript || transcript}
                         </p>
                       </div>
                     )}

@@ -197,10 +197,10 @@ export function PatientAppointments({ onBack }: Props) {
                       }`}
                     >
                       {apt.obgynFormStatus === 'completed'
-                        ? '✓ Pre-consultation Form Completed'
+                        ? '✓ Consultation Form Completed'
                         : apt.obgynFormStatus === 'partial'
-                        ? 'Continue Pre-consultation Form'
-                        : 'Complete Pre-consultation Form'}
+                        ? 'Continue Consultation Form'
+                        : 'Complete Consultation Form'}
                     </button>
                   )}
                 </div>
@@ -217,13 +217,13 @@ export function PatientAppointments({ onBack }: Props) {
           />
         )}
 
-        {/* OB/GYN Pre-consultation Form Modal */}
+        {/* OB/GYN Consultation Form Modal */}
         {selectedOBGynForm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
               <div className="bg-purple-600 text-white p-4 flex justify-between items-center">
-                <h2 className="text-lg font-semibold">Pre-consultation Form - OB/GYN</h2>
+                <h2 className="text-lg font-semibold">Consultation Form - OB/GYN</h2>
                 <button
                   onClick={() => setSelectedOBGynForm(null)}
                   className="text-white/80 hover:text-white text-xl"

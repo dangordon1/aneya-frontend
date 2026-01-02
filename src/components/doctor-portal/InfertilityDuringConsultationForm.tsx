@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useInfertilityForms } from '../../hooks/useInfertilityForms';
+import { useFormAutoFill, applyFieldUpdatesToState, getAutoFillFieldClasses } from '../../hooks/useFormAutoFill';
+import { consultationEventBus } from '../../lib/consultationEventBus';
 import { Checkbox } from '../common';
 import {
   InfertilityFormData,
@@ -26,6 +28,63 @@ export function InfertilityDuringConsultationForm({
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<InfertilityFormData>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Auto-fill hook for real-time field extraction
+  const { processTranscriptChunk, markManualOverride, autoFilledFields } = useFormAutoFill({
+    formType: 'infertility',
+    patientContext: {
+      patient_id: patientId,
+    },
+    currentFormState: formData,
+    onFieldsUpdated: (updates) => {
+      console.log(`🔄 Auto-filling ${Object.keys(updates.field_updates).length} infertility form fields`);
+
+      // Apply field updates to current form state
+      const updatedState = applyFieldUpdatesToState(formData, updates.field_updates);
+
+      // Update form data
+      setFormData(updatedState);
+    },
+  });
+
+  // Subscribe to diarization events for auto-fill
+  useEffect(() => {
+    console.log(`🔔 Infertility Form: Subscribing to diarization events for patientId=${patientId}`);
+
+    const subscription = consultationEventBus.subscribe('diarization_chunk_complete', (event) => {
+      console.log(`🔔 Infertility Form: Received event`, {
+        event_form_type: event.form_type,
+        event_patient_id: event.patient_id,
+        this_patient_id: patientId,
+        form_type_match: event.form_type === 'infertility',
+        patient_id_match: event.patient_id === patientId,
+        has_field_updates: !!event.field_updates && Object.keys(event.field_updates).length > 0,
+        will_process: event.form_type === 'infertility' && event.patient_id === patientId
+      });
+
+      // Only process if this is an infertility form
+      if (event.form_type === 'infertility' && event.patient_id === patientId) {
+        console.log(`✅ Infertility Form: Processing chunk #${event.chunk_index}`);
+
+        // NEW: Directly apply field updates from backend if available
+        if (event.field_updates && Object.keys(event.field_updates).length > 0) {
+          console.log(`📝 Applying ${Object.keys(event.field_updates).length} field updates from backend:`, event.field_updates);
+          processTranscriptChunk(event.field_updates, event.chunk_index);
+        } else {
+          // Fallback: Process segments if no field_updates provided
+          console.log(`⚠️  No field_updates in event, falling back to segment processing`);
+          processTranscriptChunk(event.segments, event.chunk_index);
+        }
+      } else {
+        console.log(`⏭️  Infertility Form: Skipping event (form_type=${event.form_type}, patient_id match=${event.patient_id === patientId})`);
+      }
+    });
+
+    return () => {
+      console.log(`🔕 Infertility Form: Unsubscribing from diarization events`);
+      subscription.unsubscribe();
+    };
+  }, [processTranscriptChunk, patientId]);
 
   // Load existing form if it exists
   useEffect(() => {
@@ -128,14 +187,24 @@ export function InfertilityDuringConsultationForm({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Duration of Marriage (years)
+                  {autoFilledFields.has('infertility_duration') && (
+                    <span className="ml-2 text-[11px] text-blue-600 font-normal">● Auto-filled</span>
+                  )}
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="0.5"
                   value={formData.duration_of_marriage ?? ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, duration_of_marriage: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                  onChange={(e) => {
+                    markManualOverride('infertility_duration');
+                    setFormData(prev => ({ ...prev, duration_of_marriage: e.target.value }));
+                  }}
+                  className={getAutoFillFieldClasses(
+                    'infertility_duration',
+                    autoFilledFields,
+                    'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
+                  )}
                   placeholder="e.g., 3"
                 />
               </div>

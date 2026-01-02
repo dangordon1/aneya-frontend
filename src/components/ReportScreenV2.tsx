@@ -11,6 +11,7 @@
 
 import { useState, useMemo } from 'react';
 import { PrimaryButton } from './PrimaryButton';
+import { FeedbackButton } from './FeedbackButton';
 import { PatientDetails } from './InputScreen';
 import { AppointmentWithPatient } from '../types/database';
 import { formatTime24 } from '../utils/dateHelpers';
@@ -39,6 +40,7 @@ interface ReportScreenV2Props {
   appointmentContext?: AppointmentWithPatient;
   onSaveConsultation?: () => void;
   location?: string | null;  // Country code (e.g., 'GB' for UK)
+  consultationId?: string | null;  // Consultation ID for feedback system
 }
 
 export function ReportScreenV2({
@@ -50,7 +52,8 @@ export function ReportScreenV2({
   drugsPending = [],
   appointmentContext,
   onSaveConsultation,
-  location
+  location,
+  consultationId
 }: ReportScreenV2Props) {
   // Determine if BNF links should be shown (UK only)
   const isUK = location === 'GB';
@@ -58,6 +61,59 @@ export function ReportScreenV2({
   const niceGuidelines = result.guidelines_found || [];
   const cksTopics = result.cks_topics || [];
   const bnfSummaries = result.bnf_summaries || [];
+
+  // Feedback state
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, string>>({});
+
+  // API URL from environment
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  // Feedback handler
+  const handleFeedback = async (
+    feedbackType: string,
+    sentiment: 'positive' | 'negative',
+    data: any
+  ) => {
+    if (!consultationId) {
+      console.warn('Cannot submit feedback: No consultation ID available');
+      return;
+    }
+
+    try {
+      const payload = {
+        consultation_id: consultationId,
+        feedback_type: feedbackType,
+        feedback_sentiment: sentiment,
+        ...data
+      };
+
+      const response = await fetch(`${API_URL}/api/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to submit feedback');
+      }
+
+      const result = await response.json();
+      console.log('✅ Feedback submitted:', result);
+
+      // Track which components have received feedback
+      setFeedbackSubmitted(prev => ({
+        ...prev,
+        [data.component_identifier || feedbackType]: sentiment
+      }));
+
+    } catch (error) {
+      console.error('❌ Failed to submit feedback:', error);
+      throw error;
+    }
+  };
 
   // Convert diagnoses to consistent format
   const convertedDiagnoses = useMemo(() => {
@@ -198,6 +254,9 @@ export function ReportScreenV2({
               drugDetails={drugDetails}
               drugsPending={drugsPending}
               showBnfLink={isUK}
+              consultationId={consultationId}
+              onFeedback={handleFeedback}
+              feedbackSubmitted={feedbackSubmitted}
             />
           ))}
 
@@ -307,7 +366,7 @@ function CollapsibleSection({
 }
 
 // ============================================
-// Diagnosis Section
+// Diagnosis Section - with integrated feedback
 // ============================================
 
 interface DiagnosisSectionProps {
@@ -317,41 +376,91 @@ interface DiagnosisSectionProps {
   drugDetails: Record<string, any>;
   drugsPending: string[];
   showBnfLink?: boolean;
+  consultationId?: string | null;
+  onFeedback?: (type: string, sentiment: 'positive' | 'negative', data: any) => Promise<void>;
+  feedbackSubmitted?: Record<string, string>;
 }
 
-function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPending, showBnfLink = true }: DiagnosisSectionProps) {
+function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPending, showBnfLink = true, consultationId, onFeedback, feedbackSubmitted }: DiagnosisSectionProps) {
   const [isOpen, setIsOpen] = useState(isPrimary); // Only primary expanded by default
+  const [isMarkedCorrect, setIsMarkedCorrect] = useState(false);
 
   const diagnosisName = diagnosis.diagnosis || diagnosis.name || 'Unknown Diagnosis';
   const confidence = diagnosis.confidence;
 
+  const handleMarkCorrect = async () => {
+    if (!onFeedback || !consultationId) return;
+
+    const newValue = !isMarkedCorrect;
+    setIsMarkedCorrect(newValue);
+
+    await onFeedback('diagnosis', 'positive', {
+      component_identifier: `diagnosis_${number}`,
+      diagnosis_text: diagnosisName,
+      is_correct_diagnosis: newValue,
+      confidence: confidence
+    });
+  };
+
   return (
     <div className="border-b border-aneya-soft-pink last:border-b-0">
-      {/* Diagnosis Header */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-3 py-4 px-4 hover:bg-aneya-cream/30 transition-colors"
-      >
-        <ChevronRight
-          className={`w-5 h-5 text-aneya-teal transition-transform duration-200 ${
-            isOpen ? 'rotate-90' : ''
-          }`}
-        />
-        <Stethoscope className="w-5 h-5 text-aneya-teal" />
-        <div className="flex-1 text-left">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-aneya-text-secondary uppercase tracking-wide">
-              {isPrimary ? 'Primary Diagnosis' : `Diagnosis ${number}`}
-            </span>
-            {confidence && (
-              <ConfidenceBadge confidence={confidence} />
-            )}
+      {/* Diagnosis Header with Integrated Feedback */}
+      <div className="w-full flex items-center gap-3 py-4 px-4 hover:bg-aneya-cream/30 transition-colors">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-3 flex-1"
+        >
+          <ChevronRight
+            className={`w-5 h-5 text-aneya-teal transition-transform duration-200 ${
+              isOpen ? 'rotate-90' : ''
+            }`}
+          />
+          <Stethoscope className="w-5 h-5 text-aneya-teal" />
+          <div className="flex-1 text-left">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-aneya-text-secondary uppercase tracking-wide">
+                {isPrimary ? 'Primary Diagnosis' : `Diagnosis ${number}`}
+              </span>
+              {confidence && (
+                <ConfidenceBadge confidence={confidence} />
+              )}
+              {isMarkedCorrect && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-400">
+                  ✓ Correct Diagnosis
+                </span>
+              )}
+            </div>
+            <h3 className="text-base font-serif font-semibold text-aneya-navy mt-0.5">
+              {diagnosisName}
+            </h3>
           </div>
-          <h3 className="text-base font-serif font-semibold text-aneya-navy mt-0.5">
-            {diagnosisName}
-          </h3>
-        </div>
-      </button>
+        </button>
+
+        {/* Integrated Feedback Controls */}
+        {consultationId && onFeedback && (
+          <div className="flex items-center gap-2 ml-auto" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={handleMarkCorrect}
+              className={`px-2 py-1 text-xs rounded-md transition-all duration-200 flex items-center gap-1 ${
+                isMarkedCorrect
+                  ? 'bg-green-100 text-green-700 border border-green-400 font-medium'
+                  : 'bg-white text-aneya-navy border border-aneya-soft-pink hover:bg-green-50 hover:border-green-300'
+              }`}
+            >
+              {isMarkedCorrect ? '✓ Correct' : 'Mark Correct'}
+            </button>
+            <FeedbackButton
+              onFeedback={(sentiment) => onFeedback('diagnosis', sentiment, {
+                component_identifier: `diagnosis_${number}`,
+                diagnosis_text: diagnosisName,
+                confidence: confidence
+              })}
+              size="sm"
+              initialSentiment={feedbackSubmitted?.[`diagnosis_${number}`] as 'positive' | 'negative' | null}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Diagnosis Content */}
       {isOpen && (
@@ -383,7 +492,15 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPend
                 icon={<Pill className="w-4 h-4" />}
                 badge={diagnosis.primary_care.medications?.length || 0}
               >
-                <TreatmentContent primaryCare={diagnosis.primary_care} drugDetails={drugDetails} drugsPending={drugsPending} showBnfLink={showBnfLink} />
+                <TreatmentContent
+                  primaryCare={diagnosis.primary_care}
+                  drugDetails={drugDetails}
+                  drugsPending={drugsPending}
+                  showBnfLink={showBnfLink}
+                  consultationId={consultationId}
+                  onFeedback={onFeedback}
+                  feedbackSubmitted={feedbackSubmitted}
+                />
               </CollapsibleSection>
             )}
 
@@ -439,7 +556,23 @@ function DiagnosisSection({ diagnosis, isPrimary, number, drugDetails, drugsPend
 // Treatment Content
 // ============================================
 
-function TreatmentContent({ primaryCare, drugDetails, drugsPending, showBnfLink = true }: { primaryCare: any; drugDetails: Record<string, any>; drugsPending: string[]; showBnfLink?: boolean }) {
+function TreatmentContent({
+  primaryCare,
+  drugDetails,
+  drugsPending,
+  showBnfLink = true,
+  consultationId,
+  onFeedback,
+  feedbackSubmitted
+}: {
+  primaryCare: any;
+  drugDetails: Record<string, any>;
+  drugsPending: string[];
+  showBnfLink?: boolean;
+  consultationId?: string | null;
+  onFeedback?: (type: string, sentiment: 'positive' | 'negative', data: any) => Promise<void>;
+  feedbackSubmitted?: Record<string, string>;
+}) {
   return (
     <div className="space-y-4 text-sm">
       {/* Medications */}
@@ -452,7 +585,16 @@ function TreatmentContent({ primaryCare, drugDetails, drugsPending, showBnfLink 
               const details = drugDetails[drugName];
               const isPending = drugsPending.includes(drugName);
               return (
-                <MedicationItem key={idx} drugName={drugName} details={details} isPending={isPending} showBnfLink={showBnfLink} />
+                <MedicationItem
+                  key={idx}
+                  drugName={drugName}
+                  details={details}
+                  isPending={isPending}
+                  showBnfLink={showBnfLink}
+                  consultationId={consultationId}
+                  onFeedback={onFeedback}
+                  feedbackSubmitted={feedbackSubmitted}
+                />
               );
             })}
           </div>
@@ -489,7 +631,23 @@ function TreatmentContent({ primaryCare, drugDetails, drugsPending, showBnfLink 
 // Medication Item (Expandable)
 // ============================================
 
-function MedicationItem({ drugName, details, isPending, showBnfLink = true }: { drugName: string; details?: any; isPending?: boolean; showBnfLink?: boolean }) {
+function MedicationItem({
+  drugName,
+  details,
+  isPending,
+  showBnfLink = true,
+  consultationId,
+  onFeedback,
+  feedbackSubmitted
+}: {
+  drugName: string;
+  details?: any;
+  isPending?: boolean;
+  showBnfLink?: boolean;
+  consultationId?: string | null;
+  onFeedback?: (type: string, sentiment: 'positive' | 'negative', data: any) => Promise<void>;
+  feedbackSubmitted?: Record<string, string>;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const hasDetails = details?.bnf_data || details?.drugbank_data;
   const isLoading = isPending && !hasDetails;
@@ -537,16 +695,32 @@ function MedicationItem({ drugName, details, isPending, showBnfLink = true }: { 
               <p className="text-aneya-text-secondary mt-0.5">{details.bnf_data.interactions}</p>
             </div>
           )}
-          {showBnfLink && details.url && (
-            <a
-              href={details.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-aneya-teal hover:underline inline-flex items-center gap-1"
-            >
-              View on BNF <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {showBnfLink && details.url && (
+              <a
+                href={details.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-aneya-teal hover:underline inline-flex items-center gap-1"
+              >
+                View on BNF <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            {consultationId && onFeedback && (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-xs text-aneya-text-secondary">Helpful?</span>
+                <FeedbackButton
+                  onFeedback={(sentiment) => onFeedback('drug_recommendation', sentiment, {
+                    component_identifier: `drug_${drugName.toLowerCase().replace(/\s+/g, '_')}`,
+                    drug_name: drugName,
+                    drug_dosage: details?.bnf_data?.dosage
+                  })}
+                  size="sm"
+                  initialSentiment={feedbackSubmitted?.[`drug_${drugName.toLowerCase().replace(/\s+/g, '_')}`] as 'positive' | 'negative' | null}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

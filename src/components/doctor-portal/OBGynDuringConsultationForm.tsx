@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ProgressiveWizard, WizardStep } from '../ProgressiveWizard';
 import { useOBGynForms } from '../../hooks/useOBGynForms';
+import { useFormAutoFill, applyFieldUpdatesToState, getAutoFillFieldClasses } from '../../hooks/useFormAutoFill';
+import { consultationEventBus } from '../../lib/consultationEventBus';
 import type {
   OBGynConsultationForm,
   VitalSigns,
@@ -60,6 +62,102 @@ export function OBGynDuringConsultationForm({
 
   // Pregnancy status (from pre-consultation or form)
   const [pregnancyStatus, setPregnancyStatus] = useState<string>('unknown');
+
+  // Auto-fill hook for real-time field extraction
+  const { processTranscriptChunk, markManualOverride, autoFilledFields } = useFormAutoFill({
+    formType: 'obgyn',
+    patientContext: {
+      patient_id: patientId,
+    },
+    currentFormState: {
+      vital_signs: vitalSigns,
+      physical_exam_findings: physicalExamFindings,
+      ultrasound_findings: ultrasoundFindings,
+      lab_results: labResults,
+      diagnosis: clinicalImpression.diagnosis,
+      treatment_plan: clinicalImpression.treatment_plan,
+      medications: clinicalImpression.medications,
+    },
+    onFieldsUpdated: (updates) => {
+      console.log(`🔄 Auto-filling ${Object.keys(updates.field_updates).length} fields`);
+
+      // Apply field updates to state
+      const updatedState = applyFieldUpdatesToState(
+        {
+          vital_signs: vitalSigns,
+          physical_exam_findings: physicalExamFindings,
+          ultrasound_findings: ultrasoundFindings,
+          lab_results: labResults,
+          diagnosis: clinicalImpression.diagnosis,
+          treatment_plan: clinicalImpression.treatment_plan,
+          medications: clinicalImpression.medications,
+        },
+        updates.field_updates
+      );
+
+      // Update state with new values
+      if (updatedState.vital_signs) setVitalSigns(updatedState.vital_signs);
+      if (updatedState.physical_exam_findings) setPhysicalExamFindings(updatedState.physical_exam_findings);
+      if (updatedState.ultrasound_findings) setUltrasoundFindings(updatedState.ultrasound_findings);
+      if (updatedState.lab_results) setLabResults(updatedState.lab_results);
+
+      // Update clinical impression if any of these fields changed
+      if (
+        updatedState.diagnosis !== clinicalImpression.diagnosis ||
+        updatedState.treatment_plan !== clinicalImpression.treatment_plan ||
+        updatedState.medications !== clinicalImpression.medications
+      ) {
+        setClinicalImpression({
+          ...clinicalImpression,
+          diagnosis: updatedState.diagnosis || clinicalImpression.diagnosis,
+          treatment_plan: updatedState.treatment_plan || clinicalImpression.treatment_plan,
+          medications: updatedState.medications || clinicalImpression.medications,
+        });
+      }
+
+      // Trigger auto-save with the current step (use 1 as default for auto-fill)
+      handleAutoSave(1);
+    },
+  });
+
+  // Subscribe to diarization events for auto-fill
+  useEffect(() => {
+    console.log(`🔔 OBGyn Form: Subscribing to diarization events for patientId=${patientId}`);
+
+    const subscription = consultationEventBus.subscribe('diarization_chunk_complete', (event) => {
+      console.log(`🔔 OBGyn Form: Received event`, {
+        event_form_type: event.form_type,
+        event_patient_id: event.patient_id,
+        this_patient_id: patientId,
+        form_type_match: event.form_type === 'obgyn',
+        patient_id_match: event.patient_id === patientId,
+        has_field_updates: !!event.field_updates && Object.keys(event.field_updates).length > 0,
+        will_process: event.form_type === 'obgyn' && event.patient_id === patientId
+      });
+
+      // Only process if this is an obgyn form
+      if (event.form_type === 'obgyn' && event.patient_id === patientId) {
+        console.log(`✅ OBGyn Form: Processing chunk #${event.chunk_index}`);
+
+        // NEW: Directly apply field updates from backend if available
+        if (event.field_updates && Object.keys(event.field_updates).length > 0) {
+          console.log(`📝 Applying ${Object.keys(event.field_updates).length} field updates from backend:`, event.field_updates);
+          processTranscriptChunk(event.field_updates, event.chunk_index);
+        } else {
+          // Fallback: Process segments if no field_updates provided
+          console.log(`⚠️  No field_updates in event, falling back to segment processing`);
+          processTranscriptChunk(event.segments, event.chunk_index);
+        }
+      } else {
+        console.log(`⏭️  OBGyn Form: Skipping event (form_type=${event.form_type}, patient_id match=${event.patient_id === patientId})`);
+      }
+    });
+
+    return () => {
+      console.log(`🔕 OBGyn Form: Unsubscribing from diarization events`);
+      subscription.unsubscribe();
+    };
+  }, [processTranscriptChunk, patientId]);
 
   // Initialize form on mount
   useEffect(() => {
@@ -212,7 +310,7 @@ export function OBGynDuringConsultationForm({
 
   const steps: WizardStep[] = [
     {
-      title: 'Pre-Consultation Review',
+      title: 'Consultation Review',
       content: <PreConsultationReview data={preConsultationData} />,
     },
     {
@@ -221,6 +319,8 @@ export function OBGynDuringConsultationForm({
         <VitalSignsSection
           vitalSigns={vitalSigns}
           onChange={setVitalSigns}
+          autoFilledFields={autoFilledFields}
+          onManualOverride={markManualOverride}
         />
       ),
       validate: () => validateVitalSigns(vitalSigns),
@@ -301,7 +401,7 @@ function PreConsultationReview({ data }: PreConsultationReviewProps) {
     return (
       <div className="p-4 bg-amber-50 border border-amber-200 rounded-[10px]">
         <p className="text-[14px] text-amber-800">
-          No pre-consultation form found. Beginning fresh consultation.
+          No previous consultation data found. Beginning fresh consultation.
         </p>
       </div>
     );
@@ -311,7 +411,7 @@ function PreConsultationReview({ data }: PreConsultationReviewProps) {
     <div className="space-y-4">
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-[10px]">
         <h3 className="text-[14px] font-semibold text-blue-900 mb-3">
-          Pre-Consultation Summary (Read-Only)
+          Previous Consultation Summary (Read-Only)
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -375,10 +475,15 @@ function PreConsultationReview({ data }: PreConsultationReviewProps) {
 interface VitalSignsSectionProps {
   vitalSigns: VitalSigns;
   onChange: (signs: VitalSigns) => void;
+  autoFilledFields?: Set<string>;
+  onManualOverride?: (fieldPath: string) => void;
 }
 
-function VitalSignsSection({ vitalSigns, onChange }: VitalSignsSectionProps) {
+function VitalSignsSection({ vitalSigns, onChange, autoFilledFields, onManualOverride }: VitalSignsSectionProps) {
   const updateField = (key: keyof VitalSigns, value: string) => {
+    // Mark as manual override when user edits
+    onManualOverride?.(`vital_signs.${key}`);
+
     const numValue = value === '' ? undefined : parseFloat(value);
     onChange({ ...vitalSigns, [key]: numValue });
   };
@@ -394,6 +499,9 @@ function VitalSignsSection({ vitalSigns, onChange }: VitalSignsSectionProps) {
         <div>
           <label className="block text-[14px] font-medium text-aneya-navy mb-2">
             Systolic BP (mmHg)
+            {autoFilledFields?.has('vital_signs.systolic_bp') && (
+              <span className="ml-2 text-[11px] text-blue-600 font-normal">● Auto-filled</span>
+            )}
           </label>
           <input
             type="number"
@@ -401,7 +509,11 @@ function VitalSignsSection({ vitalSigns, onChange }: VitalSignsSectionProps) {
             onChange={(e) => updateField('systolic_bp', e.target.value)}
             min="0"
             max="250"
-            className="w-full px-4 py-2 border-2 border-gray-200 rounded-[10px] focus:outline-none focus:border-aneya-teal text-[14px]"
+            className={getAutoFillFieldClasses(
+              'vital_signs.systolic_bp',
+              autoFilledFields || new Set(),
+              'w-full px-4 py-2 border-2 border-gray-200 rounded-[10px] focus:outline-none focus:border-aneya-teal text-[14px]'
+            )}
             placeholder="e.g., 120"
           />
         </div>
@@ -409,6 +521,9 @@ function VitalSignsSection({ vitalSigns, onChange }: VitalSignsSectionProps) {
         <div>
           <label className="block text-[14px] font-medium text-aneya-navy mb-2">
             Diastolic BP (mmHg)
+            {autoFilledFields?.has('vital_signs.diastolic_bp') && (
+              <span className="ml-2 text-[11px] text-blue-600 font-normal">● Auto-filled</span>
+            )}
           </label>
           <input
             type="number"
@@ -416,7 +531,11 @@ function VitalSignsSection({ vitalSigns, onChange }: VitalSignsSectionProps) {
             onChange={(e) => updateField('diastolic_bp', e.target.value)}
             min="0"
             max="150"
-            className="w-full px-4 py-2 border-2 border-gray-200 rounded-[10px] focus:outline-none focus:border-aneya-teal text-[14px]"
+            className={getAutoFillFieldClasses(
+              'vital_signs.diastolic_bp',
+              autoFilledFields || new Set(),
+              'w-full px-4 py-2 border-2 border-gray-200 rounded-[10px] focus:outline-none focus:border-aneya-teal text-[14px]'
+            )}
             placeholder="e.g., 80"
           />
         </div>

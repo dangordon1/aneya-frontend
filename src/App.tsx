@@ -21,6 +21,7 @@ const ProgressScreen = lazy(() => import('./components/ProgressScreen').then(m =
 const AnalysisComplete = lazy(() => import('./components/AnalysisComplete').then(m => ({ default: m.AnalysisComplete })));
 const ReportScreen = lazy(() => import('./components/ReportScreenV2').then(m => ({ default: m.ReportScreenV2 })));
 const InvalidInputScreen = lazy(() => import('./components/InvalidInputScreen').then(m => ({ default: m.InvalidInputScreen })));
+const FeedbackDashboard = lazy(() => import('./components/FeedbackDashboard').then(m => ({ default: m.FeedbackDashboard })));
 const AppointmentsTab = lazy(() => import('./components/AppointmentsTab').then(m => ({ default: m.AppointmentsTab })));
 const PatientsTab = lazy(() => import('./components/PatientsTab').then(m => ({ default: m.PatientsTab })));
 const PatientDetailView = lazy(() => import('./components/PatientDetailView').then(m => ({ default: m.PatientDetailView })));
@@ -30,11 +31,13 @@ const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorPro
 const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 const InfertilityDuringConsultationForm = lazy(() => import('./components/doctor-portal/InfertilityDuringConsultationForm').then(m => ({ default: m.InfertilityDuringConsultationForm })));
+const OBGynDuringConsultationForm = lazy(() => import('./components/doctor-portal/OBGynDuringConsultationForm').then(m => ({ default: m.OBGynDuringConsultationForm })));
+const AntenatalDuringConsultationForm = lazy(() => import('./components/doctor-portal/AntenatalDuringConsultationForm').then(m => ({ default: m.AntenatalDuringConsultationForm })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors' | 'infertility-form';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors' | 'infertility-form' | 'view-consultation-form' | 'feedback-dashboard';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -85,11 +88,16 @@ function MainApp() {
   // Location override for testing different regional guidelines
   const [locationOverride, setLocationOverride] = useState<string | null>(null);
 
+  // Consultation ID for feedback system (captured after saving consultation)
+  const [currentConsultationId, setCurrentConsultationId] = useState<string | null>(null);
+
   // Appointment system state
   const [activeTab, setActiveTab] = useState<DoctorTab>('appointments');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithPatient | null>(null);
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0); // Used to force refresh appointments
+  const [appointmentForFormView, setAppointmentForFormView] = useState<AppointmentWithPatient | null>(null); // For viewing consultation forms
+  const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
   const { saveConsultation } = useConsultations();
 
   // Messaging state - for unread counts and pending care requests
@@ -964,6 +972,10 @@ function MainApp() {
         return;
       }
 
+      // Capture consultation ID for feedback system
+      setCurrentConsultationId(savedConsultation.id);
+      console.log('✅ Consultation ID captured for feedback:', savedConsultation.id);
+
       // Increment refresh key to force AppointmentsTab to refetch
       setAppointmentsRefreshKey(prev => prev + 1);
 
@@ -984,70 +996,52 @@ function MainApp() {
     }
   };
 
-  const handleSaveConsultationOnly = async (transcript: string, summaryResponse: any, patientDetails: PatientDetails, audioUrl?: string | null) => {
-    if (!selectedPatient) {
-      alert('Please select a patient first');
-      return;
-    }
-
+  const handleSaveConsultationOnly = async (consultationData: {
+    patient_id: string;
+    appointment_id: string | null;
+    consultation_text: string;
+    original_transcript: string;
+    transcription_language: string | null;
+    audio_url: string | null;
+    patient_snapshot: any;
+    consultation_duration_seconds: number;
+    transcription_status: 'pending' | 'processing' | 'completed' | 'failed';
+  }) => {
     try {
-      // Use unified consultation_data format from summarize API if available
-      const apiConsultationData = summaryResponse?.consultation_data;
-
-      // Extract summary text for display
-      const summaryText = typeof summaryResponse === 'string'
-        ? summaryResponse
-        : summaryResponse?.summary || '';
-
-      // Format consultation_text with both transcript and summary
-      let formattedConsultationText = '';
-      if (transcript) {
-        formattedConsultationText += `Consultation Transcript:\n${transcript}`;
-      }
-      if (summaryText) {
-        if (formattedConsultationText) formattedConsultationText += '\n\n';
-        formattedConsultationText += `Consultation Summary:\n${summaryText}`;
-      }
-
-      // Build consultation data using unified format from API, with fallbacks
-      const consultationData = {
-        appointment_id: selectedAppointment?.id || null,
-        patient_id: selectedPatient.id,
-        consultation_text: formattedConsultationText || apiConsultationData?.consultation_text || transcript,
-        original_transcript: apiConsultationData?.original_transcript || originalTranscript || transcript || null,
-        transcription_language: apiConsultationData?.transcription_language || transcriptionLanguage || null,
-        audio_url: audioUrl || null,
-        patient_snapshot: patientDetails,
+      // Build full consultation object for saveConsultation
+      const fullConsultationData = {
+        ...consultationData,
         // AI Analysis fields - explicitly null/empty until analyze is called
         analysis_result: null,
         diagnoses: [],
         guidelines_found: [],
-        // Metadata from API
-        consultation_duration_seconds: apiConsultationData?.consultation_duration_seconds || null,
-        location_detected: apiConsultationData?.location_detected || null,
-        backend_api_version: apiConsultationData?.backend_api_version || '1.0.0',
-        // Full summary data for reference
-        summary_data: apiConsultationData?.summary_data || null,
+        // Default metadata
+        location_detected: null,
+        backend_api_version: '1.0.0',
+        summary_data: null,
       };
 
-      const savedConsultation = await saveConsultation(consultationData);
+      const savedConsultation = await saveConsultation(fullConsultationData);
 
       if (!savedConsultation) {
         alert('Failed to save consultation. Please check your connection and try again.');
-        return;
+        return undefined;
       }
+
+      // Capture consultation ID for feedback system
+      setCurrentConsultationId(savedConsultation.id);
+      console.log('✅ Consultation ID captured for feedback:', savedConsultation.id);
 
       // Increment refresh key to force AppointmentsTab to refetch
       setAppointmentsRefreshKey(prev => prev + 1);
 
       console.log('✅ Consultation saved successfully');
 
-      // Store updated state for later close
-      setConsultationTranscript(transcript);
-      setConsultationSummary(summaryResponse);
+      return savedConsultation;
     } catch (error) {
       console.error('Failed to save consultation:', error);
       alert('Failed to save consultation. Please try again.');
+      return undefined;
     }
   };
 
@@ -1079,6 +1073,18 @@ function MainApp() {
     setCurrentScreen('patients');
   };
 
+  const handleViewConsultationForm = (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    setAppointmentForFormView(appointment);
+    setConsultationForFormView(consultation);
+    setCurrentScreen('view-consultation-form');
+  };
+
+  const handleBackFromConsultationForm = () => {
+    setAppointmentForFormView(null);
+    setConsultationForFormView(null);
+    setCurrentScreen('appointments');
+  };
+
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Header */}
@@ -1101,12 +1107,12 @@ function MainApp() {
       </header>
 
       {/* Tab Navigation - only show on appointments/patients/messages/profile/alldoctors screens */}
-      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail' || currentScreen === 'messages' || currentScreen === 'profile' || currentScreen === 'alldoctors') && (
+      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail' || currentScreen === 'messages' || currentScreen === 'profile' || currentScreen === 'alldoctors' || currentScreen === 'feedback-dashboard') && (
         <TabNavigation
           activeTab={activeTab}
           onTabChange={(tab) => {
             setActiveTab(tab);
-            setCurrentScreen(tab);
+            setCurrentScreen(tab === 'feedback' ? 'feedback-dashboard' : tab);
           }}
           unreadMessagesCount={unreadCount}
           pendingRequestsCount={pendingRequestsCount}
@@ -1125,7 +1131,12 @@ function MainApp() {
           </div>
         }>
           {currentScreen === 'appointments' && (
-            <AppointmentsTab key={appointmentsRefreshKey} onStartConsultation={handleStartConsultationFromAppointment} onAnalyzeConsultation={handleAnalyzePastConsultation} />
+            <AppointmentsTab
+              key={appointmentsRefreshKey}
+              onStartConsultation={handleStartConsultationFromAppointment}
+              onAnalyzeConsultation={handleAnalyzePastConsultation}
+              onViewConsultationForm={handleViewConsultationForm}
+            />
           )}
 
           {currentScreen === 'patients' && (
@@ -1209,6 +1220,57 @@ function MainApp() {
             />
           )}
 
+          {currentScreen === 'view-consultation-form' && appointmentForFormView && (
+            <div className="max-w-7xl mx-auto px-4 py-6">
+              <button
+                onClick={handleBackFromConsultationForm}
+                className="mb-4 px-4 py-2 bg-aneya-navy text-white rounded-[12px] hover:bg-opacity-90 transition-colors"
+              >
+                ← Back to Appointments
+              </button>
+
+              {(() => {
+                // Use AI-detected consultation type if available, otherwise fall back to appointment type
+                const formType = consultationForFormView?.detected_consultation_type ||
+                                appointmentForFormView.specialty_subtype ||
+                                'obgyn';
+
+                console.log('🔍 Determining form type:', {
+                  detected: consultationForFormView?.detected_consultation_type,
+                  specialty_subtype: appointmentForFormView.specialty_subtype,
+                  final: formType
+                });
+
+                if (formType === 'infertility') {
+                  return (
+                    <InfertilityDuringConsultationForm
+                      patientId={appointmentForFormView.patient_id}
+                      appointmentId={appointmentForFormView.id}
+                      onBack={handleBackFromConsultationForm}
+                    />
+                  );
+                } else if (formType === 'antenatal') {
+                  return (
+                    <AntenatalDuringConsultationForm
+                      patientId={appointmentForFormView.patient_id}
+                      appointmentId={appointmentForFormView.id}
+                      displayMode="flat"
+                      onBack={handleBackFromConsultationForm}
+                    />
+                  );
+                } else {
+                  return (
+                    <OBGynDuringConsultationForm
+                      patientId={appointmentForFormView.patient_id}
+                      appointmentId={appointmentForFormView.id}
+                      displayMode="flat"
+                    />
+                  );
+                }
+              })()}
+            </div>
+          )}
+
           {currentScreen === 'progress' && (
             <ProgressScreen
               onComplete={() => setCurrentScreen('complete')}
@@ -1238,7 +1300,12 @@ function MainApp() {
               appointmentContext={selectedAppointment || undefined}
               onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
               location={locationOverride}
+              consultationId={currentConsultationId}
             />
+          )}
+
+          {currentScreen === 'feedback-dashboard' && (
+            <FeedbackDashboard />
           )}
         </Suspense>
       </main>

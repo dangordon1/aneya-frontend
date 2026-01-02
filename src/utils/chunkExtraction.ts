@@ -5,8 +5,8 @@
  * Chunks include 10-second overlap to enable speaker ID matching across segments.
  */
 
-const CHUNK_DURATION = 60; // seconds
-const OVERLAP_DURATION = 10; // seconds
+const CHUNK_DURATION = 60; // seconds (matches MediaRecorder timeslice)
+const OVERLAP_DURATION = 15; // seconds (increased for 60s chunks)
 
 // Store the WebM initialization segment (first blob with codec headers)
 // This needs to be prepended to all chunks after chunk 0 so FFmpeg can decode them
