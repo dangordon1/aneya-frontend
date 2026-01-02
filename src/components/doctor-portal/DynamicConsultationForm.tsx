@@ -150,6 +150,44 @@ export function DynamicConsultationForm({
       isRequired: fieldDef.required || false,
     };
 
+    // Handle special input types first
+    if (fieldDef.input_type) {
+      switch (fieldDef.input_type) {
+        case 'dropdown':
+          element.type = 'dropdown';
+          element.choices = fieldDef.options || [];
+          if (fieldDef.placeholder) {
+            element.placeholder = fieldDef.placeholder;
+          }
+          return element;
+
+        case 'radio':
+          element.type = 'radiogroup';
+          element.choices = fieldDef.options || [];
+          return element;
+
+        case 'checkbox':
+          element.type = 'checkbox';
+          element.choices = fieldDef.options || [];
+          return element;
+
+        case 'multi-select':
+          element.type = 'tagbox';
+          element.choices = fieldDef.options || [];
+          if (fieldDef.placeholder) {
+            element.placeholder = fieldDef.placeholder;
+          }
+          return element;
+
+        case 'rating':
+          element.type = 'rating';
+          element.rateMax = fieldDef.max_rating || 5;
+          element.rateMin = fieldDef.min_rating || 1;
+          return element;
+      }
+    }
+
+    // Handle standard types
     switch (fieldDef.type) {
       case 'string':
         if (fieldDef.format === 'date') {
