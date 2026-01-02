@@ -178,94 +178,6 @@ export function AntenatalPreConsultationForm({
   return (
     <div className="w-full max-w-4xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Section 0: Patient Registration (Paper Form Header) */}
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 border-l-4 border-l-aneya-teal">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
-            Patient Registration
-          </h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  THG No.
-                </label>
-                <input
-                  type="text"
-                  value={formData.thg_no || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, thg_no: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-                  placeholder="Hospital registration number"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Religion
-                </label>
-                <input
-                  type="text"
-                  value={formData.religion || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, religion: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tel No.
-                </label>
-                <input
-                  type="tel"
-                  value={formData.tel_no || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tel_no: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-                  placeholder="Landline/alternate phone"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ref Doctor
-                </label>
-                <input
-                  type="text"
-                  value={formData.ref_doctor || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, ref_doctor: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-                  placeholder="Referring doctor name"
-                />
-              </div>
-            </div>
-
-            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-              <label className="block text-sm font-semibold text-red-900 mb-2">
-                ⚠️ Allergies
-              </label>
-              <input
-                type="text"
-                value={formData.allergies || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, allergies: e.target.value || null }))}
-                className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
-                placeholder="Known drug/food allergies (e.g., Penicillin, NSAIDs, etc.)"
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Section 1: Current Pregnancy Information */}
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
@@ -467,12 +379,12 @@ export function AntenatalPreConsultationForm({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Husband Name
+                  Partner's Name
                 </label>
                 <input
                   type="text"
-                  value={formData.husband_name || formData.partner_name || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, husband_name: e.target.value || null, partner_name: e.target.value || null }))}
+                  value={formData.partner_name || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, partner_name: e.target.value || null }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                   placeholder="Husband's/Partner's name"
                 />
@@ -556,14 +468,11 @@ export function AntenatalPreConsultationForm({
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">No.</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mode of Conception</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Year</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Delivery</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sex</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Alive</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Birth Wt(kg)</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">NICU</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">BF (months)</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Complications</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -572,20 +481,6 @@ export function AntenatalPreConsultationForm({
                     {formData.previous_pregnancies.map((preg, index) => (
                       <tr key={index}>
                         <td className="px-3 py-2 whitespace-nowrap text-sm">{preg.pregnancy_num}</td>
-                        <td className="px-3 py-2">
-                          <select
-                            value={preg.mode_of_conception || ''}
-                            onChange={(e) => updatePregnancy(index, 'mode_of_conception', e.target.value)}
-                            className="w-28 px-2 py-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="">Select</option>
-                            <option value="natural">Natural</option>
-                            <option value="ivf">IVF</option>
-                            <option value="iui">IUI</option>
-                            <option value="icsi">ICSI</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
@@ -636,25 +531,6 @@ export function AntenatalPreConsultationForm({
                             onChange={(e) => updatePregnancy(index, 'birth_weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
                             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
                             placeholder="kg"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={preg.nicu_admission || false}
-                            onChange={(e) => updatePregnancy(index, 'nicu_admission', e.target.checked)}
-                            className="rounded border-gray-300"
-                            title="NICU Admission"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            value={preg.breastfeeding_months || ''}
-                            onChange={(e) => updatePregnancy(index, 'breastfeeding_months', e.target.value ? parseInt(e.target.value) : undefined)}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                            placeholder="mo"
-                            title="Breastfeeding duration in months"
                           />
                         </td>
                         <td className="px-3 py-2">
