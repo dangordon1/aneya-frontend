@@ -446,6 +446,53 @@ export function AntenatalDuringConsultationForm({
                 )}
               </div>
             </div>
+
+            {/* Paper Form Fields */}
+            <div className="space-y-4 border-t pt-4 mt-4">
+              <h4 className="font-medium text-gray-900">Clinical Examination</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Per Abdomen (P/A)
+                  </label>
+                  <textarea
+                    value={visitData.per_abdomen || ''}
+                    onChange={(e) => setVisitData(prev => ({ ...prev, per_abdomen: e.target.value || null }))}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                    placeholder="Per abdomen examination findings..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Liquor
+                  </label>
+                  <select
+                    value={visitData.liquor || ''}
+                    onChange={(e) => setVisitData(prev => ({ ...prev, liquor: e.target.value || null }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                  >
+                    <option value="">Select amniotic fluid status</option>
+                    <option value="adequate">Adequate</option>
+                    <option value="reduced">Reduced</option>
+                    <option value="polyhydramnios">Polyhydramnios</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Medication
+                </label>
+                <textarea
+                  value={visitData.medication || ''}
+                  onChange={(e) => setVisitData(prev => ({ ...prev, medication: e.target.value || null }))}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                  placeholder="Medications prescribed during this visit..."
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Remarks/Complaints
@@ -483,9 +530,9 @@ export function AntenatalDuringConsultationForm({
                           <option value="dating">Dating Scan (6-10 weeks)</option>
                           <option value="nt_scan">NT Scan (11-14 weeks)</option>
                           <option value="anomaly">Anomaly Scan (18-22 weeks)</option>
-                          <option value="growth1">Growth Scan 1 (28-30 weeks)</option>
-                          <option value="growth2">Growth Scan 2 (34-36 weeks)</option>
-                          <option value="growth3">Growth Scan 3 (38-40 weeks)</option>
+                          <option value="growth1">IG Scan 1 (28-30 weeks)</option>
+                          <option value="growth2">IG Scan 2 (34-36 weeks)</option>
+                          <option value="growth3">IG Scan 3 (38-40 weeks)</option>
                           <option value="other">Other</option>
                         </select>
                       </div>
@@ -500,6 +547,96 @@ export function AntenatalDuringConsultationForm({
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
                         />
                       </div>
+
+                      {/* Paper Form Fields - All scan types */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Single/Multiple
+                        </label>
+                        <select
+                          value={scan.single_multiple || ''}
+                          onChange={(e) => updateUSGScan(index, 'single_multiple', e.target.value as 'single' | 'multiple' | undefined)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                        >
+                          <option value="">Not specified</option>
+                          <option value="single">Single</option>
+                          <option value="multiple">Multiple</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          GA (weeks)
+                        </label>
+                        <input
+                          type="number"
+                          value={scan.ga_weeks ?? ''}
+                          onChange={(e) => updateUSGScan(index, 'ga_weeks', e.target.value ? parseInt(e.target.value) : undefined)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Gestational age"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Liq (Liquor)
+                        </label>
+                        <input
+                          type="text"
+                          value={scan.liquor || ''}
+                          onChange={(e) => updateUSGScan(index, 'liquor', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Amniotic fluid"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Pla (Placenta)
+                        </label>
+                        <input
+                          type="text"
+                          value={scan.placenta || ''}
+                          onChange={(e) => updateUSGScan(index, 'placenta', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Placenta location/grade"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Ana (ANA)
+                        </label>
+                        <input
+                          type="text"
+                          value={scan.ana || ''}
+                          onChange={(e) => updateUSGScan(index, 'ana', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Antinuclear Antibody"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cx Lth (mm)
+                        </label>
+                        <input
+                          type="number"
+                          value={scan.cervical_length_mm ?? ''}
+                          onChange={(e) => updateUSGScan(index, 'cervical_length_mm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Cervical length"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Dopp (Doppler)
+                        </label>
+                        <input
+                          type="text"
+                          value={scan.doppler_summary || ''}
+                          onChange={(e) => updateUSGScan(index, 'doppler_summary', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-aneya-teal focus:border-transparent text-sm"
+                          placeholder="Doppler findings"
+                        />
+                      </div>
+
+                      {/* Scan-type specific fields */}
                       {scan.scan_type === 'dating' && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1179,8 +1316,10 @@ export function AntenatalDuringConsultationForm({
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Doctor Name</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Referred To</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Reason for Referral</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Signature</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Outcome</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -1199,6 +1338,15 @@ export function AntenatalDuringConsultationForm({
                         <td className="px-3 py-2">
                           <input
                             type="text"
+                            value={ref.doctor_name || ''}
+                            onChange={(e) => updateReferral(index, 'doctor_name', e.target.value)}
+                            className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
+                            placeholder="Doctor name"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
                             value={ref.referred_to}
                             onChange={(e) => updateReferral(index, 'referred_to', e.target.value)}
                             className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
@@ -1212,6 +1360,15 @@ export function AntenatalDuringConsultationForm({
                             onChange={(e) => updateReferral(index, 'reason', e.target.value)}
                             className="w-48 px-2 py-1 border border-gray-300 rounded text-sm"
                             placeholder="Reason for referral"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            value={ref.signature || ''}
+                            onChange={(e) => updateReferral(index, 'signature', e.target.value)}
+                            className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
+                            placeholder="Signature"
                           />
                         </td>
                         <td className="px-3 py-2">

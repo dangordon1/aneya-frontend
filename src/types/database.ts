@@ -1199,13 +1199,14 @@ export interface UpdateInfertilityFormInput {
 
 export interface PreviousPregnancy {
   pregnancy_num: number; // I, II, III, etc.
-  mode_of_conception?: 'natural' | 'ivf' | 'iui' | 'other';
+  mode_of_conception?: 'natural' | 'ivf' | 'iui' | 'icsi' | 'other';
   mode_of_delivery?: 'normal' | 'lscs' | 'forceps' | 'vacuum' | 'abortion';
   sex?: 'M' | 'F';
   age?: number; // Current age of child
   alive?: boolean;
   abortion?: boolean;
   birth_weight_kg?: number;
+  nicu_admission?: boolean; // Birth Weight at NICU (paper form field)
   year?: number;
   breastfeeding_months?: number;
   anomalies?: string;
@@ -1230,13 +1231,19 @@ export type USGScanType = 'dating' | 'nt_scan' | 'anomaly' | 'growth1' | 'growth
 export interface USGScan {
   scan_type: USGScanType;
   date: string; // ISO date
+  single_multiple?: 'single' | 'multiple'; // Single/Multiple pregnancy
   ga_weeks?: number; // Gestational age at scan
+  liquor?: string; // Liq - Amniotic fluid assessment
+  placenta?: string; // Pla - Placenta location/grade
+  ana?: string; // Ana - Antinuclear Antibody
   findings?: string;
   crl?: number; // Crown-Rump Length (mm) - Dating scan
   nt_thickness?: number; // Nuchal Translucency (mm) - NT scan
   nasal_bone?: boolean; // NT scan
-  efw?: number; // Estimated Fetal Weight (grams) - Growth scans
+  efw?: number; // EFW - Estimated Fetal Weight (grams) - Growth scans
   afi?: number; // Amniotic Fluid Index
+  cervical_length_mm?: number; // Cx Lth - Cervical Length (mm)
+  doppler_summary?: string; // Dopp - Doppler findings summary
   position?: 'cephalic' | 'breech' | 'transverse';
   anatomical_survey?: string; // Anomaly scan details
   anomalies?: string;
@@ -1292,8 +1299,10 @@ export interface BirthPlan {
 
 export interface Referral {
   date: string;
-  referred_to: string; // Specialist/Hospital
+  referred_to: string; // Specialist/Hospital/Institution
+  doctor_name?: string; // Doctor Name (paper form field - separate from institution)
   reason: string;
+  signature?: string; // Signature field (paper form)
   outcome?: string;
 }
 
@@ -1308,6 +1317,15 @@ export interface AntenatalForm {
   created_by: string;
   updated_by: string;
   filled_by: string | null;
+
+  // Patient Registration (Paper Form Header)
+  thg_no?: string | null; // THG No. - Hospital/Clinic registration number
+  religion?: string | null;
+  tel_no?: string | null; // Landline/alternate phone
+  email?: string | null;
+  ref_doctor?: string | null; // Referring doctor
+  allergies?: string | null; // Known allergies (prominent on paper form)
+  husband_name?: string | null; // Husband/Partner name
 
   // Current Pregnancy
   lmp?: string | null;
@@ -1403,6 +1421,14 @@ export interface AntenatalVisit {
   edema_location?: string | null;
   remarks?: string | null;
   complaints?: string | null;
+
+  // Paper Form Visit Fields
+  per_abdomen?: string | null; // P/A - Per abdomen examination findings
+  liquor?: string | null; // Amniotic fluid assessment
+  medication?: string | null; // Medications prescribed
+  nvd?: string | null; // Normal vaginal delivery notes
+  delivery_notes?: string | null; // Delivery outcome notes
+
   clinical_notes?: string | null;
   treatment_given?: string | null;
   next_visit_plan?: string | null;
