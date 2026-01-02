@@ -11,9 +11,6 @@
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
-    "@rjsf/core": "^6.1.2",
-    "@rjsf/utils": "^6.1.2",
-    "@rjsf/validator-ajv8": "^6.1.2",
     "@supabase/supabase-js": "^2.86.2",
     "@types/react-calendar": "^3.9.0",
     "firebase": "^12.6.0",
@@ -21,7 +18,9 @@
     "posthog-js": "^1.305.0",
     "react": "^18.2.0",
     "react-calendar": "^6.0.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "survey-core": "^2.5.4",
+    "survey-react-ui": "^2.5.4"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

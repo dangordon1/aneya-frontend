@@ -2,7 +2,7 @@
 
 ## Overview
 
-We've implemented a fully dynamic form system using **react-jsonschema-form** that generates consultation forms from database schemas. This eliminates hardcoded form types and allows adding new forms without code changes.
+We've implemented a fully dynamic form system using **SurveyJS** that generates consultation forms from database schemas. This eliminates hardcoded form types and allows adding new forms without code changes.
 
 ## Architecture
 
