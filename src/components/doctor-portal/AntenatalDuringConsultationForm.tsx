@@ -1392,6 +1392,11 @@ export function AntenatalDuringConsultationForm({
 
     return (
       <div className="w-full bg-white rounded-[20px] p-8">
+        {/* Form Title */}
+        <div className="mb-6 pb-4 border-b border-gray-200">
+          <h2 className="text-[24px] font-bold text-aneya-navy">Antenatal Consultation</h2>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Render all steps as sections */}
           {[1, 2, 3, 4, 5, 6, 7, 8].map((step) => (
@@ -1421,6 +1426,11 @@ export function AntenatalDuringConsultationForm({
   // Wizard mode rendering (original)
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {/* Form Title */}
+      <div className="mb-6">
+        <h2 className="text-[24px] font-bold text-aneya-navy text-center">Antenatal Consultation</h2>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Progress Indicator */}
         <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">

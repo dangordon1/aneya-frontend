@@ -160,6 +160,11 @@ export function InfertilityDuringConsultationForm({
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {/* Form Title */}
+      <div className="mb-6">
+        <h2 className="text-[24px] font-bold text-aneya-navy text-center">Infertility Consultation</h2>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Section 1: Basic Information & Menstrual History */}
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">

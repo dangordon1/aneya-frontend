@@ -370,6 +370,11 @@ export function OBGynDuringConsultationForm({
 
   return (
     <div className="w-full">
+      {/* Form Title */}
+      <div className="mb-6 pb-4 border-b border-gray-200">
+        <h2 className="text-[24px] font-bold text-aneya-navy">OB/GYN Consultation</h2>
+      </div>
+
       {saveError && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-[10px]">
           <p className="text-[14px] text-red-700">{saveError}</p>
