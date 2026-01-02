@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
+    "@rjsf/core": "^6.1.2",
+    "@rjsf/utils": "^6.1.2",
+    "@rjsf/validator-ajv8": "^6.1.2",
     "@supabase/supabase-js": "^2.86.2",
     "@types/react-calendar": "^3.9.0",
     "firebase": "^12.6.0",
