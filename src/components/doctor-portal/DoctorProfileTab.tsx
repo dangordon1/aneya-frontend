@@ -3,6 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { UpdateDoctorInput, MedicalSpecialtyType } from '../../types/database';
 import { MEDICAL_SPECIALTIES } from '../../types/database';
+import { CustomFormsSection } from './CustomFormsSection';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -16,13 +18,18 @@ const getBrowserTimezone = (): string => {
 };
 
 export function DoctorProfileTab() {
-  const { doctorProfile, refreshDoctorProfile } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
+  const { doctorProfile, refreshDoctorProfile, getIdToken } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [detectedTimezone, setDetectedTimezone] = useState<string | null>(null);
   const hasAttemptedGeoDetection = useRef(false);
+
+  // Logo upload state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [deletingLogo, setDeletingLogo] = useState(false);
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -57,7 +64,11 @@ export function DoctorProfileTab() {
       hasAttemptedGeoDetection.current = true;
 
       try {
-        const response = await fetch(`${API_URL}/api/geolocation`);
+        const response = await fetchWithTimeout(
+          `${API_URL}/api/geolocation`,
+          {},
+          5000  // 5 second timeout
+        );
         if (response.ok) {
           const data = await response.json();
           if (data.timezone) {
@@ -67,7 +78,8 @@ export function DoctorProfileTab() {
           }
         }
       } catch (err) {
-        console.log('Geolocation detection failed, using browser timezone as fallback');
+        console.log('Geolocation detection failed or timed out, using browser timezone as fallback');
+        console.log('Error details:', err instanceof Error ? err.message : 'Unknown error');
         // Fallback to browser timezone
         const browserTz = getBrowserTimezone();
         setDetectedTimezone(browserTz);
@@ -130,7 +142,7 @@ export function DoctorProfileTab() {
       }
 
       setSuccess('Profile updated successfully');
-      setIsEditing(false);
+      // Stay in edit mode - don't call setIsEditing(false)
 
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
@@ -158,8 +170,116 @@ export function DoctorProfileTab() {
         allow_patient_messages: doctorProfile.allow_patient_messages ?? true,
       });
     }
-    setIsEditing(false);
+    // Stay in edit mode - don't call setIsEditing(false)
     setError(null);
+    setSuccess(null);
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload PNG, JPEG, or SVG file');
+      return;
+    }
+
+    // Validate size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('File must be less than 2MB');
+      return;
+    }
+
+    setLogoFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = async () => {
+    if (!logoFile || !doctorProfile) return;
+
+    setUploadingLogo(true);
+    setError('');
+
+    try {
+      // Get Firebase JWT token
+      const token = await getIdToken();
+      if (!token) {
+        setError('Authentication required. Please sign in again.');
+        setUploadingLogo(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', logoFile);
+
+      const response = await fetch(
+        `${API_URL}/api/doctor-logo/upload?doctor_id=${doctorProfile.id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setLogoFile(null);
+        setLogoPreview(null);
+        if (refreshDoctorProfile) {
+          await refreshDoctorProfile();
+        }
+        setSuccess('Logo uploaded successfully');
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(result.message || result.detail || 'Failed to upload logo');
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      setError('Failed to upload logo. Please try again.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    if (!doctorProfile?.clinic_logo_url) return;
+    if (!confirm('Are you sure you want to delete the clinic logo?')) return;
+
+    setDeletingLogo(true);
+    setError('');
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/doctor-logo/delete?doctor_id=${doctorProfile.id}`,
+        { method: 'DELETE' }
+      );
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        if (refreshDoctorProfile) {
+          await refreshDoctorProfile();
+        }
+        setSuccess('Logo deleted successfully');
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(result.message || 'Failed to delete logo');
+      }
+    } catch (error) {
+      console.error('Logo delete error:', error);
+      setError('Failed to delete logo. Please try again.');
+    } finally {
+      setDeletingLogo(false);
+    }
   };
 
   if (!doctorProfile) {
@@ -177,22 +297,9 @@ export function DoctorProfileTab() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <div className="bg-white rounded-[20px] shadow-sm overflow-hidden">
         {/* Header */}
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-[24px] text-aneya-navy font-semibold">My Details</h2>
-            <p className="text-sm text-gray-500 mt-1">Manage your profile and contact preferences</p>
-          </div>
-          {!isEditing && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-2 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Edit Profile
-            </button>
-          )}
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-[24px] text-aneya-navy font-semibold">My Details</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage your profile and contact preferences</p>
         </div>
 
         {/* Messages */}
@@ -221,12 +328,7 @@ export function DoctorProfileTab() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                   placeholder="Dr. John Smith"
                 />
               </div>
@@ -238,12 +340,7 @@ export function DoctorProfileTab() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                   placeholder="doctor@example.com"
                 />
               </div>
@@ -253,12 +350,7 @@ export function DoctorProfileTab() {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                 />
               </div>
               <div>
@@ -266,12 +358,7 @@ export function DoctorProfileTab() {
                 <select
                   value={formData.specialty}
                   onChange={(e) => setFormData({ ...formData, specialty: e.target.value as MedicalSpecialtyType })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                 >
                   {MEDICAL_SPECIALTIES.map(({ value, label }) => (
                     <option key={value} value={value}>
@@ -296,12 +383,7 @@ export function DoctorProfileTab() {
                   type="text"
                   value={formData.clinic_name}
                   onChange={(e) => setFormData({ ...formData, clinic_name: e.target.value })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                   placeholder="City Medical Centre"
                 />
               </div>
@@ -310,15 +392,104 @@ export function DoctorProfileTab() {
                 <textarea
                   value={formData.clinic_address}
                   onChange={(e) => setFormData({ ...formData, clinic_address: e.target.value })}
-                  disabled={!isEditing}
                   rows={2}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                   placeholder="123 Medical Street, London, UK"
                 />
+              </div>
+
+              {/* Clinic Logo Upload */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Clinic Logo
+                </label>
+
+                {/* Current Logo Display */}
+                {doctorProfile?.clinic_logo_url && !logoPreview && (
+                  <div className="mb-3 p-4 border rounded-lg bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={doctorProfile.clinic_logo_url}
+                          alt="Clinic logo"
+                          className="h-16 max-w-[200px] object-contain"
+                        />
+                        <span className="text-sm text-gray-600">Current logo</span>
+                      </div>
+                      <button
+                        onClick={handleLogoDelete}
+                        disabled={deletingLogo}
+                        className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {deletingLogo ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview */}
+                {logoPreview && (
+                  <div className="mb-3 p-4 border-2 border-aneya-teal rounded-lg bg-aneya-teal/5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={logoPreview}
+                          alt="Logo preview"
+                          className="h-16 max-w-[200px] object-contain"
+                        />
+                        <span className="text-sm text-aneya-teal font-medium">
+                          Preview
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setLogoFile(null);
+                          setLogoPreview(null);
+                        }}
+                        className="text-sm text-gray-600 hover:text-gray-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload Controls */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    id="clinic-logo-input"
+                    accept=".png,.jpg,.jpeg,.svg"
+                    onChange={handleLogoFileChange}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="clinic-logo-input"
+                    className="px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg cursor-pointer hover:border-aneya-teal hover:text-aneya-teal transition-colors text-sm"
+                  >
+                    Choose Logo
+                  </label>
+
+                  {logoFile && (
+                    <button
+                      onClick={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="px-4 py-2 bg-aneya-teal text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
+                    >
+                      {uploadingLogo && (
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                      )}
+                      {uploadingLogo ? 'Uploading...' : 'Upload'}
+                    </button>
+                  )}
+                </div>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  PNG, JPEG, or SVG. Max 2MB. Logo will appear on consultation PDFs.
+                </p>
               </div>
             </div>
           </div>
@@ -332,12 +503,7 @@ export function DoctorProfileTab() {
                 <select
                   value={formData.default_appointment_duration}
                   onChange={(e) => setFormData({ ...formData, default_appointment_duration: Number(e.target.value) })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                 >
                   <option value={10}>10 minutes</option>
                   <option value={15}>15 minutes</option>
@@ -358,12 +524,7 @@ export function DoctorProfileTab() {
                 <select
                   value={formData.timezone}
                   onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                  disabled={!isEditing}
-                  className={`w-full p-3 border rounded-lg text-sm ${
-                    isEditing
-                      ? 'border-gray-300 focus:ring-2 focus:ring-aneya-teal focus:border-transparent'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
                 >
                   {/* Add detected timezone if it's not in the standard list */}
                   {detectedTimezone && ![
@@ -399,10 +560,7 @@ export function DoctorProfileTab() {
                   id="allow_patient_messages"
                   checked={formData.allow_patient_messages}
                   onChange={(e) => setFormData({ ...formData, allow_patient_messages: e.target.checked })}
-                  disabled={!isEditing}
-                  className={`mt-1 h-4 w-4 rounded border-gray-300 text-aneya-teal focus:ring-aneya-teal ${
-                    !isEditing ? 'opacity-60' : ''
-                  }`}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-aneya-teal focus:ring-aneya-teal"
                 />
                 <div>
                   <label htmlFor="allow_patient_messages" className="text-sm font-medium text-gray-700">
@@ -416,9 +574,11 @@ export function DoctorProfileTab() {
             </div>
           </div>
 
+          {/* Custom Forms Section */}
+          <CustomFormsSection />
+
           {/* Action Buttons */}
-          {isEditing && (
-            <div className="pt-4 border-t border-gray-200 flex gap-3 justify-end">
+          <div className="pt-4 border-t border-gray-200 flex gap-3 justify-end">
               <button
                 onClick={handleCancel}
                 disabled={isSaving}
@@ -443,8 +603,7 @@ export function DoctorProfileTab() {
                   'Save Changes'
                 )}
               </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
