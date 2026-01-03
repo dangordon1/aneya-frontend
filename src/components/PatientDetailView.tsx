@@ -67,7 +67,8 @@ export function PatientDetailView({
         .select('*, patient:patients(*)')
         .eq('patient_id', patient.id)
         .in('status', ['completed', 'cancelled'])
-        .order('scheduled_time', { ascending: false });
+        .order('scheduled_time', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (appointmentsError) throw appointmentsError;
 

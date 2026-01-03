@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { Appointment, Doctor, Consultation, AppointmentWithPatient } from '../../types/database';
 import { requiresOBGynForms } from '../../utils/specialtyHelpers';
-import { OBGynPreConsultationForm } from './OBGynPreConsultationForm';
+import { DynamicConsultationForm } from '../doctor-portal/DynamicConsultationForm';
 import { PastAppointmentCard } from '../PastAppointmentCard';
 
 interface AppointmentWithDetails extends Appointment {
@@ -25,7 +25,7 @@ export function PatientAppointments({ onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedConsultation, setSelectedConsultation] = useState<Consultation | null>(null);
-  const [selectedOBGynForm, setSelectedOBGynForm] = useState<{ appointmentId: string; patientId: string } | null>(null);
+  const [selectedOBGynForm, setSelectedOBGynForm] = useState<{ appointmentId: string; patientId: string; formType: string } | null>(null);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('all');
 
   useEffect(() => {
@@ -49,7 +49,8 @@ export function PatientAppointments({ onBack }: Props) {
           consultation:consultations(*)
         `)
         .eq('patient_id', patientProfile.id)
-        .order('scheduled_time', { ascending: false });
+        .order('scheduled_time', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
 
@@ -186,7 +187,8 @@ export function PatientAppointments({ onBack }: Props) {
                     <button
                       onClick={() => setSelectedOBGynForm({
                         appointmentId: apt.id,
-                        patientId: patientProfile!.id
+                        patientId: patientProfile!.id,
+                        formType: apt.specialty_subtype || 'obgyn'
                       })}
                       className={`mt-2 w-full px-4 py-3 rounded-lg border-2 transition-colors text-sm font-medium ${
                         apt.obgynFormStatus === 'completed'
@@ -234,9 +236,12 @@ export function PatientAppointments({ onBack }: Props) {
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-6">
-                <OBGynPreConsultationForm
+                <DynamicConsultationForm
+                  formType={selectedOBGynForm.formType}
                   patientId={selectedOBGynForm.patientId}
                   appointmentId={selectedOBGynForm.appointmentId}
+                  filledBy="patient"
+                  displayMode="flat"
                   onComplete={() => {
                     setSelectedOBGynForm(null);
                     // Refresh appointments to show updated form status
