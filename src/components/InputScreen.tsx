@@ -9,9 +9,7 @@ import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
-import { OBGynDuringConsultationForm } from './doctor-portal/OBGynDuringConsultationForm';
-import { InfertilityDuringConsultationForm } from './doctor-portal/InfertilityDuringConsultationForm';
-import { AntenatalDuringConsultationForm } from './doctor-portal/AntenatalDuringConsultationForm';
+import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -192,7 +190,7 @@ function determineFormType(doctorSpecialty: string | undefined, appointmentType?
 }
 
 export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultation, onCloseConsultation, onBack, preFilledPatient, appointmentContext, locationOverride, onLocationChange }: InputScreenProps) {
-  const { user, doctorProfile } = useAuth();
+  const { user, doctorProfile, getIdToken } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const [consultation, setConsultation] = useState(''); // Consultation Transcript (raw or diarized)
@@ -334,6 +332,19 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // OB/GYN during-consultation form state
   // Track which form type is selected (null = none, 'obgyn', 'infertility', 'antenatal')
   const [selectedFormType, setSelectedFormType] = useState<'obgyn' | 'infertility' | 'antenatal' | null>(null);
+
+  // Auto-select form when consultation type is determined
+  useEffect(() => {
+    if (determinedConsultationType && !selectedFormType) {
+      // Only auto-select if a valid form type is determined and no form is currently selected
+      if (determinedConsultationType === 'obgyn' ||
+          determinedConsultationType === 'infertility' ||
+          determinedConsultationType === 'antenatal') {
+        console.log(`🎯 Auto-selecting ${determinedConsultationType} form based on detected consultation type`);
+        setSelectedFormType(determinedConsultationType as 'obgyn' | 'infertility' | 'antenatal');
+      }
+    }
+  }, [determinedConsultationType, selectedFormType]);
 
   // Audio recording refs
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -878,6 +889,79 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     }
   };
 
+  // Helper function to extract form fields and auto-fill the consultation form
+  const callAutoFillEndpoint = async (consultationId: string) => {
+    try {
+      if (!appointmentContext || !preFilledPatient) {
+        console.warn('⚠️ Cannot auto-fill form: missing appointmentContext or preFilledPatient');
+        return;
+      }
+
+      console.log(`📋 Auto-filling form for consultation ${consultationId}...`);
+
+      // Get Firebase ID token for authentication
+      const idToken = await getIdToken();
+      if (!idToken) {
+        console.warn('⚠️ Cannot auto-fill form: no ID token available');
+        return;
+      }
+
+      // Prepare request body
+      const requestBody = {
+        consultation_id: consultationId,
+        appointment_id: appointmentContext.id,
+        patient_id: preFilledPatient.id,
+        original_transcript: originalTranscript || consultation,
+        consultation_text: consultation,
+        patient_snapshot: {
+          name: preFilledPatient.name,
+          age: getPatientAge(preFilledPatient),
+          sex: preFilledPatient.sex,
+          allergies: preFilledPatient.allergies,
+          current_medications: preFilledPatient.current_medications,
+          current_conditions: preFilledPatient.current_conditions
+        }
+      };
+
+      // Call backend endpoint with Authorization header
+      const response = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.warn('⚠️ Form auto-fill failed:', errorData.detail || response.statusText);
+        return; // Don't throw - this shouldn't block summarization
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✅ ${data.form_created ? 'Created' : 'Updated'} ${data.consultation_type} form`);
+        console.log(`   Form ID: ${data.form_id}`);
+        console.log(`   Confidence: ${(data.confidence * 100).toFixed(0)}%`);
+        console.log(`   Fields extracted: ${Object.keys(data.field_updates).length}`);
+        console.log(`   Reasoning: ${data.reasoning}`);
+
+        // Set determined consultation type so form auto-selects
+        if (data.consultation_type) {
+          setDeterminedConsultationType(data.consultation_type);
+        }
+      } else {
+        console.warn('⚠️ Form auto-fill unsuccessful:', data.error);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in form auto-fill:', error);
+      // Don't throw - form filling failure shouldn't block summarization
+    }
+  };
+
   const handleSummarize = async () => {
     if (!consultation.trim()) {
       alert('Please enter or record a consultation before summarizing.');
@@ -922,8 +1006,48 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         setConsultationSummary(data);
         console.log('✅ Consultation summarized');
 
-        // NOTE: Saving is now handled in stopRecording() for the diarization flow
-        // Old signature save call removed to match new interface
+        // Save consultation if not already saved (for manual text entry or when summarize is clicked before stopping recording)
+        let consultationId = pendingConsultationId;
+
+        if (!consultationId && onSaveConsultation && preFilledPatient) {
+          console.log('💾 Saving consultation before auto-fill...');
+
+          // Prepare patient snapshot
+          const patientSnapshot = {
+            name: preFilledPatient.name,
+            age: getPatientAge(preFilledPatient),
+            sex: preFilledPatient.sex,
+            allergies: preFilledPatient.allergies,
+            current_medications: preFilledPatient.current_medications,
+            current_conditions: preFilledPatient.current_conditions
+          };
+
+          const saved = await onSaveConsultation({
+            patient_id: preFilledPatient.id,
+            appointment_id: appointmentContext?.id || null,
+            consultation_text: consultation,
+            original_transcript: originalTranscript || consultation,
+            transcription_language: consultationLanguage,
+            audio_url: null,
+            patient_snapshot: patientSnapshot,
+            consultation_duration_seconds: 0,
+            transcription_status: 'completed'
+          });
+
+          if (saved) {
+            consultationId = saved.id;
+            setPendingConsultationId(saved.id);
+            console.log(`✅ Consultation saved (id: ${saved.id})`);
+          }
+        }
+
+        // NEW: Call auto-fill endpoint if we have a saved consultation
+        if (consultationId) {
+          console.log(`📋 Triggering form auto-fill for consultation ${consultationId}...`);
+          await callAutoFillEndpoint(consultationId);
+        } else {
+          console.warn('⚠️ No consultation ID available - skipping form auto-fill');
+        }
 
         // NEW: Trigger form auto-fill if we have diarized segments
         const segments = diarizedSegmentsRef.current;
@@ -2532,39 +2656,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 </div>
 
                 {/* Inline Embedded Forms - Display below buttons */}
-                {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
+                {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && user?.id && (
                   <div className="mt-6 bg-purple-50 border-2 border-purple-300 rounded-[10px] p-6">
-                    {selectedFormType === 'obgyn' && (
-                      <OBGynDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        displayMode="flat"
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
-
-                    {selectedFormType === 'infertility' && (
-                      <InfertilityDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
-
-                    {selectedFormType === 'antenatal' && (
-                      <AntenatalDuringConsultationForm
-                        patientId={preFilledPatient.id}
-                        appointmentId={appointmentContext.id}
-                        displayMode="flat"
-                        onComplete={() => {
-                          setSelectedFormType(null);
-                        }}
-                      />
-                    )}
+                    <DynamicConsultationForm
+                      formType={selectedFormType}
+                      patientId={preFilledPatient.id}
+                      appointmentId={appointmentContext.id}
+                      doctorUserId={user.id}
+                      displayMode="flat"
+                      onComplete={() => {
+                        setSelectedFormType(null);
+                      }}
+                    />
                   </div>
                 )}
               </div>
