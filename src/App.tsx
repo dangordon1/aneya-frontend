@@ -1203,7 +1203,6 @@ function MainApp() {
               appointmentContext={selectedAppointment || undefined}
               locationOverride={locationOverride}
               onLocationChange={setLocationOverride}
-              onOpenInfertilityForm={() => setCurrentScreen('infertility-form')}
             />
           )}
 
