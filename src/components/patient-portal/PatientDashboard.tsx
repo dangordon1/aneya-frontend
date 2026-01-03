@@ -67,6 +67,7 @@ export function PatientDashboard() {
         .gte('scheduled_time', now)
         .not('status', 'eq', 'cancelled')
         .order('scheduled_time', { ascending: true })
+        .order('created_at', { ascending: true })
         .limit(5);
 
       if (error) throw error;
