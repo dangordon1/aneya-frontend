@@ -10,6 +10,7 @@ import { PatientMessages } from './PatientMessages';
 import { PatientTabNavigation, PatientTab } from './PatientTabNavigation';
 import { SymptomsTab } from './SymptomsTab';
 import { useMessages } from '../../hooks/useMessages';
+import { BranchIndicator } from '../BranchIndicator';
 type PatientScreen = 'tabs' | 'book';
 
 interface AppointmentWithDoctor extends Appointment {
@@ -106,11 +107,14 @@ export function PatientDashboard() {
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-16 sm:h-20" />
-          <div className="text-right">
-            {patientProfile?.name && (
-              <span className="text-aneya-cream text-sm sm:text-base font-medium block">{patientProfile.name}</span>
-            )}
-            <span className="text-aneya-cream/70 text-xs sm:text-sm font-light tracking-wide">Patient Portal</span>
+          <div className="flex flex-col items-end gap-2">
+            <BranchIndicator />
+            <div className="text-right">
+              {patientProfile?.name && (
+                <span className="text-aneya-cream text-sm sm:text-base font-medium block">{patientProfile.name}</span>
+              )}
+              <span className="text-aneya-cream/70 text-xs sm:text-sm font-light tracking-wide">Patient Portal</span>
+            </div>
           </div>
         </div>
       </header>
