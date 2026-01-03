@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __GIT_BRANCH__: string
+
 interface ImportMetaEnv {
   readonly VITE_API_URL: string
 }

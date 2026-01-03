@@ -4,6 +4,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation, DoctorTab } from './components/TabNavigation';
 import { LocationSelector } from './components/LocationSelector';
+import { BranchIndicator } from './components/BranchIndicator';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
 import { useMessages } from './hooks/useMessages';
@@ -1091,6 +1092,7 @@ function MainApp() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
           <div className="flex items-center gap-4">
+            <BranchIndicator />
             <LocationSelector
               selectedLocation={locationOverride}
               onLocationChange={setLocationOverride}
