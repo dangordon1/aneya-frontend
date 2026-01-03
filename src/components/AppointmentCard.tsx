@@ -1,17 +1,13 @@
 import { useState } from 'react';
-import { AppointmentWithPatient, MedicalSpecialtyType, Consultation } from '../types/database';
+import { AppointmentWithPatient, Consultation } from '../types/database';
 import { AppointmentStatusBadge } from './AppointmentStatusBadge';
 import { formatTime24 } from '../utils/dateHelpers';
-import { requiresOBGynForms } from '../utils/specialtyHelpers';
 
 interface AppointmentCardProps {
   appointment: AppointmentWithPatient;
   onStartConsultation: (appointment: AppointmentWithPatient) => void;
   onModify: (appointment: AppointmentWithPatient) => void;
   onCancel: (appointment: AppointmentWithPatient) => void;
-  onFillPreConsultationForm?: (appointment: AppointmentWithPatient) => void;
-  obgynFormStatus?: 'draft' | 'partial' | 'completed' | null;
-  doctorSpecialty?: MedicalSpecialtyType | null;
   consultation?: Consultation | null;
 }
 
@@ -20,9 +16,6 @@ export function AppointmentCard({
   onStartConsultation,
   onModify,
   onCancel,
-  onFillPreConsultationForm,
-  obgynFormStatus,
-  doctorSpecialty,
   consultation
 }: AppointmentCardProps) {
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -36,18 +29,6 @@ export function AppointmentCard({
       ? appointment.reason.substring(0, 100) + '...'
       : appointment.reason
     : 'No reason specified';
-
-  // Determine button text and visibility for consultation form
-  const getFormButtonText = () => {
-    if (!obgynFormStatus) return 'Fill Consultation Form';
-    if (obgynFormStatus === 'draft' || obgynFormStatus === 'partial') return 'Review/Edit Consultation Form';
-    return 'Review Consultation Form';
-  };
-
-  // Only show form button for OB/GYN appointments
-  const isOBGyn = requiresOBGynForms(doctorSpecialty);
-  const canShowFormButton = onFillPreConsultationForm !== undefined && isOBGyn;
-  const statusCheck = appointment.status === 'scheduled' || appointment.status === 'in_progress';
 
   const handleDownloadPdf = async () => {
     setGeneratingPdf(true);
@@ -173,28 +154,6 @@ export function AppointmentCard({
             </>
           )}
         </div>
-
-        {canShowFormButton && statusCheck && (
-          <button
-            onClick={() => onFillPreConsultationForm?.(appointment)}
-            className="w-full px-4 py-2 bg-purple-600 text-white rounded-[10px] text-[14px] font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            {getFormButtonText()}
-          </button>
-        )}
 
         {appointment.consultation_id && (
           <button

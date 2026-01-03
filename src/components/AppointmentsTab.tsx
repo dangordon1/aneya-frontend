@@ -10,12 +10,8 @@ import { FullCalendarModal } from './FullCalendarModal';
 import { PastAppointmentCard } from './PastAppointmentCard';
 import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { DoctorAvailabilitySettings } from './doctor-portal/DoctorAvailabilitySettings';
-import { OBGynPreConsultationForm } from './patient-portal/OBGynPreConsultationForm';
-import { InfertilityPreConsultationForm } from './patient-portal/InfertilityPreConsultationForm';
-import { AntenatalPreConsultationForm } from './patient-portal/AntenatalPreConsultationForm';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { requiresOBGynForms } from '../utils/specialtyHelpers';
 import { getPatientAgeNumber } from '../utils/dateHelpers';
 
 interface AppointmentsTabProps {
@@ -37,11 +33,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
-
-  // OB/GYN Pre-consultation Form Modal state
-  const [showOBGynFormModal, setShowOBGynFormModal] = useState(false);
-  const [selectedAppointmentForForm, setSelectedAppointmentForForm] = useState<AppointmentWithPatient | null>(null);
-  const [appointmentOBGynFormStatus, setAppointmentOBGynFormStatus] = useState<Record<string, 'draft' | 'partial' | 'completed' | null>>({});
 
   // State for past appointments
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
@@ -98,24 +89,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
       // Reopen the appointment form after patient is created
       setIsFormModalOpen(true);
     }
-  };
-
-  const handleFillPreConsultationForm = (appointment: AppointmentWithPatient) => {
-    setSelectedAppointmentForForm(appointment);
-    setShowOBGynFormModal(true);
-  };
-
-  const handleCloseOBGynFormModal = () => {
-    setShowOBGynFormModal(false);
-    setSelectedAppointmentForForm(null);
-  };
-
-  const handleOBGynFormComplete = () => {
-    // Refresh form status for this appointment
-    if (selectedAppointmentForForm) {
-      // Could refetch the status here if needed
-    }
-    handleCloseOBGynFormModal();
   };
 
   // Helper function to extract form fields and update the appropriate form
@@ -355,6 +328,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           .select('*, patient:patients(*)')
           .in('status', ['completed', 'cancelled'])
           .order('scheduled_time', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(isAdmin ? 50 : 10); // Admins see more appointments
 
         // Non-admins only see their own appointments (doctors see their appointments)
@@ -462,82 +436,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
 
     fetchTodayConsultations();
   }, [appointments]); // Re-run when appointments change
-
-  // Fetch OB/GYN form statuses for doctor portal
-  useEffect(() => {
-    const fetchOBGynFormStatuses = async () => {
-      if (!doctorProfile || !requiresOBGynForms(doctorProfile.specialty)) {
-        return;
-      }
-
-      try {
-        // Fetch all appointments for this doctor with specialty_subtype
-        const { data: allAppointments, error: appointmentsError } = await supabase
-          .from('appointments')
-          .select('id, patient_id, specialty_subtype')
-          .eq('doctor_id', doctorProfile.id)
-          .in('status', ['scheduled', 'in_progress']);
-
-        if (appointmentsError) throw appointmentsError;
-
-        // For each appointment, fetch the form status from the appropriate table
-        const formStatuses: Record<string, 'draft' | 'partial' | 'completed' | null> = {};
-
-        for (const apt of allAppointments || []) {
-          try {
-            // Determine which table to query based on specialty_subtype
-            if (apt.specialty_subtype === 'infertility') {
-              // Query infertility_forms table
-              const { data: formData, error: formError } = await supabase
-                .from('infertility_forms')
-                .select('status')
-                .eq('appointment_id', apt.id)
-                .eq('form_type', 'pre_consultation')
-                .single();
-
-              if (!formError && formData) {
-                formStatuses[apt.id] = formData.status;
-              }
-            } else if (apt.specialty_subtype === 'antenatal') {
-              // Query antenatal_forms table
-              const { data: formData, error: formError } = await supabase
-                .from('antenatal_forms')
-                .select('status')
-                .eq('appointment_id', apt.id)
-                .eq('form_type', 'pre_consultation')
-                .single();
-
-              if (!formError && formData) {
-                formStatuses[apt.id] = formData.status;
-              }
-            } else {
-              // Query obgyn_consultation_forms table for general/other subtypes
-              const { data: formData, error: formError } = await supabase
-                .from('obgyn_consultation_forms')
-                .select('status')
-                .eq('appointment_id', apt.id)
-                .eq('form_type', 'pre_consultation')
-                .single();
-
-              if (!formError && formData) {
-                formStatuses[apt.id] = formData.status;
-              }
-            }
-          } catch (err) {
-            // Form doesn't exist yet, that's ok
-          }
-        }
-
-        setAppointmentOBGynFormStatus(formStatuses);
-      } catch (err) {
-        console.error('Error fetching OB/GYN form statuses:', err);
-      }
-    };
-
-    if (!loading && user && doctorProfile) {
-      fetchOBGynFormStatuses();
-    }
-  }, [user, loading, doctorProfile]);
 
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
@@ -665,9 +563,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
                       onStartConsultation={onStartConsultation}
                       onModify={handleModifyAppointment}
                       onCancel={handleCancelAppointment}
-                      onFillPreConsultationForm={handleFillPreConsultationForm}
-                      obgynFormStatus={appointmentOBGynFormStatus[appointment.id] || null}
-                      doctorSpecialty={appointment.doctor?.specialty}
                       consultation={consultationsMap[appointment.id] || null}
                     />
                   ))}
@@ -725,74 +620,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           <DoctorAvailabilitySettings
             onClose={() => setIsAvailabilityModalOpen(false)}
           />
-        )}
-
-        {/* OB/GYN Consultation Form Modal */}
-        {showOBGynFormModal && selectedAppointmentForForm && user?.id && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-              {/* Background overlay */}
-              <div
-                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-                onClick={handleCloseOBGynFormModal}
-              />
-
-              {/* Modal dialog */}
-              <div className="relative inline-block align-bottom bg-white rounded-[20px] text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:w-full sm:max-w-4xl">
-                {/* Header */}
-                <div className="bg-purple-600 px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-[18px] font-semibold text-white">
-                    {selectedAppointmentForForm.specialty_subtype === 'infertility'
-                      ? 'Infertility Consultation Form'
-                      : selectedAppointmentForForm.specialty_subtype === 'antenatal'
-                      ? 'Antenatal Care (ANC) Form'
-                      : 'OB/GYN Consultation Form'}
-                  </h3>
-                  <button
-                    onClick={handleCloseOBGynFormModal}
-                    className="text-white hover:text-purple-100 transition-colors"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Form Content */}
-                <div className="px-6 py-8 max-h-[calc(100vh-200px)] overflow-y-auto">
-                  {/* Render specialty-specific form based on appointment subtype */}
-                  {selectedAppointmentForForm.specialty_subtype === 'infertility' ? (
-                    <InfertilityPreConsultationForm
-                      patientId={selectedAppointmentForForm.patient_id}
-                      appointmentId={selectedAppointmentForForm.id}
-                      filledBy="doctor"
-                      doctorUserId={user.id}
-                      onComplete={handleOBGynFormComplete}
-                      displayMode="flat"
-                    />
-                  ) : selectedAppointmentForForm.specialty_subtype === 'antenatal' ? (
-                    <AntenatalPreConsultationForm
-                      patientId={selectedAppointmentForForm.patient_id}
-                      appointmentId={selectedAppointmentForForm.id}
-                      filledBy="doctor"
-                      doctorUserId={user.id}
-                      onComplete={handleOBGynFormComplete}
-                      displayMode="flat"
-                    />
-                  ) : (
-                    <OBGynPreConsultationForm
-                      patientId={selectedAppointmentForForm.patient_id}
-                      appointmentId={selectedAppointmentForForm.id}
-                      filledBy="doctor"
-                      doctorUserId={user.id}
-                      onComplete={handleOBGynFormComplete}
-                      displayMode="flat"
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Past Appointments Section */}

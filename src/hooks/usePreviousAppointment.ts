@@ -44,6 +44,7 @@ export function usePreviousAppointment(
           .eq('patient_id', patientId)
           .in('status', ['completed'])
           .order('scheduled_time', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1);
 
         const { data: appointments, error: appointmentError } = await query;
