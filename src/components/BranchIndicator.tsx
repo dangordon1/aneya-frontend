@@ -12,7 +12,7 @@ export function BranchIndicator() {
       try {
         const response = await fetch(`${API_URL}/api/health`);
         const data = await response.json();
-        if (data.branch && data.branch !== 'main') {
+        if (data.branch && data.branch !== 'main' && data.branch !== 'master') {
           setBackendBranch(data.branch);
         }
       } catch (error) {
@@ -23,14 +23,14 @@ export function BranchIndicator() {
     fetchBackendBranch();
   }, []);
 
-  // Don't show anything if both are on main
-  if (frontendBranch === 'main' && !backendBranch) {
+  // Don't show anything if both are on main/master
+  if ((frontendBranch === 'main' || frontendBranch === 'master') && !backendBranch) {
     return null;
   }
 
   return (
     <div className="flex flex-col gap-0.5 text-right">
-      {frontendBranch !== 'main' && (
+      {frontendBranch !== 'main' && frontendBranch !== 'master' && (
         <span className="text-aneya-cream/60 text-xs font-mono">
           FE: {frontendBranch}
         </span>
