@@ -3,7 +3,6 @@
  * Provides a modal interface for uploading historical patient forms
  */
 
-import { useState } from 'react';
 import { Patient } from '../../types/database';
 import { HistoricalFormUpload } from './HistoricalFormUpload';
 
@@ -20,19 +19,15 @@ export function HistoricalFormUploadModal({
   patient,
   onUploadComplete,
 }: HistoricalFormUploadModalProps) {
-  const [importId, setImportId] = useState<string | null>(null);
-
   if (!isOpen) return null;
 
-  const handleUploadComplete = (newImportId: string) => {
-    setImportId(newImportId);
+  const handleUploadComplete = () => {
     if (onUploadComplete) {
       onUploadComplete();
     }
   };
 
   const handleClose = () => {
-    setImportId(null);
     onClose();
   };
 

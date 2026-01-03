@@ -80,7 +80,7 @@ export function HistoricalFormUpload({ patient, onUploadComplete }: HistoricalFo
 
       if (result) {
         setUploadSuccess(true);
-        setImportId(result.import_id);
+        setImportId(result.id);
 
         // Reset form
         setFiles([]);
@@ -92,7 +92,7 @@ export function HistoricalFormUpload({ patient, onUploadComplete }: HistoricalFo
 
         // Notify parent
         if (onUploadComplete) {
-          onUploadComplete(result.import_id);
+          onUploadComplete(result.id);
         }
       } else {
         setError(hookError || 'Upload failed');

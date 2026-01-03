@@ -238,7 +238,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
   // NEW: Speaker diarization state
   const [isDiarizing, setIsDiarizing] = useState(false);
-  const [diarizationData, setDiarizationData] = useState<any>(null);
+  const [_diarizationData, setDiarizationData] = useState<any>(null);
   const [showSpeakerMapping, setShowSpeakerMapping] = useState(false);
 
   // Chunked diarization state (used by processNextChunk, UI display will be added in separate task)
@@ -249,10 +249,10 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
   // NEW: Multi-speaker identification state
   const [pendingSegments, setPendingSegments] = useState<DiarizedSegment[]>([]);
-  const [detectedSpeakerList, setDetectedSpeakerList] = useState<string[]>([]);
+  const [detectedSpeakerList, _setDetectedSpeakerList] = useState<string[]>([]);
   const [speakerRoleMapping, setSpeakerRoleMapping] = useState<Record<string, string>>({});
-  const [speakerConfidenceScores, setSpeakerConfidenceScores] = useState<Record<string, number>>({});
-  const [speakerReasoning, setSpeakerReasoning] = useState<Record<string, string>>({});
+  const [speakerConfidenceScores, _setSpeakerConfidenceScores] = useState<Record<string, number>>({});
+  const [speakerReasoning, _setSpeakerReasoning] = useState<Record<string, string>>({});
   const speakerRolesRef = useRef<Record<string, string>>({}); // Ref to access latest value
   const [lastProcessedChunkIndex, setLastProcessedChunkIndex] = useState(-1);
 
