@@ -85,7 +85,6 @@ export function DynamicConsultationForm({
   onBack,
   filledBy = 'doctor',
   doctorUserId,
-  displayMode = 'flat',
 }: DynamicConsultationFormProps) {
   const [survey, setSurvey] = useState<Model | null>(null);
   const [formId, setFormId] = useState<string | null>(null);
@@ -109,7 +108,7 @@ export function DynamicConsultationForm({
   }, []);
 
   // Convert backend schema to SurveyJS format
-  const convertToSurveyJS = (backendSchema: any, title: string): any => {
+  const convertToSurveyJS = (backendSchema: any): any => {
     const elements: any[] = [];
 
     for (const [fieldName, fieldDef] of Object.entries(backendSchema as Record<string, any>)) {
@@ -237,7 +236,7 @@ export function DynamicConsultationForm({
 
         setFormTitle(title);
 
-        const surveyJSON = convertToSurveyJS(data.schema, title);
+        const surveyJSON = convertToSurveyJS(data.schema);
         const surveyModel = new Model(surveyJSON);
 
         // Apply Aneya theme
