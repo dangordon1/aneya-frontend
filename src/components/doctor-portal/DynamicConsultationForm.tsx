@@ -112,22 +112,44 @@ export function DynamicConsultationForm({
   const convertToSurveyJS = (backendSchema: any, title: string): any => {
     const elements: any[] = [];
 
-    for (const [fieldName, fieldDef] of Object.entries(backendSchema as Record<string, any>)) {
-      if (fieldDef.type === 'object' && fieldDef.fields) {
-        // Nested object - create a panel
-        const nestedElements = Object.entries(fieldDef.fields).map(([nestedFieldName, nestedFieldDef]: [string, any]) => {
-          return convertFieldToElement(`${fieldName}.${nestedFieldName}`, nestedFieldDef);
+    // Sort sections by order field
+    const sortedSections = Object.entries(backendSchema as Record<string, any>)
+      .sort(([, a]: [string, any], [, b]: [string, any]) => {
+        const orderA = a.order || 999;
+        const orderB = b.order || 999;
+        return orderA - orderB;
+      });
+
+    for (const [sectionName, sectionDef] of sortedSections) {
+      // NEW: Database schema has fields as ARRAY, not object
+      if (Array.isArray(sectionDef.fields)) {
+        // Section with fields array - create a panel
+        const nestedElements = sectionDef.fields.map((field: any) => {
+          const fieldPath = `${sectionName}.${field.name}`;
+          return convertFieldToElement(fieldPath, field);
         });
 
         elements.push({
           type: 'panel',
-          name: fieldName,
-          title: fieldDef.description || fieldName,
+          name: sectionName,
+          title: sectionDef.description || sectionName,
+          elements: nestedElements,
+        });
+      } else if (sectionDef.type === 'object' && sectionDef.fields) {
+        // OLD FORMAT: Nested object with fields as dictionary (backwards compatibility)
+        const nestedElements = Object.entries(sectionDef.fields).map(([nestedFieldName, nestedFieldDef]: [string, any]) => {
+          return convertFieldToElement(`${sectionName}.${nestedFieldName}`, nestedFieldDef);
+        });
+
+        elements.push({
+          type: 'panel',
+          name: sectionName,
+          title: sectionDef.description || sectionName,
           elements: nestedElements,
         });
       } else {
-        // Simple field
-        elements.push(convertFieldToElement(fieldName, fieldDef));
+        // Simple field (top-level)
+        elements.push(convertFieldToElement(sectionName, sectionDef));
       }
     }
 
@@ -146,7 +168,7 @@ export function DynamicConsultationForm({
   const convertFieldToElement = (fieldName: string, fieldDef: any): any => {
     const element: any = {
       name: fieldName,
-      title: fieldDef.description || fieldName,
+      title: fieldDef.label || fieldDef.description || fieldName,  // NEW: Use label first, then description
       isRequired: fieldDef.required || false,
     };
 
@@ -167,6 +189,12 @@ export function DynamicConsultationForm({
           return element;
 
         case 'checkbox':
+          // For boolean fields, use SurveyJS 'boolean' type (single true/false checkbox)
+          if (fieldDef.type === 'boolean') {
+            element.type = 'boolean';
+            return element;
+          }
+          // For multi-select checkboxes, use 'checkbox' type with choices
           element.type = 'checkbox';
           element.choices = fieldDef.options || [];
           return element;
@@ -183,6 +211,75 @@ export function DynamicConsultationForm({
           element.type = 'rating';
           element.rateMax = fieldDef.max_rating || 5;
           element.rateMin = fieldDef.min_rating || 1;
+          return element;
+
+        case 'textarea':
+          element.type = 'comment';
+          element.rows = 4;
+          return element;
+
+        case 'text_short':
+          element.type = 'text';
+          return element;
+
+        case 'number':
+          element.type = 'text';
+          element.inputType = 'number';
+          return element;
+
+        case 'date':
+          element.type = 'text';
+          element.inputType = 'date';
+          return element;
+
+        case 'table':
+        case 'table_transposed':
+          // Render as SurveyJS matrixdynamic (editable table with add/remove rows)
+          element.type = 'matrixdynamic';
+          element.rowCount = 0; // Start with 0 rows, user can add
+          element.addRowText = 'Add Visit';
+          element.removeRowText = 'Remove';
+
+          // Build columns from row_fields
+          const columns = (fieldDef.row_fields || []).map((rowField: any) => {
+            const col: any = {
+              name: rowField.name,
+              title: rowField.label || rowField.name,
+              cellType: 'text', // default
+            };
+
+            // Map field types to SurveyJS cell types
+            switch (rowField.input_type || rowField.type) {
+              case 'date':
+                col.cellType = 'text';
+                col.inputType = 'date';
+                break;
+              case 'number':
+                col.cellType = 'text';
+                col.inputType = 'number';
+                break;
+              case 'textarea':
+                col.cellType = 'comment';
+                col.rows = 2;
+                break;
+              case 'dropdown':
+                col.cellType = 'dropdown';
+                col.choices = rowField.options || [];
+                break;
+              case 'checkbox':
+                col.cellType = 'checkbox';
+                break;
+              case 'boolean':
+                col.cellType = 'boolean';
+                break;
+              default:
+                col.cellType = 'text';
+            }
+
+            return col;
+          });
+
+          element.columns = columns;
           return element;
       }
     }

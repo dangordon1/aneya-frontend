@@ -2,8 +2,38 @@ import { useState } from 'react';
 import { CustomFormUpload } from './CustomFormUpload';
 import { CustomFormLibrary } from './CustomFormLibrary';
 
+interface CustomForm {
+  id: string;
+  form_name: string;
+  specialty: string;
+  description?: string;
+  field_count: number;
+  section_count: number;
+  status: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  form_schema?: Record<string, any>;
+  pdf_template?: Record<string, any>;
+}
+
 export function CustomFormsSection() {
   const [activeTab, setActiveTab] = useState<'library' | 'upload'>('library');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [editingForm, setEditingForm] = useState<CustomForm | null>(null);
+
+  const handleFormSaved = () => {
+    // Refresh the library and switch to it
+    setRefreshKey(prev => prev + 1);
+    setActiveTab('library');
+    setEditingForm(null);
+  };
+
+  const handleFormEdit = (form: CustomForm) => {
+    // Set the form to edit and switch to upload tab
+    setEditingForm(form);
+    setActiveTab('upload');
+  };
 
   return (
     <div className="pt-4 border-t border-gray-200">
@@ -19,7 +49,10 @@ export function CustomFormsSection() {
       {/* Tab Navigation */}
       <div className="flex gap-4 mb-6 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('library')}
+          onClick={() => {
+            setActiveTab('library');
+            setEditingForm(null);
+          }}
           className={`pb-3 px-1 text-sm font-medium transition-colors relative ${
             activeTab === 'library'
               ? 'text-aneya-teal'
@@ -32,7 +65,10 @@ export function CustomFormsSection() {
           )}
         </button>
         <button
-          onClick={() => setActiveTab('upload')}
+          onClick={() => {
+            setActiveTab('upload');
+            setEditingForm(null);
+          }}
           className={`pb-3 px-1 text-sm font-medium transition-colors relative ${
             activeTab === 'upload'
               ? 'text-aneya-teal'
@@ -48,8 +84,18 @@ export function CustomFormsSection() {
 
       {/* Tab Content */}
       <div>
-        {activeTab === 'library' && <CustomFormLibrary />}
-        {activeTab === 'upload' && <CustomFormUpload />}
+        {activeTab === 'library' && (
+          <CustomFormLibrary
+            key={refreshKey}
+            onEditForm={handleFormEdit}
+          />
+        )}
+        {activeTab === 'upload' && (
+          <CustomFormUpload
+            onFormSaved={handleFormSaved}
+            editingForm={editingForm}
+          />
+        )}
       </div>
     </div>
   );

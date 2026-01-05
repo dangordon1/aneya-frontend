@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { Download } from 'lucide-react';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation, DoctorTab } from './components/TabNavigation';
@@ -98,6 +99,7 @@ function MainApp() {
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0); // Used to force refresh appointments
   const [appointmentForFormView, setAppointmentForFormView] = useState<AppointmentWithPatient | null>(null); // For viewing consultation forms
   const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
+  const [generatingPdf, setGeneratingPdf] = useState(false); // PDF generation state for view consultation form screen
   const { saveConsultation } = useConsultations();
 
   // Messaging state - for unread counts and pending care requests
@@ -1085,6 +1087,43 @@ function MainApp() {
     setCurrentScreen('appointments');
   };
 
+  const handleDownloadPdf = async () => {
+    if (!appointmentForFormView?.consultation_id) return;
+
+    setGeneratingPdf(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/appointments/${appointmentForFormView.id}/consultation-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate PDF');
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date(appointmentForFormView.scheduled_time);
+      const dateStr = date.toISOString().split('T')[0];
+      a.download = `consultation_${appointmentForFormView.patient.name.replace(/\s+/g, '_')}_${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Header */}
@@ -1223,12 +1262,24 @@ function MainApp() {
 
           {currentScreen === 'view-consultation-form' && appointmentForFormView && (
             <div className="max-w-7xl mx-auto px-4 py-6">
-              <button
-                onClick={handleBackFromConsultationForm}
-                className="mb-4 px-4 py-2 bg-aneya-navy text-white rounded-[12px] hover:bg-opacity-90 transition-colors"
-              >
-                ← Back to Appointments
-              </button>
+              <div className="mb-4 flex gap-2 flex-wrap">
+                <button
+                  onClick={handleBackFromConsultationForm}
+                  className="px-4 py-2 bg-aneya-navy text-white rounded-[12px] hover:bg-opacity-90 transition-colors"
+                >
+                  ← Back to Appointments
+                </button>
+                {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={generatingPdf}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
+                  </button>
+                )}
+              </div>
 
               {(() => {
                 // Use AI-detected consultation type if available, otherwise fall back to appointment type
@@ -1254,6 +1305,20 @@ function MainApp() {
                   />
                 );
               })()}
+
+              {/* Download PDF button at bottom */}
+              {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={generatingPdf}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -38,7 +38,6 @@ export function AppointmentDetailModal({
   const [isRerunningTranscription, setIsRerunningTranscription] = useState(false);
   const [rerunProgress, setRerunProgress] = useState<string>('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, string>>({});
-  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   if (!isOpen) return null;
@@ -188,42 +187,6 @@ export function AppointmentDetailModal({
     }
   };
 
-  const handleDownloadPdf = async () => {
-    if (!appointment.consultation_id) return;
-
-    setGeneratingPdf(true);
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(
-        `${API_URL}/api/appointments/${appointment.id}/consultation-pdf`,
-        { method: 'GET' }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to generate PDF');
-      }
-
-      // Create blob from response
-      const blob = await response.blob();
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `consultation_${appointment.patient.name.replace(/\s+/g, '_')}_${formattedDate.replace(/\s+/g, '_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setGeneratingPdf(false);
-    }
-  };
-
   const handleDelete = async () => {
     const patientName = appointment.patient?.name || 'Unknown Patient';
     const confirmMessage = `Delete appointment with ${patientName}?\n\n` +
@@ -254,7 +217,6 @@ export function AppointmentDetailModal({
   const canAnalyze = !hasAiAnalysis && onAnalyze && consultation;
   const canResummarize = onResummarize && consultation;
   const canRerunTranscription = onRerunTranscription && consultation?.audio_url;
-  const canDownloadPdf = appointment.consultation_id && appointment.status === 'completed';
 
   // Show consultation form button for all completed appointments with consultations
   // The form component will determine which form type to show based on detected consultation type
@@ -321,7 +283,7 @@ export function AppointmentDetailModal({
         {consultation ? (
           <div className="space-y-4">
             {/* Action buttons */}
-            {viewMode === 'doctor' && (canResummarize || canAnalyze || canRerunTranscription || canViewConsultationForm || canDownloadPdf) && (
+            {viewMode === 'doctor' && (canResummarize || canAnalyze || canRerunTranscription || canViewConsultationForm) && (
               <div className="flex gap-2 flex-wrap">
                 {canViewConsultationForm && (
                   <button
@@ -330,16 +292,6 @@ export function AppointmentDetailModal({
                   >
                     <FileText className="w-4 h-4" />
                     View Consultation Form
-                  </button>
-                )}
-                {canDownloadPdf && (
-                  <button
-                    onClick={handleDownloadPdf}
-                    disabled={generatingPdf}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
                   </button>
                 )}
                 {canResummarize && (
