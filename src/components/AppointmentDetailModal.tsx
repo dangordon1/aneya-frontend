@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AppointmentWithPatient, Consultation } from '../types/database';
-import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Download, Trash2 } from 'lucide-react';
+import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
