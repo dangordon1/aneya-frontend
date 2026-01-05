@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { SchemaReviewEditor } from './SchemaReviewEditor';
 
@@ -10,23 +10,49 @@ interface ExtractionResult {
   success: boolean;
   form_name: string;
   specialty: string;
-  schema: Record<string, any>;
+  form_schema: Record<string, any>;
   pdf_template: Record<string, any>;
   metadata: Record<string, any>;
   error?: string;
 }
 
 interface ExtractedData {
+  form_id?: string;
   form_name: string;
   specialty: string;
-  schema: Record<string, any>;
+  form_schema: Record<string, any>;
   pdf_template: Record<string, any>;
   description?: string;
+  patient_criteria?: string;
   is_public: boolean;
+  metadata?: Record<string, any>;  // Includes logo_info with logo_url
+  logo_info?: {
+    has_logo: boolean;
+    logo_position?: string;
+    logo_description?: string;
+    facility_name?: string;
+    logo_url?: string;  // URL to extracted and uploaded logo
+  };
 }
 
-export function CustomFormUpload() {
-  const { session } = useAuth();
+interface CustomForm {
+  id: string;
+  form_name: string;
+  specialty: string;
+  description?: string;
+  patient_criteria?: string;
+  is_public: boolean;
+  form_schema?: Record<string, any>;
+  pdf_template?: Record<string, any>;
+}
+
+interface CustomFormUploadProps {
+  onFormSaved?: () => void;
+  editingForm?: CustomForm | null;
+}
+
+export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadProps) {
+  const { session, getIdToken } = useAuth();
   const [uploadState, setUploadState] = useState<UploadState>('input');
   const [files, setFiles] = useState<File[]>([]);
   const [formName, setFormName] = useState('');
@@ -35,6 +61,24 @@ export function CustomFormUpload() {
   const [isPublic, setIsPublic] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle editing existing form
+  useEffect(() => {
+    if (editingForm) {
+      // Populate the review screen with existing form data
+      setExtractedData({
+        form_id: editingForm.id,
+        form_name: editingForm.form_name,
+        specialty: editingForm.specialty,
+        form_schema: editingForm.form_schema || {},
+        pdf_template: editingForm.pdf_template || {},
+        description: editingForm.description,
+        patient_criteria: editingForm.patient_criteria,
+        is_public: editingForm.is_public
+      });
+      setUploadState('reviewing');
+    }
+  }, [editingForm]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -63,6 +107,11 @@ export function CustomFormUpload() {
   };
 
   const handleUpload = async () => {
+    // Prevent duplicate submissions
+    if (uploadState === 'uploading') {
+      return;
+    }
+
     // Validate inputs
     if (!formName.trim()) {
       setError('Form name is required');
@@ -111,14 +160,45 @@ export function CustomFormUpload() {
       const result: ExtractionResult = await response.json();
 
       if (result.success) {
+        // ✅ VALIDATE SCHEMA IS NOT EMPTY
+        if (!result.form_schema || typeof result.form_schema !== 'object') {
+          setError('Backend returned invalid schema - not an object. Please try again with different images.');
+          setUploadState('input');
+          return;
+        }
+
+        const schemaKeys = Object.keys(result.form_schema);
+        if (schemaKeys.length === 0) {
+          setError(
+            'Form extraction failed: No fields detected in the uploaded images.\n\n' +
+            'Troubleshooting:\n' +
+            '• Ensure images are clear and high resolution\n' +
+            '• Check that form fields are visible in the images\n' +
+            '• Verify images are not corrupted\n' +
+            '• Try uploading images in a different format (JPG/PNG)'
+          );
+          setUploadState('input');
+          return;
+        }
+
+        // Show warning if very few fields
+        if (schemaKeys.length < 3) {
+          console.warn(`⚠️  Only ${schemaKeys.length} fields extracted - this seems low`);
+        }
+
+        console.log(`✅ Extracted ${schemaKeys.length} fields from form images`);
+
         // CHANGED: Show review screen instead of success
         setExtractedData({
           form_name: formName,
           specialty: specialty,
-          schema: result.schema,
+          form_schema: result.form_schema,
           pdf_template: result.pdf_template,
           description: description,
-          is_public: isPublic
+          patient_criteria: result.patient_criteria,
+          is_public: isPublic,
+          metadata: result.metadata,  // Include full metadata
+          logo_info: result.metadata?.logo_info
         });
         setUploadState('reviewing');
       } else {
@@ -131,23 +211,82 @@ export function CustomFormUpload() {
     }
   };
 
-  const handleSave = async (schema: any, pdfTemplate: any) => {
-    try {
-      const response = await fetch(`${API_URL}/api/custom-forms/save`, {
-        method: 'POST',
+  const handleSave = async (
+    schema: any,
+    pdfTemplate: any,
+    metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean }
+  ) => {
+    // ✅ VALIDATE SCHEMA BEFORE SAVING
+    if (!schema || typeof schema !== 'object') {
+      setError('Invalid schema format - cannot save');
+      return;
+    }
+
+    const fieldCount = Object.keys(schema).length;
+    if (fieldCount === 0) {
+      setError(
+        'Cannot save form with no fields. ' +
+        'Please ensure the schema contains at least one field definition.'
+      );
+      return;
+    }
+
+    // Warn if suspiciously few fields
+    if (fieldCount < 5) {
+      const confirm = window.confirm(
+        `This form only has ${fieldCount} fields. This seems unusually low. ` +
+        `Are you sure you want to save?`
+      );
+      if (!confirm) return;
+    }
+
+    console.log(`💾 Saving form with ${fieldCount} fields`);
+
+    const makeRequest = async (token: string) => {
+      const isEditing = !!extractedData?.form_id;
+      const url = isEditing
+        ? `${API_URL}/api/custom-forms/forms/${extractedData!.form_id}`
+        : `${API_URL}/api/custom-forms/save`;
+      const method = isEditing ? 'PUT' : 'POST';
+
+      return fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
-          ...(session?.access_token && { 'Authorization': `Bearer ${session.access_token}` })
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          form_name: extractedData!.form_name,
-          specialty: extractedData!.specialty,
-          schema: schema,
+          form_name: metadata.formName,
+          specialty: metadata.specialty,
+          form_schema: schema,
           pdf_template: pdfTemplate,
-          description: extractedData!.description,
-          is_public: extractedData!.is_public
+          description: metadata.description,
+          patient_criteria: metadata.patientCriteria,
+          is_public: metadata.isPublic,
+          metadata: extractedData?.metadata  // Include metadata with logo_info and logo_url
         })
       });
+    };
+
+    try {
+      // Get fresh token (Firebase SDK will auto-refresh if expired)
+      const token = await getIdToken();
+      if (!token) {
+        throw new Error('Authentication required. Please sign in again.');
+      }
+
+      let response = await makeRequest(token);
+
+      // If 401, token might have expired between getIdToken and request
+      // Force refresh and retry once
+      if (response.status === 401) {
+        console.log('🔄 Token expired, forcing refresh and retrying...');
+        const freshToken = await getIdToken(true); // Force refresh
+        if (!freshToken) {
+          throw new Error('Authentication required. Please sign in again.');
+        }
+        response = await makeRequest(freshToken);
+      }
 
       if (response.ok) {
         setUploadState('complete');
@@ -162,6 +301,9 @@ export function CustomFormUpload() {
         // Reset file input
         const fileInput = document.getElementById('form-images') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
+
+        // Notify parent to refresh form list
+        onFormSaved?.();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to save form');
@@ -185,10 +327,12 @@ export function CustomFormUpload() {
         <SchemaReviewEditor
           formName={extractedData.form_name}
           specialty={extractedData.specialty}
-          initialSchema={extractedData.schema}
+          initialSchema={extractedData.form_schema}
           initialPdfTemplate={extractedData.pdf_template}
           description={extractedData.description}
+          patientCriteria={extractedData.patient_criteria}
           isPublic={extractedData.is_public}
+          logoInfo={extractedData.logo_info}
           onSave={handleSave}
           onCancel={handleCancel}
         />
@@ -240,7 +384,7 @@ export function CustomFormUpload() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                  <h4 className="font-medium text-blue-900">AI Analysis in Progress with Claude Opus 4.5</h4>
+                  <h4 className="font-medium text-blue-900">AI Analysis in Progress</h4>
                   <p className="text-sm text-blue-700 mt-1">
                     Extracting form schema and PDF layout from your images. This typically takes 30-90 seconds.
                   </p>
@@ -388,7 +532,7 @@ export function CustomFormUpload() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Analyzing with Opus 4.5... (30-90s)
+              Analyzing...
             </>
           ) : (
             <>
