@@ -21,7 +21,7 @@ interface AddFormModalProps {
 }
 
 export function AddFormModal({ onClose, onFormAdded }: AddFormModalProps) {
-  const { session, doctorProfile } = useAuth();
+  const { getIdToken, doctorProfile } = useAuth();
   const [forms, setForms] = useState<CustomForm[]>([]);
   const [specialty, setSpecialty] = useState<string>('');
   const [search, setSearch] = useState<string>('');
@@ -38,9 +38,12 @@ export function AddFormModal({ onClose, onFormAdded }: AddFormModalProps) {
     setError(null);
 
     try {
+      // Get fresh token (force refresh to avoid expired tokens)
+      const token = await getIdToken(true);
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const params = new URLSearchParams();
@@ -78,9 +81,12 @@ export function AddFormModal({ onClose, onFormAdded }: AddFormModalProps) {
     setError(null);
 
     try {
+      // Get fresh token (force refresh to avoid expired tokens)
+      const token = await getIdToken(true);
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(
