@@ -951,6 +951,25 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         // Set determined consultation type so form auto-selects
         if (data.consultation_type) {
           setDeterminedConsultationType(data.consultation_type);
+
+          // If form is not currently visible, show it
+          if (selectedFormType !== data.consultation_type) {
+            setSelectedFormType(data.consultation_type);
+          }
+
+          // Emit event to update any already-mounted form with the extracted data
+          // Use setTimeout to ensure form component has mounted if it wasn't visible before
+          setTimeout(() => {
+            consultationEventBus.emit('diarization_chunk_complete', {
+              segments: [],
+              chunk_index: -1,
+              form_type: data.consultation_type,
+              patient_id: preFilledPatient?.id,
+              field_updates: data.field_updates || {},
+              confidence_scores: data.field_confidence || {}
+            });
+            console.log(`📤 Emitted form update event for ${data.consultation_type} with ${Object.keys(data.field_updates || {}).length} fields`);
+          }, 300);
         }
       } else {
         console.warn('⚠️ Form auto-fill unsuccessful:', data.error);
