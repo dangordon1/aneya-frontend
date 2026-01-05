@@ -331,6 +331,10 @@ export interface Doctor {
   clinic_name: string | null;
   clinic_address: string | null;
   clinic_logo_url: string | null; // Public URL to clinic logo in GCS (appears on PDF reports)
+  primary_color?: string | null; // Primary brand color for PDFs (hex format, e.g., #0c3555)
+  accent_color?: string | null; // Accent brand color for PDFs (hex format, e.g., #1d9e99)
+  text_color?: string | null; // Text color for PDFs (hex format, e.g., #6b7280)
+  light_gray_color?: string | null; // Light gray for borders/backgrounds (hex format, e.g., #d1d5db)
   default_appointment_duration: number;
   timezone: string;
   is_active: boolean;

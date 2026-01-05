@@ -58,7 +58,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => Promise<{ error: AuthError | null; session: Session | null }>;
   signInWithGoogle: (role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
-  getIdToken: () => Promise<string | null>;
+  getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   refreshProfiles: () => Promise<void>;
   refreshDoctorProfile: () => Promise<void>;
@@ -730,12 +730,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Get current ID token (for API calls)
-  const getIdToken = async (): Promise<string | null> => {
+  const getIdToken = async (forceRefresh: boolean = false): Promise<string | null> => {
     const currentUser = auth.currentUser;
     if (!currentUser) return null;
 
     try {
-      return await currentUser.getIdToken();
+      return await currentUser.getIdToken(forceRefresh);
     } catch (err) {
       console.error('❌ Error getting ID token:', err);
       return null;
