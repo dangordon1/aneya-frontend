@@ -13,6 +13,7 @@ interface ExtractionResult {
   form_schema: Record<string, any>;
   pdf_template: Record<string, any>;
   metadata: Record<string, any>;
+  patient_criteria?: string;
   error?: string;
 }
 

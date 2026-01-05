@@ -34,7 +34,7 @@ export function SchemaReviewEditor({
 }: SchemaReviewEditorProps) {
   const { doctorProfile } = useAuth();
   const [schema, setSchema] = useState(initialSchema);
-  const [pdfTemplate, setPdfTemplate] = useState(initialPdfTemplate);
+  const [pdfTemplate] = useState(initialPdfTemplate);
   const [formName, setFormName] = useState(initialFormName);
   const [specialty, setSpecialty] = useState(initialSpecialty);
   const [description, setDescription] = useState(initialDescription || '');
