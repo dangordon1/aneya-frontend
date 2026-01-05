@@ -36,7 +36,7 @@ export function CustomFormsSection() {
   };
 
   return (
-    <div className="pt-4 border-t border-gray-200">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-medium text-aneya-navy">Custom Forms</h3>
