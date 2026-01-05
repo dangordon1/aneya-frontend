@@ -3,7 +3,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { UpdateDoctorInput, MedicalSpecialtyType } from '../../types/database';
 import { MEDICAL_SPECIALTIES } from '../../types/database';
-import { CustomFormsSection } from './CustomFormsSection';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -573,9 +572,6 @@ export function DoctorProfileTab() {
               </div>
             </div>
           </div>
-
-          {/* Custom Forms Section */}
-          <CustomFormsSection />
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-gray-200 flex gap-3 justify-end">

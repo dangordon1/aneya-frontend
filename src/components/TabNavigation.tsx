@@ -1,4 +1,4 @@
-export type DoctorTab = 'appointments' | 'patients' | 'messages' | 'profile' | 'alldoctors' | 'feedback';
+export type DoctorTab = 'appointments' | 'patients' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'feedback';
 
 interface TabNavigationProps {
   activeTab: DoctorTab;
@@ -67,6 +67,18 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
             `}
           >
             My Details
+          </button>
+          <button
+            onClick={() => onTabChange('forms')}
+            className={`
+              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              ${activeTab === 'forms'
+                ? 'bg-aneya-navy text-white'
+                : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
+              }
+            `}
+          >
+            My Forms
           </button>
           {isAdmin && (
             <button

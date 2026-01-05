@@ -30,6 +30,7 @@ const PatientDetailView = lazy(() => import('./components/PatientDetailView').th
 // InvitePatientsTab removed - feature disabled for now
 const DoctorMessages = lazy(() => import('./components/doctor-portal/DoctorMessages').then(m => ({ default: m.DoctorMessages })));
 const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorProfileTab').then(m => ({ default: m.DoctorProfileTab })));
+const CustomFormsTab = lazy(() => import('./components/doctor-portal/CustomFormsTab').then(m => ({ default: m.CustomFormsTab })));
 const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 // ✨ NEW: Single dynamic form component for all consultation types
@@ -38,7 +39,7 @@ const DynamicConsultationForm = lazy(() => import('./components/doctor-portal/Dy
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'alldoctors' | 'infertility-form' | 'view-consultation-form' | 'feedback-dashboard';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'infertility-form' | 'view-consultation-form' | 'feedback-dashboard';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -1147,7 +1148,7 @@ function MainApp() {
       </header>
 
       {/* Tab Navigation - only show on appointments/patients/messages/profile/alldoctors screens */}
-      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail' || currentScreen === 'messages' || currentScreen === 'profile' || currentScreen === 'alldoctors' || currentScreen === 'feedback-dashboard') && (
+      {(currentScreen === 'appointments' || currentScreen === 'patients' || currentScreen === 'patient-detail' || currentScreen === 'messages' || currentScreen === 'profile' || currentScreen === 'forms' || currentScreen === 'alldoctors' || currentScreen === 'feedback-dashboard') && (
         <TabNavigation
           activeTab={activeTab}
           onTabChange={(tab) => {
@@ -1226,6 +1227,10 @@ function MainApp() {
 
           {currentScreen === 'profile' && (
             <DoctorProfileTab />
+          )}
+
+          {currentScreen === 'forms' && (
+            <CustomFormsTab />
           )}
 
           {currentScreen === 'alldoctors' && isAdmin && (
