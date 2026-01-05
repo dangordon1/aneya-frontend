@@ -327,7 +327,7 @@ export function AppointmentDetailModal({
                     className="px-3 py-2 bg-aneya-navy text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
                   >
                     <Brain className="w-4 h-4" />
-                    Run AI Analysis
+                    AI Analysis
                   </button>
                 )}
                 {isAdmin && onDelete && (

@@ -504,7 +504,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                 className="w-full px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
-                Analyse Consultation
+                AI Analysis
               </button>
             </div>
           ) : null}
@@ -549,7 +549,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                 className="flex-1 px-4 py-2 bg-aneya-navy text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
-                Run AI Analysis
+                AI Analysis
               </button>
             )}
             {onDelete && (
