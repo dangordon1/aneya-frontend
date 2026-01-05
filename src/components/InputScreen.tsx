@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Download } from 'lucide-react';
 import { PrimaryButton } from './PrimaryButton';
 import { Patient, AppointmentWithPatient, ConsultationLanguage, CONSULTATION_LANGUAGES, isSarvamLanguage } from '../types/database';
 import { getPatientAge } from '../utils/dateHelpers';
@@ -259,6 +260,9 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Async transcription processing state
   const [pendingConsultationId, setPendingConsultationId] = useState<string | null>(null);
   const [showProcessingOverlay, setShowProcessingOverlay] = useState(false);
+
+  // PDF generation state
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   // CRITICAL: Lock to prevent parallel chunk processing
   // Sarvam batch jobs take 30-120s, so we must process chunks sequentially
@@ -1114,6 +1118,47 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       alert('Failed to summarize consultation. Please try again.');
     } finally {
       setIsSummarizing(false);
+    }
+  };
+
+  // Download consultation form PDF
+  const handleDownloadPdf = async () => {
+    if (!appointmentContext?.id) {
+      console.error('Cannot download PDF: No appointment ID');
+      return;
+    }
+
+    setGeneratingPdf(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/appointments/${appointmentContext.id}/consultation-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate PDF');
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const patientName = (preFilledPatient?.name || appointmentContext.patient?.name || 'Patient').replace(/\s+/g, '_');
+      a.download = `consultation_form_${patientName}_${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
@@ -2807,6 +2852,20 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               onFeedback={handleFeedback}
               feedbackSubmitted={feedbackSubmitted}
             />
+
+            {/* Download PDF button - shown after consultation is summarized */}
+            {appointmentContext && selectedFormType && (
+              <div className="mt-4">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={generatingPdf}
+                  className="w-full px-6 py-3 bg-aneya-teal text-white rounded-[10px] font-medium text-[15px] hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                  {generatingPdf ? 'Generating PDF...' : 'Download PDF Form'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
