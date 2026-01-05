@@ -38,8 +38,8 @@ export function AddFormModal({ onClose, onFormAdded }: AddFormModalProps) {
     setError(null);
 
     try {
-      // Get fresh token (force refresh to avoid expired tokens)
-      const token = await getIdToken(true);
+      // Get token (Firebase automatically refreshes if expired)
+      const token = await getIdToken();
 
       const headers: Record<string, string> = {};
       if (token) {
@@ -81,8 +81,8 @@ export function AddFormModal({ onClose, onFormAdded }: AddFormModalProps) {
     setError(null);
 
     try {
-      // Get fresh token (force refresh to avoid expired tokens)
-      const token = await getIdToken(true);
+      // Get token (Firebase automatically refreshes if expired)
+      const token = await getIdToken();
 
       const headers: Record<string, string> = {};
       if (token) {
