@@ -1,27 +1,39 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { SchemaReviewEditor } from './SchemaReviewEditor';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-interface UploadResult {
+type UploadState = 'input' | 'uploading' | 'reviewing' | 'complete';
+
+interface ExtractionResult {
   success: boolean;
-  form_id?: string;
   form_name: string;
   specialty: string;
-  field_count?: number;
-  section_count?: number;
+  schema: Record<string, any>;
+  pdf_template: Record<string, any>;
+  metadata: Record<string, any>;
   error?: string;
+}
+
+interface ExtractedData {
+  form_name: string;
+  specialty: string;
+  schema: Record<string, any>;
+  pdf_template: Record<string, any>;
+  description?: string;
+  is_public: boolean;
 }
 
 export function CustomFormUpload() {
   const { session } = useAuth();
+  const [uploadState, setUploadState] = useState<UploadState>('input');
   const [files, setFiles] = useState<File[]>([]);
   const [formName, setFormName] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,9 +85,8 @@ export function CustomFormUpload() {
       return;
     }
 
-    setUploading(true);
+    setUploadState('uploading');
     setError(null);
-    setUploadResult(null);
 
     try {
       const formData = new FormData();
@@ -97,63 +108,146 @@ export function CustomFormUpload() {
         }
       });
 
-      const result: UploadResult = await response.json();
+      const result: ExtractionResult = await response.json();
 
       if (result.success) {
-        setUploadResult(result);
+        // CHANGED: Show review screen instead of success
+        setExtractedData({
+          form_name: formName,
+          specialty: specialty,
+          schema: result.schema,
+          pdf_template: result.pdf_template,
+          description: description,
+          is_public: isPublic
+        });
+        setUploadState('reviewing');
+      } else {
+        setError(result.error || 'Upload failed');
+        setUploadState('input');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      setUploadState('input');
+    }
+  };
+
+  const handleSave = async (schema: any, pdfTemplate: any) => {
+    try {
+      const response = await fetch(`${API_URL}/api/custom-forms/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token && { 'Authorization': `Bearer ${session.access_token}` })
+        },
+        body: JSON.stringify({
+          form_name: extractedData!.form_name,
+          specialty: extractedData!.specialty,
+          schema: schema,
+          pdf_template: pdfTemplate,
+          description: extractedData!.description,
+          is_public: extractedData!.is_public
+        })
+      });
+
+      if (response.ok) {
+        setUploadState('complete');
         // Reset form
         setFiles([]);
         setFormName('');
         setSpecialty('');
         setDescription('');
         setIsPublic(false);
+        setExtractedData(null);
 
         // Reset file input
         const fileInput = document.getElementById('form-images') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
       } else {
-        setError(result.error || 'Upload failed');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to save form');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
+      setError(err instanceof Error ? err.message : 'Failed to save form. Please try again.');
+      throw err; // Re-throw so SchemaReviewEditor knows it failed
     }
+  };
+
+  const handleCancel = () => {
+    setUploadState('input');
+    setExtractedData(null);
+    setError(null);
   };
 
   return (
     <div className="space-y-6">
-      {/* Success Message */}
-      {uploadResult && uploadResult.success && (
+      {/* Reviewing State - Show Schema Editor */}
+      {uploadState === 'reviewing' && extractedData && (
+        <SchemaReviewEditor
+          formName={extractedData.form_name}
+          specialty={extractedData.specialty}
+          initialSchema={extractedData.schema}
+          initialPdfTemplate={extractedData.pdf_template}
+          description={extractedData.description}
+          isPublic={extractedData.is_public}
+          onSave={handleSave}
+          onCancel={handleCancel}
+        />
+      )}
+
+      {/* Complete State - Success Message */}
+      {uploadState === 'complete' && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <h4 className="font-medium text-green-900">Form Created Successfully!</h4>
+              <h4 className="font-medium text-green-900">Form Saved Successfully!</h4>
               <p className="text-sm text-green-700 mt-1">
-                "{uploadResult.form_name}" has been generated with {uploadResult.field_count} fields in {uploadResult.section_count} sections.
+                Your custom form has been saved as a draft. Review it in "My Forms" and activate it when ready.
               </p>
-              <p className="text-sm text-green-700 mt-1">
-                The form is in draft status. Review it in "My Forms" and activate it when ready.
-              </p>
+              <button
+                onClick={() => setUploadState('input')}
+                className="mt-3 px-4 py-2 bg-aneya-navy text-white rounded-lg text-sm hover:bg-opacity-90"
+              >
+                Upload Another Form
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        </div>
-      )}
+      {/* Input or Uploading State - Show Upload Form */}
+      {(uploadState === 'input' || uploadState === 'uploading') && (
+        <>
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Uploading Progress Message */}
+          {uploadState === 'uploading' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-blue-600 mt-0.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <h4 className="font-medium text-blue-900">AI Analysis in Progress with Claude Opus 4.5</h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Extracting form schema and PDF layout from your images. This typically takes 30-90 seconds.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
       {/* Form Name */}
       <div>
@@ -166,7 +260,7 @@ export function CustomFormUpload() {
           onChange={(e) => setFormName(e.target.value)}
           placeholder="e.g., neurology_assessment"
           className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-          disabled={uploading}
+          disabled={uploadState === 'uploading'}
         />
         <p className="text-xs text-gray-500 mt-1">
           Use snake_case (lowercase letters, numbers, underscores only)
@@ -182,7 +276,7 @@ export function CustomFormUpload() {
           value={specialty}
           onChange={(e) => setSpecialty(e.target.value)}
           className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-          disabled={uploading}
+          disabled={uploadState === 'uploading'}
         >
           <option value="">Select specialty...</option>
           <option value="cardiology">Cardiology</option>
@@ -210,7 +304,7 @@ export function CustomFormUpload() {
           placeholder="Brief description of what this form is used for..."
           rows={3}
           className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
-          disabled={uploading}
+          disabled={uploadState === 'uploading'}
         />
       </div>
 
@@ -227,7 +321,7 @@ export function CustomFormUpload() {
             accept=".heic,.jpg,.jpeg,.png,.HEIC,.JPG,.JPEG,.PNG"
             onChange={handleFileChange}
             className="hidden"
-            disabled={uploading}
+            disabled={uploadState === 'uploading'}
           />
           <label
             htmlFor="form-images"
@@ -269,7 +363,7 @@ export function CustomFormUpload() {
           checked={isPublic}
           onChange={(e) => setIsPublic(e.target.checked)}
           className="mt-1 h-4 w-4 rounded border-gray-300 text-aneya-teal focus:ring-aneya-teal"
-          disabled={uploading}
+          disabled={uploadState === 'uploading'}
         />
         <div>
           <label htmlFor="is_public" className="text-sm font-medium text-gray-700">
@@ -285,44 +379,28 @@ export function CustomFormUpload() {
       <div className="flex gap-3 justify-end pt-4">
         <button
           onClick={handleUpload}
-          disabled={!formName || !specialty || files.length < 2 || uploading}
+          disabled={!formName || !specialty || files.length < 2 || uploadState === 'uploading'}
           className="px-6 py-3 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {uploading ? (
+          {uploadState === 'uploading' ? (
             <>
               <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Generating Form... (30-60s)
+              Analyzing with Opus 4.5... (30-90s)
             </>
           ) : (
             <>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              Upload & Generate Form
+              Upload & Extract Form
             </>
           )}
         </button>
       </div>
-
-      {/* Info Box */}
-      {uploading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-blue-600 mt-0.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <h4 className="font-medium text-blue-900">AI Analysis in Progress</h4>
-              <p className="text-sm text-blue-700 mt-1">
-                Our AI is analyzing your form images to extract fields and structure.
-                This typically takes 30-60 seconds.
-              </p>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
