@@ -375,7 +375,14 @@ export function DynamicConsultationForm({
           if (data.form) {
             console.log(`📝 Loaded existing form:`, data.form);
             setFormId(data.form.id);
-            survey.data = data.form.form_data || {};
+
+            // Use mergeData instead of direct assignment for proper re-render
+            const formData = data.form.form_data || {};
+            if (Object.keys(formData).length > 0) {
+              console.log(`📝 Merging ${Object.keys(formData).length} existing fields into survey`);
+              survey.mergeData(formData);
+              survey.render(); // Force re-render to display loaded data
+            }
           }
         }
       } catch (error) {
