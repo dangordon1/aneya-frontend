@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react'
 import { execSync } from 'child_process'
 
 function getGitBranch(): string {
+  // Use Vercel's environment variable first (for production builds)
+  if (process.env.VERCEL_GIT_COMMIT_REF) {
+    return process.env.VERCEL_GIT_COMMIT_REF
+  }
+
+  // Fallback to git command (for local development)
   try {
     return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim()
   } catch {
