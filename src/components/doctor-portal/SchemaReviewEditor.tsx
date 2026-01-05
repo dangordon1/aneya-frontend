@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SchemaReviewEditorProps {
   formName: string;
@@ -6,24 +7,41 @@ interface SchemaReviewEditorProps {
   initialSchema: Record<string, any>;
   initialPdfTemplate: Record<string, any>;
   description?: string;
+  patientCriteria?: string;
   isPublic: boolean;
-  onSave: (schema: any, pdfTemplate: any) => Promise<void>;
+  logoInfo?: {
+    has_logo: boolean;
+    logo_position?: string;
+    logo_description?: string;
+    facility_name?: string;
+    logo_url?: string;
+  };
+  onSave: (schema: any, pdfTemplate: any, metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean }) => Promise<void>;
   onCancel: () => void;
 }
 
 export function SchemaReviewEditor({
-  formName,
-  specialty,
+  formName: initialFormName,
+  specialty: initialSpecialty,
   initialSchema,
   initialPdfTemplate,
-  description,
-  isPublic,
+  description: initialDescription,
+  patientCriteria: initialPatientCriteria,
+  isPublic: initialIsPublic,
+  logoInfo,
   onSave,
   onCancel
 }: SchemaReviewEditorProps) {
+  const { doctorProfile } = useAuth();
   const [schema, setSchema] = useState(initialSchema);
   const [pdfTemplate, setPdfTemplate] = useState(initialPdfTemplate);
+  const [formName, setFormName] = useState(initialFormName);
+  const [specialty, setSpecialty] = useState(initialSpecialty);
+  const [description, setDescription] = useState(initialDescription || '');
+  const [patientCriteria, setPatientCriteria] = useState(initialPatientCriteria || '');
+  const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Convert schema object to sections array for easier editing
   const sections = Object.entries(schema).map(([name, data]) => ({
@@ -33,8 +51,18 @@ export function SchemaReviewEditor({
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      await onSave(schema, pdfTemplate);
+      await onSave(schema, pdfTemplate, {
+        formName,
+        specialty,
+        description,
+        patientCriteria,
+        isPublic
+      });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save form');
+      console.error('Save error:', error);
     } finally {
       setSaving(false);
     }
@@ -73,22 +101,162 @@ export function SchemaReviewEditor({
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900">Review Extracted Form Schema</h3>
+        <h3 className="font-semibold text-blue-900">Review & Edit Form</h3>
         <p className="text-sm text-blue-700 mt-1">
-          Review and edit the fields extracted by AI. Add, remove, or modify fields as needed.
+          Edit form details and schema. All fields below are editable.
         </p>
-        <div className="mt-2 space-y-1">
-          <p className="text-xs text-blue-600">
-            <span className="font-medium">Form Name:</span> {formName}
-          </p>
-          <p className="text-xs text-blue-600">
-            <span className="font-medium">Specialty:</span> {specialty}
-          </p>
-          {description && (
-            <p className="text-xs text-blue-600">
-              <span className="font-medium">Description:</span> {description}
-            </p>
+      </div>
+
+      {/* Extracted Logo Information */}
+      {logoInfo && logoInfo.has_logo && (
+        <div className="bg-aneya-navy border border-aneya-navy rounded-lg p-4">
+          <h4 className="font-medium text-white text-sm mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Extracted Logo Information
+          </h4>
+
+          {/* Display extracted or clinic logo if available */}
+          {(logoInfo.logo_url || doctorProfile?.clinic_logo_url) && (
+            <div className="mb-4 flex justify-center">
+              <div className="bg-white rounded-lg p-3 inline-block">
+                <img
+                  src={logoInfo.logo_url || doctorProfile?.clinic_logo_url || ''}
+                  alt="Clinic Logo"
+                  className="max-h-20 max-w-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
           )}
+
+          <div className="space-y-2 text-sm">
+            {logoInfo.facility_name && (
+              <div className="flex items-start gap-2">
+                <span className="text-gray-300 font-medium min-w-24">Facility:</span>
+                <span className="text-white">{logoInfo.facility_name}</span>
+              </div>
+            )}
+            {logoInfo.logo_description && (
+              <div className="flex items-start gap-2">
+                <span className="text-gray-300 font-medium min-w-24">Description:</span>
+                <span className="text-white">{logoInfo.logo_description}</span>
+              </div>
+            )}
+            {logoInfo.logo_position && (
+              <div className="flex items-start gap-2">
+                <span className="text-gray-300 font-medium min-w-24">Position:</span>
+                <span className="text-white capitalize">{logoInfo.logo_position.replace('-', ' ')}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-300 mt-2 italic">
+            {logoInfo.logo_url
+              ? "Logo extracted from form and will be saved to your profile for use on PDFs"
+              : doctorProfile?.clinic_logo_url
+              ? "Your clinic logo will appear on generated PDFs"
+              : "Logo detected - it will be extracted and saved when you save this form"}
+          </p>
+        </div>
+      )}
+
+      {/* Form Metadata - Editable Fields */}
+      <div className="space-y-4 bg-white border border-gray-200 rounded-lg p-4">
+        <h4 className="font-medium text-gray-900 text-sm">Form Details</h4>
+
+        {/* Form Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Form Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+            placeholder="e.g., neurology_assessment"
+            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Use snake_case (lowercase letters, numbers, underscores only)
+          </p>
+        </div>
+
+        {/* Specialty */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Specialty <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={specialty}
+            onChange={(e) => setSpecialty(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          >
+            <option value="">Select specialty...</option>
+            <option value="cardiology">Cardiology</option>
+            <option value="neurology">Neurology</option>
+            <option value="pediatrics">Pediatrics</option>
+            <option value="orthopedics">Orthopedics</option>
+            <option value="dermatology">Dermatology</option>
+            <option value="psychiatry">Psychiatry</option>
+            <option value="internal_medicine">Internal Medicine</option>
+            <option value="emergency_medicine">Emergency Medicine</option>
+            <option value="surgery">Surgery</option>
+            <option value="obstetrics_gynecology">Obstetrics & Gynecology</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        {/* Description */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Description (Optional)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Brief description of what this form is used for..."
+            rows={2}
+            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          />
+        </div>
+
+        {/* Patient Criteria */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Patient Criteria (Optional)
+          </label>
+          <textarea
+            value={patientCriteria}
+            onChange={(e) => setPatientCriteria(e.target.value)}
+            placeholder="Which patients or clinical scenarios is this form for? (e.g., 'Pregnant women in antenatal care between 12-40 weeks', 'Patients with neurological symptoms requiring initial assessment')"
+            rows={3}
+            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Helps AI select the right form when multiple forms are available for your specialty
+          </p>
+        </div>
+
+        {/* Public Sharing */}
+        <div className="flex items-start gap-3 bg-gray-50 p-3 rounded">
+          <input
+            type="checkbox"
+            id="is_public_edit"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-aneya-teal focus:ring-aneya-teal"
+          />
+          <div>
+            <label htmlFor="is_public_edit" className="text-sm font-medium text-gray-700">
+              Make this form public
+            </label>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Allow other doctors to discover and use this form template
+            </p>
+          </div>
         </div>
       </div>
 
@@ -116,21 +284,67 @@ export function SchemaReviewEditor({
         Add Section
       </button>
 
-      {/* PDF Preview (read-only) */}
+      {/* Preview PDF Button */}
       <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-        <h4 className="font-medium text-gray-900 mb-2">PDF Layout Preview</h4>
-        <p className="text-sm text-gray-600 mb-2">
-          PDF template has been generated automatically. Full editing coming soon.
+        <button
+          onClick={async () => {
+            try {
+              const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+              const response = await fetch(`${API_URL}/api/custom-forms/preview-pdf`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  form_name: formName,
+                  form_schema: schema,
+                  pdf_template: pdfTemplate,
+                  clinic_logo_url: doctorProfile?.clinic_logo_url || null,
+                  clinic_name: doctorProfile?.clinic_name || null,
+                  primary_color: doctorProfile?.primary_color || null,
+                  accent_color: doctorProfile?.accent_color || null,
+                  text_color: doctorProfile?.text_color || null,
+                  light_gray_color: doctorProfile?.light_gray_color || null
+                })
+              });
+
+              if (response.ok) {
+                // Get PDF blob and open in new tab
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+              } else {
+                const error = await response.json();
+                alert(`Failed to generate PDF preview: ${error.detail || 'Unknown error'}`);
+              }
+            } catch (err) {
+              console.error('PDF preview error:', err);
+              alert('Failed to generate PDF preview. Please try again.');
+            }
+          }}
+          className="w-full px-4 py-2 bg-aneya-teal text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm font-medium"
+        >
+          Preview PDF
+        </button>
+        <p className="text-xs text-gray-500 mt-2 text-center italic">
+          Preview how the form will appear as a PDF with your clinic logo
         </p>
-        <details className="text-xs">
-          <summary className="cursor-pointer text-gray-700 hover:text-gray-900">
-            View JSON
-          </summary>
-          <pre className="bg-white p-2 rounded mt-2 overflow-auto max-h-40 border border-gray-200">
-            {JSON.stringify(pdfTemplate, null, 2)}
-          </pre>
-        </details>
       </div>
+
+      {/* Save Error Display */}
+      {saveError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h4 className="font-medium text-red-900">Failed to Save Form</h4>
+              <p className="text-sm text-red-700 mt-1">{saveError}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-3 justify-end pt-4 border-t">
@@ -345,7 +559,16 @@ function FieldRow({ field, onUpdate, onDelete }: FieldRowProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <span className="text-sm font-medium text-gray-700">{field.label}</span>
-          <span className="text-xs text-gray-500">({field.type})</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+            field.type === 'array' && field.input_type?.includes('table')
+              ? 'bg-purple-50 text-purple-700'
+              : 'bg-gray-100 text-gray-700'
+          }`}>
+            {field.type === 'array' && field.input_type?.includes('table')
+              ? `Table (${field.row_fields?.length || 0} cols)`
+              : field.type
+            }
+          </span>
         </button>
         <button
           onClick={onDelete}
@@ -383,6 +606,7 @@ function FieldRow({ field, onUpdate, onDelete }: FieldRowProps) {
             <option value="boolean">Boolean</option>
             <option value="date">Date</option>
             <option value="object">Object</option>
+            <option value="array">Array/Table</option>
           </select>
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -393,6 +617,67 @@ function FieldRow({ field, onUpdate, onDelete }: FieldRowProps) {
             />
             Required
           </label>
+
+          {/* Table-specific properties - show only when type="array" and input_type="table" or "table_transposed" */}
+          {field.type === 'array' && field.input_type?.includes('table') && (
+            <div className="space-y-2 border-t pt-2 mt-2">
+              {/* Table Type Badge */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-700">Table Type:</span>
+                <span className={`px-2 py-1 rounded text-xs ${
+                  field.input_type === 'table_transposed'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {field.input_type === 'table_transposed' ? 'Transposed Table' : 'Regular Table'}
+                </span>
+              </div>
+
+              {/* Column Names */}
+              {field.column_names && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700">Columns:</label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {field.column_names.map((col: string, idx: number) => (
+                      <span key={idx} className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        {col}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Row Names (for transposed tables) */}
+              {field.row_names && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700">Row Attributes:</label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {field.row_names.map((row: string, idx: number) => (
+                      <span key={idx} className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        {row}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Row Fields Preview */}
+              {field.row_fields && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700">
+                    Field Structure ({field.row_fields.length} fields):
+                  </label>
+                  <div className="mt-1 text-xs text-gray-600 space-y-1 max-h-32 overflow-y-auto bg-gray-50 p-2 rounded">
+                    {field.row_fields.map((rf: any, idx: number) => (
+                      <div key={idx}>
+                        • {rf.label || rf.name} ({rf.type})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
