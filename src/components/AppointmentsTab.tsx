@@ -30,6 +30,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithPatient | null>(null);
   const [preFilledDate, setPreFilledDate] = useState<Date | null>(null);
@@ -514,6 +515,25 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
               </svg>
               Set Availability
             </button>
+            <button
+              onClick={() => setIsCalendarVisible(!isCalendarVisible)}
+              className="px-6 py-3 bg-white border border-aneya-teal text-aneya-teal rounded-[10px] font-medium text-[14px] hover:bg-aneya-teal/5 transition-colors flex items-center gap-2"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              {isCalendarVisible ? 'Hide Calendar' : 'View Calendar'}
+            </button>
           </div>
         </div>
 
@@ -570,15 +590,17 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
             )}
           </div>
 
-          {/* Right column: Calendar */}
-          <div className="w-full lg:w-[350px] flex-shrink-0">
-            <CompactCalendar
-              appointments={appointments}
-              selectedDate={selectedDate}
-              onDateChange={setSelectedDate}
-              onExpand={() => setIsCalendarExpanded(true)}
-            />
-          </div>
+          {/* Right column: Calendar (conditionally rendered) */}
+          {isCalendarVisible && (
+            <div className="w-full lg:w-[350px] flex-shrink-0">
+              <CompactCalendar
+                appointments={appointments}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                onExpand={() => setIsCalendarExpanded(true)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Modals */}
