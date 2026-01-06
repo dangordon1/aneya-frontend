@@ -26,7 +26,7 @@ interface CustomFormLibraryProps {
 }
 
 export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
-  const { session, doctorProfile } = useAuth();
+  const { getIdToken, doctorProfile } = useAuth();
   const [libraryForms, setLibraryForms] = useState<CustomForm[]>([]);
   const [ownedCount, setOwnedCount] = useState(0);
   const [adoptedCount, setAdoptedCount] = useState(0);
@@ -47,9 +47,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       // Fetch doctor's complete form library (owned + adopted)
@@ -75,9 +78,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setPreviewingFormId(formId);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${API_URL}/api/custom-forms/forms/${formId}/preview-pdf`, {
@@ -113,9 +119,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${API_URL}/api/custom-forms/forms/${formId}`, {
@@ -146,9 +155,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${API_URL}/api/custom-forms/forms/${formId}/remove`, {
@@ -179,9 +191,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${API_URL}/api/custom-forms/forms/${formId}/share`, {
@@ -208,9 +223,12 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
+      // Get Firebase ID token (automatically refreshes if expired)
+      const token = await getIdToken();
+
       const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       // Fetch full form details (including schema and pdf_template) using the GET endpoint
