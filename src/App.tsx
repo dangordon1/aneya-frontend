@@ -35,6 +35,8 @@ const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => 
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 // ✨ NEW: Single dynamic form component for all consultation types
 const DynamicConsultationForm = lazy(() => import('./components/doctor-portal/DynamicConsultationForm').then(m => ({ default: m.DynamicConsultationForm })));
+// Form selector with tabs for all forms in a specialty
+const ConsultationFormSelector = lazy(() => import('./components/doctor-portal/ConsultationFormSelector').then(m => ({ default: m.ConsultationFormSelector })));
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
@@ -1286,30 +1288,15 @@ function MainApp() {
                 )}
               </div>
 
-              {(() => {
-                // Use AI-detected consultation type if available, otherwise fall back to appointment type
-                const formType = consultationForFormView?.detected_consultation_type ||
-                                appointmentForFormView.specialty_subtype ||
-                                'obgyn';
-
-                console.log('🔍 Determining form type:', {
-                  detected: consultationForFormView?.detected_consultation_type,
-                  specialty_subtype: appointmentForFormView.specialty_subtype,
-                  final: formType
-                });
-
-                // ✨ NEW: Single dynamic form component handles all form types
-                return (
-                  <DynamicConsultationForm
-                    formType={formType}
-                    patientId={appointmentForFormView.patient_id}
-                    appointmentId={appointmentForFormView.id}
-                    doctorUserId={user?.id}
-                    displayMode="flat"
-                    onBack={handleBackFromConsultationForm}
-                  />
-                );
-              })()}
+              {/* Form selector with tabs for all forms in the specialty */}
+              <ConsultationFormSelector
+                patientId={appointmentForFormView.patient_id}
+                appointmentId={appointmentForFormView.id}
+                doctorUserId={user?.id}
+                detectedFormType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || undefined}
+                specialty="obstetrics_gynecology"
+                onBack={handleBackFromConsultationForm}
+              />
 
               {/* Download PDF button at bottom */}
               {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
