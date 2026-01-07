@@ -16,6 +16,12 @@ if (import.meta.env.VITE_POSTHOG_KEY) {
     session_recording: {
       recordCrossOriginIframes: true,
     },
+    loaded: (posthogInstance) => {
+      // Expose PostHog globally for debugging
+      (window as any).posthog = posthogInstance;
+      console.log('✅ PostHog initialized');
+      console.log('📹 Session recording started:', posthogInstance.sessionRecordingStarted());
+    },
   });
 }
 
