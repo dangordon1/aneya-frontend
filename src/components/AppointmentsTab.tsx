@@ -154,6 +154,38 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     }
   };
 
+  // Standalone form filling function (separate from re-summarize)
+  const handleFillForm = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
+    if (!consultation || !appointment) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+      console.log('📋 Starting standalone form filling...');
+      await extractAndFillForm(appointment, consultation, apiUrl);
+
+      // Refetch fresh consultation data
+      const { data: freshConsultation, error: refetchError } = await supabase
+        .from('consultations')
+        .select('*')
+        .eq('id', consultation.id)
+        .single();
+
+      if (!refetchError && freshConsultation) {
+        const mapKey = freshConsultation.appointment_id || appointment.id;
+        setConsultationsMap((prev) => ({
+          ...prev,
+          [mapKey]: freshConsultation
+        }));
+      }
+
+      console.log('✅ Form filled successfully');
+      alert('Form filled successfully! View the consultation form to see extracted data.');
+    } catch (error) {
+      console.error('Error filling form:', error);
+      alert('Failed to fill form. Please try again.');
+    }
+  };
+
   const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
     if (!consultation) {
       console.error('No consultation to re-summarize');
@@ -319,7 +351,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
       }
 
       try {
-        // TIME: Fetch completed and cancelled appointments
+        // TIME: Fetch completed appointments (excluding cancelled)
         // Admins see all appointments, regular users only see their own
         const appointmentsStart = performance.now();
         console.log('🔍 Fetching past appointments for user:', user.id, isAdmin ? '(admin - all appointments)' : '(own appointments only)');
@@ -327,7 +359,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
         let query = supabase
           .from('appointments')
           .select('*, patient:patients(*)')
-          .in('status', ['completed', 'cancelled'])
+          .eq('status', 'completed')
           .order('scheduled_time', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(isAdmin ? 50 : 10); // Admins see more appointments
@@ -733,6 +765,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           consultation={consultationsMap[selectedAppointmentDetail.id] || null}
           onAnalyze={onAnalyzeConsultation}
           onResummarize={handleResummarize}
+          onFillForm={handleFillForm}
           onRerunTranscription={handleRerunTranscription}
           onViewConsultationForm={onViewConsultationForm}
           isAdmin={isAdmin}
