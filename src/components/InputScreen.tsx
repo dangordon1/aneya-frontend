@@ -334,21 +334,48 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   const [showConsentModal, setShowConsentModal] = useState(false);
 
   // OB/GYN during-consultation form state
-  // Track which form type is selected (null = none, 'obgyn', 'infertility', 'antenatal')
-  const [selectedFormType, setSelectedFormType] = useState<'obgyn' | 'infertility' | 'antenatal' | null>(null);
+  // Track which form type is selected (null = none, dynamic from database)
+  const [selectedFormType, setSelectedFormType] = useState<string | null>(null);
+  const [availableForms, setAvailableForms] = useState<Array<{
+    id: string;
+    form_type: string;
+    specialty: string;
+    description: string;
+    is_active: boolean;
+  }>>([]);
+
+  // Fetch available forms for the specialty
+  useEffect(() => {
+    const fetchForms = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/form-schemas`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        // Filter for OB/GYN forms only
+        const obgynForms = data.schemas.filter(
+          (schema: any) => schema.specialty === 'obstetrics_gynecology' && schema.is_active
+        );
+        console.log(`📋 Loaded ${obgynForms.length} OB/GYN forms:`, obgynForms.map((f: any) => f.form_type));
+        setAvailableForms(obgynForms);
+      } catch (error) {
+        console.error('❌ Failed to fetch form schemas:', error);
+      }
+    };
+    fetchForms();
+  }, []);
 
   // Auto-select form when consultation type is determined
   useEffect(() => {
-    if (determinedConsultationType && !selectedFormType) {
-      // Only auto-select if a valid form type is determined and no form is currently selected
-      if (determinedConsultationType === 'obgyn' ||
-          determinedConsultationType === 'infertility' ||
-          determinedConsultationType === 'antenatal') {
+    if (determinedConsultationType && !selectedFormType && availableForms.length > 0) {
+      // Check if the determined type matches any available form
+      const matchingForm = availableForms.find(f => f.form_type === determinedConsultationType);
+      if (matchingForm) {
         console.log(`🎯 Auto-selecting ${determinedConsultationType} form based on detected consultation type`);
-        setSelectedFormType(determinedConsultationType as 'obgyn' | 'infertility' | 'antenatal');
+        setSelectedFormType(determinedConsultationType);
       }
     }
-  }, [determinedConsultationType, selectedFormType]);
+  }, [determinedConsultationType, selectedFormType, availableForms]);
 
   // Audio recording refs
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -2663,60 +2690,36 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
               <div className="flex-1">
                 <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
                 <p className="text-[13px] text-gray-600 mb-2">
-                  {determinedConsultationType
-                    ? `Suggested form type: ${determinedConsultationType === 'antenatal' ? 'Antenatal' : determinedConsultationType === 'infertility' ? 'Infertility' : 'General OB/GYN'}`
+                  {determinedConsultationType && availableForms.some(f => f.form_type === determinedConsultationType)
+                    ? `Suggested form type: ${availableForms.find(f => f.form_type === determinedConsultationType)?.description || determinedConsultationType}`
                     : 'Select consultation form type:'}
                 </p>
 
-                {/* Three form buttons - all visible, determined type highlighted */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {/* General OB/GYN Form Button */}
-                  <button
-                    onClick={() => setSelectedFormType(selectedFormType === 'obgyn' ? null : 'obgyn')}
-                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
-                      selectedFormType === 'obgyn'
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
-                        : determinedConsultationType === 'obgyn'
-                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
-                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
-                    }`}
-                  >
-                    {selectedFormType === 'obgyn' && '✓ '}
-                    {determinedConsultationType === 'obgyn' && selectedFormType !== 'obgyn' && '★ '}
-                    General OB/GYN
-                  </button>
+                {/* Dynamic form buttons from database */}
+                <div className={`grid grid-cols-1 gap-2 ${availableForms.length === 2 ? 'sm:grid-cols-2' : availableForms.length >= 3 ? 'sm:grid-cols-3' : ''}`}>
+                  {availableForms.map((form) => {
+                    const displayName = form.description || form.form_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    const isSelected = selectedFormType === form.form_type;
+                    const isSuggested = determinedConsultationType === form.form_type;
 
-                  {/* Infertility Form Button */}
-                  <button
-                    onClick={() => setSelectedFormType(selectedFormType === 'infertility' ? null : 'infertility')}
-                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
-                      selectedFormType === 'infertility'
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
-                        : determinedConsultationType === 'infertility'
-                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
-                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
-                    }`}
-                  >
-                    {selectedFormType === 'infertility' && '✓ '}
-                    {determinedConsultationType === 'infertility' && selectedFormType !== 'infertility' && '★ '}
-                    Infertility
-                  </button>
-
-                  {/* Antenatal Form Button */}
-                  <button
-                    onClick={() => setSelectedFormType(selectedFormType === 'antenatal' ? null : 'antenatal')}
-                    className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
-                      selectedFormType === 'antenatal'
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
-                        : determinedConsultationType === 'antenatal'
-                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
-                        : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
-                    }`}
-                  >
-                    {selectedFormType === 'antenatal' && '✓ '}
-                    {determinedConsultationType === 'antenatal' && selectedFormType !== 'antenatal' && '★ '}
-                    Antenatal (ANC)
-                  </button>
+                    return (
+                      <button
+                        key={form.id}
+                        onClick={() => setSelectedFormType(isSelected ? null : form.form_type)}
+                        className={`px-4 py-2.5 rounded-[8px] text-sm font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                            : isSuggested
+                            ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
+                            : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
+                        }`}
+                      >
+                        {isSelected && '✓ '}
+                        {isSuggested && !isSelected && '★ '}
+                        {displayName}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Inline Embedded Forms - Display below buttons */}
