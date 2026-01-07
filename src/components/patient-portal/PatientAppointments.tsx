@@ -95,7 +95,7 @@ export function PatientAppointments({ onBack }: Props) {
       return new Date(apt.scheduled_time) >= now && apt.status !== 'cancelled';
     }
     if (filter === 'past') {
-      return new Date(apt.scheduled_time) < now || apt.status === 'completed';
+      return (new Date(apt.scheduled_time) < now || apt.status === 'completed') && apt.status !== 'cancelled';
     }
     return true;
   });

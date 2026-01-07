@@ -24,7 +24,7 @@ export function PatientDetailView({
   onAnalyzeConsultation,
 }: PatientDetailViewProps) {
   const { updatePatient } = usePatients();
-  const { isAdmin } = useAuth();
+  const { isAdmin, getIdToken } = useAuth();
   const { deleteAppointment } = useAppointments();
 
   const [pastAppointments, setPastAppointments] = useState<AppointmentWithPatient[]>([]);
@@ -108,8 +108,86 @@ export function PatientDetailView({
     fetchPastAppointments();
   }, [patient.id]);
 
-  const handleResummarize = async (_appointment: AppointmentWithPatient, consultation: Consultation | null) => {
-    if (!consultation) return;
+  // Helper function to extract form fields and update the appropriate form
+  const extractAndFillForm = async (
+    appointment: AppointmentWithPatient,
+    consultation: Consultation,
+    apiUrl: string
+  ) => {
+    try {
+      console.log(`📋 Auto-filling form for consultation ${consultation.id}...`);
+
+      // Get Firebase ID token for authentication
+      const idToken = await getIdToken();
+      if (!idToken) {
+        throw new Error('Not authenticated - no ID token available');
+      }
+
+      // Prepare request body
+      const requestBody = {
+        consultation_id: consultation.id,
+        appointment_id: appointment.id,
+        patient_id: appointment.patient_id,
+        original_transcript: consultation.original_transcript || '',
+        consultation_text: consultation.consultation_text || '',
+        patient_snapshot: consultation.patient_snapshot || {}
+      };
+
+      // Call backend endpoint with Authorization header
+      const response = await fetch(`${apiUrl}/api/auto-fill-consultation-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.warn('⚠️ Form auto-fill failed:', errorData.detail || response.statusText);
+        return; // Don't throw - this shouldn't block re-summarize
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✅ ${data.form_created ? 'Created' : 'Updated'} ${data.consultation_type} form`);
+        console.log(`   Form ID: ${data.form_id}`);
+        console.log(`   Confidence: ${(data.confidence * 100).toFixed(0)}%`);
+        console.log(`   Fields extracted: ${Object.keys(data.field_updates).length}`);
+      } else {
+        console.warn('⚠️ Form auto-fill unsuccessful:', data.error);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in form auto-fill:', error);
+      // Don't throw - form filling failure shouldn't block re-summarize
+    }
+  };
+
+  // Standalone form filling function (separate from re-summarize)
+  const handleFillForm = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
+    if (!consultation || !appointment) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+      console.log('📋 Starting standalone form filling...');
+      await extractAndFillForm(appointment, consultation, apiUrl);
+
+      // Refresh the appointments list to show updated form data
+      await fetchPastAppointments();
+
+      console.log('✅ Form filled successfully');
+      alert('Form filled successfully! View the consultation form to see extracted data.');
+    } catch (error) {
+      console.error('Error filling form:', error);
+      alert('Failed to fill form. Please try again.');
+    }
+  };
+
+  const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    if (!consultation || !appointment) return;
 
     try {
       // Get the API URL from environment variables
@@ -120,7 +198,7 @@ export function PatientDetailView({
         text: consultation.consultation_text || consultation.original_transcript || '',
         original_text: consultation.original_transcript,
         patient_info: consultation.patient_snapshot || {
-          patient_id: patient.id,
+          patient_id: appointment.patient_id,
           patient_age: getPatientAge(patient),
         },
         is_from_transcription: true,
@@ -146,6 +224,10 @@ export function PatientDetailView({
         throw new Error('Invalid response from summarize endpoint');
       }
 
+      // Extract form fields from consultation text
+      console.log('📋 Extracting form fields from consultation...');
+      await extractAndFillForm(appointment, consultation, apiUrl);
+
       // Update the consultation in the database
       const { error: updateError } = await supabase
         .from('consultations')
@@ -165,7 +247,7 @@ export function PatientDetailView({
       // Refresh the appointments list to show updated data
       await fetchPastAppointments();
 
-      console.log('Consultation re-summarized successfully');
+      console.log('✅ Consultation re-summarized and form filled successfully');
     } catch (error) {
       console.error('Error re-summarizing consultation:', error);
       alert('Failed to re-summarize consultation. Please try again.');
@@ -484,6 +566,7 @@ export function PatientDetailView({
             consultation={consultationsMap[selectedAppointmentDetail.id] || null}
             onAnalyze={onAnalyzeConsultation}
             onResummarize={handleResummarize}
+            onFillForm={handleFillForm}
             onRerunTranscription={handleRerunTranscription}
             isAdmin={isAdmin}
             onDelete={handleDeleteAppointment}

@@ -279,6 +279,12 @@ export function DynamicConsultationForm({
           });
 
           element.columns = columns;
+
+          // Pass through data_source metadata if present
+          if (fieldDef.data_source) {
+            element.data_source = fieldDef.data_source;
+          }
+
           return element;
       }
     }
@@ -339,7 +345,13 @@ export function DynamicConsultationForm({
         // Apply Aneya theme
         surveyModel.applyTheme(aneyaTheme);
 
-        // Handle survey completion
+        // Disable the SurveyJS completion page entirely
+        // This is a doctor's form for adjustments, not a patient survey
+        surveyModel.showCompletedPage = false;
+        surveyModel.completedHtml = '';  // Remove any completion HTML
+        surveyModel.completeText = 'Save Form';  // Change button text from "Complete" to "Save Form"
+
+        // Handle form submission
         surveyModel.onComplete.add((sender: Model) => {
           handleSubmit(sender.data);
         });
@@ -360,7 +372,7 @@ export function DynamicConsultationForm({
     fetchSchema();
   }, [formType]);
 
-  // Fetch existing form data
+  // Fetch existing form data and populate tables with external data sources
   useEffect(() => {
     if (!survey) return;
 
@@ -392,6 +404,106 @@ export function DynamicConsultationForm({
 
     fetchFormData();
   }, [appointmentId, formType, survey]);
+
+  // Generic external data population for table fields with data_source metadata
+  useEffect(() => {
+    if (!survey) return;
+
+    const populateExternalDataSources = async () => {
+      try {
+        // Get all questions from the survey
+        const allQuestions = survey.getAllQuestions();
+
+        // Find table questions (matrixdynamic) that have data_source metadata
+        const tableQuestionsWithDataSource = allQuestions.filter((question: any) => {
+          return question.getType() === 'matrixdynamic' && question.data_source;
+        });
+
+        if (tableQuestionsWithDataSource.length === 0) {
+          console.log('ℹ️ No table fields with external data sources found');
+          return;
+        }
+
+        console.log(`📊 Found ${tableQuestionsWithDataSource.length} table(s) with external data sources`);
+
+        // Import supabase dynamically
+        const { supabase } = await import('../../lib/supabase');
+
+        // Populate each table
+        for (const question of tableQuestionsWithDataSource) {
+          const dataSource = question.data_source;
+          const tableName = dataSource.table;
+          const filters = dataSource.filters || {};
+          const orderBy = dataSource.order_by;
+          const fieldMapping = dataSource.field_mapping || {};
+
+          console.log(`📊 Fetching data from table: ${tableName} for field: ${question.name}`);
+
+          // Build query
+          let query = supabase.from(tableName).select('*');
+
+          // Apply filters (e.g., patient_id: "{{patient_id}}")
+          for (const [filterKey, filterValue] of Object.entries(filters)) {
+            let actualValue = filterValue;
+
+            // Replace template variables
+            if (typeof filterValue === 'string' && filterValue.includes('{{')) {
+              actualValue = filterValue
+                .replace('{{patient_id}}', patientId)
+                .replace('{{appointment_id}}', appointmentId);
+            }
+
+            query = query.eq(filterKey, actualValue);
+          }
+
+          // Apply ordering
+          if (orderBy) {
+            query = query.order(orderBy.field, { ascending: orderBy.ascending !== false });
+          }
+
+          const { data: records, error } = await query;
+
+          if (error) {
+            console.error(`❌ Error fetching from ${tableName}:`, error);
+            continue;
+          }
+
+          if (records && records.length > 0) {
+            console.log(`✅ Found ${records.length} records from ${tableName}`);
+
+            // Transform records using field mapping if provided
+            const transformedRecords = records.map(record => {
+              if (Object.keys(fieldMapping).length > 0) {
+                // Use field mapping to transform
+                const transformed: any = {};
+                for (const [targetField, sourceField] of Object.entries(fieldMapping)) {
+                  transformed[targetField] = record[sourceField as string];
+                }
+                return transformed;
+              } else {
+                // No mapping, use record as-is
+                return record;
+              }
+            });
+
+            // Set the data in the survey
+            survey.setValue(question.name, transformedRecords);
+            console.log(`✅ Populated ${question.name} with ${transformedRecords.length} records`);
+          } else {
+            console.log(`ℹ️ No records found in ${tableName} for this ${Object.keys(filters).join(', ')}`);
+          }
+        }
+
+        survey.render();
+      } catch (error) {
+        console.error('❌ Failed to populate external data sources:', error);
+      }
+    };
+
+    // Delay slightly to ensure form is fully loaded
+    const timer = setTimeout(populateExternalDataSources, 500);
+    return () => clearTimeout(timer);
+  }, [survey, patientId, appointmentId]);
 
   // Subscribe to auto-fill events
   useEffect(() => {
