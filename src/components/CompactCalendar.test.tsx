@@ -1,11 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../test/utils/render'
 import { CompactCalendar } from './CompactCalendar'
-import { Appointment } from '../types/database'
+import { createMockAppointment } from '../test/fixtures'
 
 // Mock react-calendar
 vi.mock('react-calendar', () => ({
-  default: ({ value, onChange, tileContent }: any) => (
+  default: ({ value, onChange, tileContent }: {
+    value: Date
+    onChange: (date: Date) => void
+    tileContent: (props: { date: Date }) => React.ReactNode
+  }) => (
     <div data-testid="mock-calendar">
       <span data-testid="selected-date">{value.toDateString()}</span>
       <button
@@ -23,29 +27,23 @@ vi.mock('react-calendar', () => ({
 }))
 
 describe('CompactCalendar', () => {
-  const mockAppointments: Appointment[] = [
-    {
+  const mockAppointments = [
+    createMockAppointment({
       id: 'apt-1',
       doctor_id: 'doc-1',
       patient_id: 'pat-1',
       scheduled_time: '2024-01-15T10:00:00Z',
-      duration_minutes: 30,
       status: 'scheduled',
       reason: 'Checkup',
-      notes: null,
-      created_at: '2024-01-01T00:00:00Z',
-    },
-    {
+    }),
+    createMockAppointment({
       id: 'apt-2',
       doctor_id: 'doc-1',
       patient_id: 'pat-2',
       scheduled_time: '2024-01-15T14:00:00Z',
-      duration_minutes: 45,
       status: 'scheduled',
       reason: 'Follow-up',
-      notes: null,
-      created_at: '2024-01-01T00:00:00Z',
-    },
+    }),
   ]
 
   const mockOnDateChange = vi.fn()
@@ -128,7 +126,7 @@ describe('CompactCalendar', () => {
 
   describe('appointment indicators', () => {
     it('shows indicator dot for dates with appointments', () => {
-      const { container } = render(
+      render(
         <CompactCalendar
           appointments={mockAppointments}
           selectedDate={selectedDate}
@@ -143,7 +141,7 @@ describe('CompactCalendar', () => {
     })
 
     it('does not show indicator for dates without appointments', () => {
-      const { container } = render(
+      render(
         <CompactCalendar
           appointments={[]}
           selectedDate={selectedDate}

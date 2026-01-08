@@ -2019,7 +2019,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   };
 
   // NEW: Process speaker diarization (unused for now, will be enabled later)
-  // @ts-ignore - Function will be used when diarization is enabled
   const processDiarization = async () => {
     try {
       setIsDiarizing(true);
@@ -2070,6 +2069,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       audioChunksRef.current = []; // Clear audio chunks to prevent memory leak
     }
   };
+  // Mark as intentionally unused - will be enabled when diarization feature is complete
+  void processDiarization;
 
   // Cancel recording (discard)
   const cancelRecording = () => {
