@@ -39,14 +39,14 @@ Object.defineProperty(window, 'matchMedia', {
 })
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
+;(globalThis as typeof globalThis & { ResizeObserver: unknown }).ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }))
 
 // Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+;(globalThis as typeof globalThis & { IntersectionObserver: unknown }).IntersectionObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
@@ -100,14 +100,14 @@ class MockMediaRecorder {
   }
 }
 
-global.MediaRecorder = MockMediaRecorder as unknown as typeof MediaRecorder
+;(globalThis as typeof globalThis & { MediaRecorder: unknown }).MediaRecorder = MockMediaRecorder as unknown as typeof MediaRecorder
 
 // Mock URL.createObjectURL and revokeObjectURL
-global.URL.createObjectURL = vi.fn(() => 'blob:test-url')
-global.URL.revokeObjectURL = vi.fn()
+globalThis.URL.createObjectURL = vi.fn(() => 'blob:test-url')
+globalThis.URL.revokeObjectURL = vi.fn()
 
 // Mock Audio
-global.Audio = vi.fn().mockImplementation(() => ({
+;(globalThis as typeof globalThis & { Audio: unknown }).Audio = vi.fn().mockImplementation(() => ({
   play: vi.fn().mockResolvedValue(undefined),
   pause: vi.fn(),
   load: vi.fn(),
