@@ -8,6 +8,7 @@ import { LocationSelector } from './components/LocationSelector';
 import { BranchIndicator } from './components/BranchIndicator';
 import { Patient, AppointmentWithPatient, Consultation } from './types/database';
 import { useConsultations } from './hooks/useConsultations';
+import { useAppointments } from './hooks/useAppointments';
 import { useMessages } from './hooks/useMessages';
 import { usePatientDoctors } from './hooks/usePatientDoctors';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -104,6 +105,7 @@ function MainApp() {
   const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
   const [generatingPdf, setGeneratingPdf] = useState(false); // PDF generation state for view consultation form screen
   const { saveConsultation } = useConsultations();
+  const { createAppointment } = useAppointments();
 
   // Messaging state - for unread counts and pending care requests
   const { unreadCount } = useMessages();
@@ -1194,32 +1196,32 @@ function MainApp() {
                 // TODO: Implement patient editing
                 console.log('Edit patient:', selectedPatient.id);
               }}
-              onStartConsultation={(patient) => {
-                // Create a temporary appointment-like object for consultation
-                const tempAppointment: AppointmentWithPatient = {
-                  id: '',
+              onStartConsultation={async (patient) => {
+                // Create a REAL appointment in the database
+                // Default scheduled_time: 9:00 AM today
+                const today = new Date();
+                today.setHours(9, 0, 0, 0);
+
+                const realAppointment = await createAppointment({
                   patient_id: patient.id,
-                  doctor_id: null,
-                  scheduled_time: new Date().toISOString(),
+                  doctor_id: doctorProfile?.id || null,
+                  scheduled_time: today.toISOString(),
                   duration_minutes: 30,
-                  status: 'scheduled',
                   appointment_type: 'general',
                   specialty: 'general',
                   specialty_subtype: null,
-                  reason: null,
-                  notes: null,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                  created_by: user!.id,
                   booked_by: 'doctor',
-                  consultation_id: null,
-                  cancelled_at: null,
-                  cancellation_reason: null,
-                  patient: patient
-                };
-                handleStartConsultationFromAppointment(tempAppointment);
+                });
+
+                if (realAppointment) {
+                  handleStartConsultationFromAppointment(realAppointment);
+                } else {
+                  console.error('Failed to create appointment');
+                  alert('Failed to create appointment. Please try again.');
+                }
               }}
               onAnalyzeConsultation={handleAnalyzeConsultationFromPatientView}
+              onPatientUpdated={(updatedPatient) => setSelectedPatient(updatedPatient)}
             />
           )}
 

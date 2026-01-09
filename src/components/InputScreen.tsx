@@ -940,7 +940,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Prepare request body
       const requestBody = {
         consultation_id: consultationId,
-        appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
+        appointment_id: appointmentContext?.id || null,
         patient_id: preFilledPatient.id,
         original_transcript: originalTranscript || consultation,
         consultation_text: consultation,
@@ -1074,7 +1074,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
           const saved = await onSaveConsultation({
             patient_id: preFilledPatient.id,
-            appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
+            appointment_id: appointmentContext?.id || null,
             consultation_text: consultation,
             original_transcript: originalTranscript || consultation,
             transcription_language: consultationLanguage,
@@ -1250,7 +1250,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
         const saved = await onSaveConsultation({
           patient_id: preFilledPatient.id,
-          appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
+          appointment_id: appointmentContext?.id || null,
           consultation_text: consultation,
           original_transcript: originalTranscript || consultation,
           transcription_language: consultationLanguage,
@@ -1957,7 +1957,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       const saved = await onSaveConsultation({
         patient_id: preFilledPatient.id,
-        appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
+        appointment_id: appointmentContext?.id || null,
         consultation_text: consultationText,
         original_transcript: originalTranscript || consultation,
         transcription_language: consultationLanguage,
