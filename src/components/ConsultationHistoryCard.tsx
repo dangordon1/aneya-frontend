@@ -492,7 +492,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
               <div className="flex items-center gap-2 mb-3">
                 <Brain className="w-4 h-4 text-amber-600" />
                 <h5 className="text-[14px] text-amber-800 font-semibold">
-                  AI Analysis Not Yet Performed
+                  AI Diagnosis and Treatment Not Yet Performed
                 </h5>
               </div>
               <p className="text-[13px] text-amber-700 mb-3">
@@ -504,7 +504,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                 className="w-full px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
-                AI Analysis
+                AI Diagnosis and Treatment
               </button>
             </div>
           ) : null}
@@ -549,7 +549,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                 className="flex-1 px-4 py-2 bg-aneya-navy text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
-                AI Analysis
+                AI Diagnosis and Treatment
               </button>
             )}
             {onDelete && (
