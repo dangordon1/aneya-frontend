@@ -29,11 +29,8 @@ const formatFormType = (formType: string): string => {
     .join(' ');
 };
 
-// Get display name from schema (use description if available, otherwise format form_type)
+// Get display name from schema (always use formatted form_type for tab display)
 const getFormDisplayName = (form: FormSchema): string => {
-  if (form.description && form.description.trim()) {
-    return form.description;
-  }
   return formatFormType(form.form_type);
 };
 
@@ -72,19 +69,26 @@ export function ConsultationFormSelector({
         console.log(`📋 Found ${formsForSpecialty.length} forms for specialty ${specialty}:`,
           formsForSpecialty.map((f: FormSchema) => f.form_type));
 
-        setAvailableForms(formsForSpecialty);
-
-        // Set default selected form
-        if (formsForSpecialty.length > 0) {
-          // Try to use detected form type if it exists in available forms
-          const detectedExists = formsForSpecialty.some(
+        // If a detected form type is provided, only show that form (don't show all forms as tabs)
+        if (detectedFormType) {
+          const detectedForm = formsForSpecialty.find(
             (f: FormSchema) => f.form_type === detectedFormType
           );
-
-          if (detectedExists && detectedFormType) {
+          if (detectedForm) {
+            console.log(`🎯 Using detected form type: ${detectedFormType}`);
+            setAvailableForms([detectedForm]);
             setSelectedFormType(detectedFormType);
           } else {
-            // Fall back to first available form
+            console.warn(`⚠️ Detected form type '${detectedFormType}' not found, showing all forms`);
+            setAvailableForms(formsForSpecialty);
+            if (formsForSpecialty.length > 0) {
+              setSelectedFormType(formsForSpecialty[0].form_type);
+            }
+          }
+        } else {
+          // No detected form type - show all forms for the specialty
+          setAvailableForms(formsForSpecialty);
+          if (formsForSpecialty.length > 0) {
             setSelectedFormType(formsForSpecialty[0].form_type);
           }
         }
@@ -138,48 +142,25 @@ export function ConsultationFormSelector({
     );
   }
 
+  // Always use only ONE form - never show tabs
+  const formToDisplay = availableForms.find(f => f.form_type === selectedFormType) || availableForms[0];
+
   return (
     <div>
-      {/* Form Type Tabs */}
-      {availableForms.length > 1 && (
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="flex gap-1" aria-label="Form types">
-            {availableForms.map((form) => (
-              <button
-                key={form.id}
-                onClick={() => setSelectedFormType(form.form_type)}
-                className={`px-4 py-3 text-[14px] font-medium rounded-t-lg transition-colors ${
-                  selectedFormType === form.form_type
-                    ? 'bg-aneya-teal text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {getFormDisplayName(form)}
-                {form.form_type === detectedFormType && (
-                  <span className="ml-2 text-[10px] bg-white/20 px-1.5 py-0.5 rounded">
-                    Detected
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </div>
-      )}
-
-      {/* Single Form Label (when only one form available) */}
-      {availableForms.length === 1 && (
+      {/* Single Form Label - always show just one form, never tabs */}
+      {formToDisplay && (
         <div className="mb-4">
           <span className="inline-block px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-full text-[13px] font-medium">
-            {getFormDisplayName(availableForms[0])} Form
+            {getFormDisplayName(formToDisplay)} Form
           </span>
         </div>
       )}
 
-      {/* Dynamic Form */}
-      {selectedFormType && (
+      {/* Dynamic Form - only one form ever displayed */}
+      {formToDisplay && (
         <DynamicConsultationForm
-          key={selectedFormType} // Force re-mount when form type changes
-          formType={selectedFormType}
+          key={formToDisplay.form_type}
+          formType={formToDisplay.form_type}
           patientId={patientId}
           appointmentId={appointmentId}
           doctorUserId={doctorUserId}
