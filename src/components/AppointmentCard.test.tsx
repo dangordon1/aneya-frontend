@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../test/utils/render'
 import { AppointmentCard } from './AppointmentCard'
-import { AppointmentWithPatient } from '../types/database'
+import { createMockAppointmentWithPatient, createMockConsultation } from '../test/fixtures'
 
 // Mock the formatTime24 utility
 vi.mock('../utils/dateHelpers', () => ({
@@ -9,7 +9,7 @@ vi.mock('../utils/dateHelpers', () => ({
 }))
 
 describe('AppointmentCard', () => {
-  const mockAppointment: AppointmentWithPatient = {
+  const mockAppointment = createMockAppointmentWithPatient({
     id: 'apt-123',
     doctor_id: 'doc-456',
     patient_id: 'pat-789',
@@ -18,15 +18,12 @@ describe('AppointmentCard', () => {
     status: 'scheduled',
     reason: 'Annual checkup',
     notes: 'Patient requested morning appointment',
-    created_at: '2024-01-01T00:00:00Z',
     patient: {
-      id: 'pat-789',
       name: 'Jane Smith',
       email: 'jane@example.com',
       phone: '555-1234',
-      created_at: '2024-01-01T00:00:00Z',
     },
-  }
+  })
 
   const mockHandlers = {
     onStartConsultation: vi.fn(),
@@ -67,7 +64,10 @@ describe('AppointmentCard', () => {
     })
 
     it('does not render notes section when notes is empty', () => {
-      const noNotesAppointment = { ...mockAppointment, notes: null }
+      const noNotesAppointment = createMockAppointmentWithPatient({
+        ...mockAppointment,
+        notes: null,
+      })
       render(
         <AppointmentCard appointment={noNotesAppointment} {...mockHandlers} />
       )
@@ -75,10 +75,10 @@ describe('AppointmentCard', () => {
     })
 
     it('truncates long reason text', () => {
-      const longReasonAppointment = {
+      const longReasonAppointment = createMockAppointmentWithPatient({
         ...mockAppointment,
         reason: 'A'.repeat(150),
-      }
+      })
       render(
         <AppointmentCard appointment={longReasonAppointment} {...mockHandlers} />
       )
@@ -87,7 +87,10 @@ describe('AppointmentCard', () => {
     })
 
     it('shows No reason specified when reason is null', () => {
-      const noReasonAppointment = { ...mockAppointment, reason: null }
+      const noReasonAppointment = createMockAppointmentWithPatient({
+        ...mockAppointment,
+        reason: null,
+      })
       render(
         <AppointmentCard appointment={noReasonAppointment} {...mockHandlers} />
       )
@@ -144,10 +147,10 @@ describe('AppointmentCard', () => {
   })
 
   describe('in_progress status', () => {
-    const inProgressAppointment = {
+    const inProgressAppointment = createMockAppointmentWithPatient({
       ...mockAppointment,
-      status: 'in_progress' as const,
-    }
+      status: 'in_progress',
+    })
 
     it('shows Start Consultation button', () => {
       render(
@@ -168,10 +171,10 @@ describe('AppointmentCard', () => {
   })
 
   describe('completed status', () => {
-    const completedAppointment = {
+    const completedAppointment = createMockAppointmentWithPatient({
       ...mockAppointment,
-      status: 'completed' as const,
-    }
+      status: 'completed',
+    })
 
     it('does not show Start Consultation button', () => {
       render(
@@ -202,10 +205,10 @@ describe('AppointmentCard', () => {
   })
 
   describe('cancelled status', () => {
-    const cancelledAppointment = {
+    const cancelledAppointment = createMockAppointmentWithPatient({
       ...mockAppointment,
-      status: 'cancelled' as const,
-    }
+      status: 'cancelled',
+    })
 
     it('does not show action buttons', () => {
       render(
@@ -224,10 +227,10 @@ describe('AppointmentCard', () => {
   })
 
   describe('with consultation_id', () => {
-    const appointmentWithConsultation = {
+    const appointmentWithConsultation = createMockAppointmentWithPatient({
       ...mockAppointment,
       consultation_id: 'cons-123',
-    }
+    })
 
     it('shows Generate PDF button', () => {
       render(
@@ -243,13 +246,7 @@ describe('AppointmentCard', () => {
   })
 
   describe('prescriptions display', () => {
-    const consultation = {
-      id: 'cons-123',
-      appointment_id: 'apt-123',
-      doctor_id: 'doc-456',
-      patient_id: 'pat-789',
-      form_data: {},
-      created_at: '2024-01-15T15:00:00Z',
+    const consultation = createMockConsultation({
       prescriptions: [
         {
           drug_name: 'Paracetamol',
@@ -266,7 +263,7 @@ describe('AppointmentCard', () => {
           duration: '3 days',
         },
       ],
-    }
+    })
 
     it('shows Prescriptions section when consultation has prescriptions', () => {
       render(
@@ -292,7 +289,7 @@ describe('AppointmentCard', () => {
     })
 
     it('does not show Prescriptions section when no prescriptions', () => {
-      const noPresConsultation = { ...consultation, prescriptions: [] }
+      const noPresConsultation = createMockConsultation({ prescriptions: [] })
       render(
         <AppointmentCard
           appointment={mockAppointment}

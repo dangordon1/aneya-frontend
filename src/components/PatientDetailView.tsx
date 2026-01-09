@@ -14,6 +14,7 @@ interface PatientDetailViewProps {
   onEditPatient: (patient: Patient) => void;
   onStartConsultation: (patient: Patient) => void;
   onAnalyzeConsultation?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
+  onPatientUpdated?: (patient: Patient) => void;
 }
 
 export function PatientDetailView({
@@ -22,6 +23,7 @@ export function PatientDetailView({
   onEditPatient,
   onStartConsultation,
   onAnalyzeConsultation,
+  onPatientUpdated,
 }: PatientDetailViewProps) {
   const { updatePatient } = usePatients();
   const { isAdmin, getIdToken } = useAuth();
@@ -36,13 +38,25 @@ export function PatientDetailView({
   const [medicationsValue, setMedicationsValue] = useState(patient.current_medications || '');
   const [conditionsValue, setConditionsValue] = useState(patient.current_conditions || '');
 
+  // Sync local state when patient prop changes
+  useEffect(() => {
+    setMedicationsValue(patient.current_medications || '');
+    setConditionsValue(patient.current_conditions || '');
+  }, [patient.current_medications, patient.current_conditions]);
+
   const handleSaveMedications = async () => {
-    await updatePatient(patient.id, { current_medications: medicationsValue });
+    const updatedPatient = await updatePatient(patient.id, { current_medications: medicationsValue });
+    if (updatedPatient && onPatientUpdated) {
+      onPatientUpdated(updatedPatient);
+    }
     setIsEditingMedications(false);
   };
 
   const handleSaveConditions = async () => {
-    await updatePatient(patient.id, { current_conditions: conditionsValue });
+    const updatedPatient = await updatePatient(patient.id, { current_conditions: conditionsValue });
+    if (updatedPatient && onPatientUpdated) {
+      onPatientUpdated(updatedPatient);
+    }
     setIsEditingConditions(false);
   };
 
@@ -440,7 +454,7 @@ export function PatientDetailView({
             </div>
           ) : (
             <p className="text-[15px] text-aneya-navy whitespace-pre-wrap">
-              {patient.current_medications || 'No current medications recorded'}
+              {medicationsValue || 'No current medications recorded'}
             </p>
           )}
         </section>
@@ -483,7 +497,7 @@ export function PatientDetailView({
             </div>
           ) : (
             <p className="text-[15px] text-aneya-navy whitespace-pre-wrap">
-              {patient.current_conditions || 'No current conditions recorded'}
+              {conditionsValue || 'No current conditions recorded'}
             </p>
           )}
         </section>

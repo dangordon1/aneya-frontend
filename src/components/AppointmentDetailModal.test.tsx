@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../test/utils/render'
 import { AppointmentDetailModal } from './AppointmentDetailModal'
-import { AppointmentWithPatient, Consultation } from '../types/database'
+import { createMockAppointmentWithPatient, createMockConsultation, createMockDoctor } from '../test/fixtures'
 
 // Mock dateHelpers
 vi.mock('../utils/dateHelpers', () => ({
@@ -24,7 +24,7 @@ vi.mock('./StructuredSummaryDisplay', () => ({
 }))
 
 describe('AppointmentDetailModal', () => {
-  const mockAppointment: AppointmentWithPatient = {
+  const mockAppointment = createMockAppointmentWithPatient({
     id: 'apt-123',
     doctor_id: 'doc-456',
     patient_id: 'pat-789',
@@ -33,31 +33,27 @@ describe('AppointmentDetailModal', () => {
     status: 'completed',
     reason: 'Follow-up consultation',
     notes: null,
-    created_at: '2024-01-01T00:00:00Z',
-    appointment_type: 'Follow-up',
+    appointment_type: 'follow_up',
     patient: {
       id: 'pat-789',
       name: 'Jane Smith',
       email: 'jane@example.com',
       phone: '555-1234',
-      created_at: '2024-01-01T00:00:00Z',
     },
-    doctor: {
+    doctor: createMockDoctor({
       id: 'doc-456',
       user_id: 'user-456',
       name: 'Dr. Johnson',
       email: 'doc@example.com',
-      specialty: 'General Practice',
-    },
-  }
+      specialty: 'general',
+    }),
+  })
 
-  const mockConsultation: Consultation = {
+  const mockConsultation = createMockConsultation({
     id: 'cons-123',
     appointment_id: 'apt-123',
     doctor_id: 'doc-456',
     patient_id: 'pat-789',
-    form_data: {},
-    created_at: '2024-01-15T15:00:00Z',
     consultation_text: 'Consultation Transcript:\nPatient reports headache\n\nConsultation Summary:\nHeadache for 3 days.',
     audio_url: 'gs://bucket/audio.webm',
     diagnoses: [
@@ -68,13 +64,15 @@ describe('AppointmentDetailModal', () => {
       },
     ],
     summary_data: {
-      clinical_summary: { plan: 'Follow-up in 1 week' },
+      clinical_summary: {
+        plan: {
+          follow_up: 'Follow-up in 1 week',
+        },
+      },
     },
-    prescriptions: [],
-  }
+  })
 
   const mockOnClose = vi.fn()
-  const mockOnAnalyze = vi.fn()
   const mockOnResummarize = vi.fn()
   const mockOnFillForm = vi.fn()
   const mockOnViewConsultationForm = vi.fn()
@@ -221,7 +219,7 @@ describe('AppointmentDetailModal', () => {
     })
 
     it('does not render audio player when no audio URL', () => {
-      const consultationNoAudio = { ...mockConsultation, audio_url: null }
+      const consultationNoAudio = createMockConsultation({ audio_url: null })
       render(
         <AppointmentDetailModal
           isOpen={true}
@@ -287,7 +285,7 @@ describe('AppointmentDetailModal', () => {
           viewMode="doctor"
           isAdmin={true}
           onDelete={mockOnDelete}
-          onResummarize={mockOnResummarize} // Need at least one action callback to render the action buttons div
+          onResummarize={mockOnResummarize}
         />
       )
       expect(screen.getByRole('button', { name: /Delete Appointment/i })).toBeInTheDocument()
@@ -348,7 +346,7 @@ describe('AppointmentDetailModal', () => {
           viewMode="patient"
         />
       )
-      expect(screen.getByText('General Practice')).toBeInTheDocument()
+      expect(screen.getByText('general')).toBeInTheDocument()
     })
   })
 

@@ -143,8 +143,7 @@ describe('ExpandableSection', () => {
   })
 
   describe('children rendering', () => {
-    it('renders complex children correctly when expanded', async () => {
-      const user = userEvent.setup()
+    it('renders complex children correctly when expanded', () => {
       render(
         <ExpandableSection title="Complex Content" defaultExpanded>
           <div>

@@ -44,7 +44,7 @@ describe('CollapsibleSection', () => {
     })
 
     it('renders icon when provided', () => {
-      const { container } = render(
+      render(
         <CollapsibleSection title="With Icon" icon={<AlertTriangle data-testid="custom-icon" />}>
           <p>Content</p>
         </CollapsibleSection>

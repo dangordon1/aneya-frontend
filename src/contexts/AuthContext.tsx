@@ -243,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setDoctorProfile(null);
               setPatientProfile(null);
             }
-          } catch (roleErr) {
+          } catch (_roleErr) {
             console.log('ℹ️ No role found for user');
             setUserRole('user');
             setIsAdmin(false);
