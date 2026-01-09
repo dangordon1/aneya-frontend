@@ -1,6 +1,9 @@
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, passthrough } from 'msw'
 
 const API_URL = 'http://localhost:8000'
+
+// Real Supabase URL - integration tests should passthrough to real database
+const REAL_SUPABASE_URL = 'https://ngkmhrckbybqghzfyorp.supabase.co'
 
 // Default mock data
 const mockDiagnoses = [
@@ -18,6 +21,10 @@ const mockDiagnoses = [
 ]
 
 export const handlers = [
+  // Passthrough handlers for real Supabase (integration tests)
+  // These must come first to ensure real Supabase requests aren't intercepted
+  http.all(`${REAL_SUPABASE_URL}/*`, () => passthrough()),
+
   // Health check
   http.get(`${API_URL}/health`, () => {
     return HttpResponse.json({ status: 'healthy' })
