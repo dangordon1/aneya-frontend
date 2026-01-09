@@ -257,6 +257,11 @@ export function AppointmentDetailModal({
                   {confidence} confidence
                 </span>
               )}
+              {consultation?.detected_consultation_type && (
+                <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-[12px] font-medium capitalize">
+                  {consultation.detected_consultation_type.replace('_', ' ')}
+                </span>
+              )}
             </div>
             {viewMode === 'patient' && appointment.doctor?.specialty && (
               <p className="text-[13px] text-gray-600 mt-1">
@@ -348,7 +353,7 @@ export function AppointmentDetailModal({
                     className="px-3 py-2 bg-aneya-navy text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
                   >
                     <Brain className="w-4 h-4" />
-                    AI Analysis
+                    AI Diagnosis and Treatment
                   </button>
                 )}
                 {isAdmin && onDelete && (

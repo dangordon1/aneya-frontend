@@ -28,13 +28,18 @@ export function PastAppointmentCard({
       onClick={onClick}
       className="w-full bg-white rounded-[16px] border border-gray-200 p-4 hover:shadow-md hover:border-aneya-teal transition-all text-left"
     >
-      <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center gap-3 mb-2 flex-wrap">
         <span className="text-[14px] text-gray-600">
           {formattedDate} at {formattedTime}
         </span>
         <span className="px-2 py-1 rounded-full bg-aneya-teal/10 text-aneya-teal text-[12px] font-medium">
           {appointment.status === 'completed' ? 'Completed' : appointment.status}
         </span>
+        {consultation?.detected_consultation_type && (
+          <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-[12px] font-medium capitalize">
+            {consultation.detected_consultation_type.replace('_', ' ')}
+          </span>
+        )}
       </div>
 
       <h4 className="text-[16px] text-aneya-navy font-semibold mb-1">

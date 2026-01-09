@@ -2921,7 +2921,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {!consultationSummary ? 'Summarizing & Analyzing...' : 'Analyzing...'}
               </span>
             ) : (
-              'Analyse Consultation'
+              'AI Diagnosis and Treatment'
             )}
           </PrimaryButton>
         </div>
