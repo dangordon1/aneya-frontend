@@ -940,7 +940,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       // Prepare request body
       const requestBody = {
         consultation_id: consultationId,
-        appointment_id: appointmentContext.id,
+        appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
         patient_id: preFilledPatient.id,
         original_transcript: originalTranscript || consultation,
         consultation_text: consultation,
@@ -1074,7 +1074,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
           const saved = await onSaveConsultation({
             patient_id: preFilledPatient.id,
-            appointment_id: appointmentContext?.id || null,
+            appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
             consultation_text: consultation,
             original_transcript: originalTranscript || consultation,
             transcription_language: consultationLanguage,
@@ -1235,8 +1235,40 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         }
       }
 
-      // NOTE: Saving is now handled in stopRecording() for the diarization flow
-      // Old signature save call removed to match new interface
+      // Step 2: Save consultation to database if not already saved
+      if (!pendingConsultationId && onSaveConsultation && preFilledPatient) {
+        console.log('💾 Saving consultation to database...');
+
+        const patientSnapshot = {
+          name: preFilledPatient.name,
+          age: getPatientAge(preFilledPatient),
+          sex: preFilledPatient.sex,
+          allergies: preFilledPatient.allergies,
+          current_medications: preFilledPatient.current_medications,
+          current_conditions: preFilledPatient.current_conditions
+        };
+
+        const saved = await onSaveConsultation({
+          patient_id: preFilledPatient.id,
+          appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
+          consultation_text: consultation,
+          original_transcript: originalTranscript || consultation,
+          transcription_language: consultationLanguage,
+          audio_url: null,
+          patient_snapshot: patientSnapshot,
+          consultation_duration_seconds: recordingTime,
+          transcription_status: 'completed'
+        });
+
+        if (saved) {
+          setPendingConsultationId(saved.id);
+          console.log(`✅ Consultation saved (id: ${saved.id})`);
+        } else {
+          console.error('❌ Failed to save consultation');
+        }
+      } else if (pendingConsultationId) {
+        console.log(`ℹ️ Consultation already saved (id: ${pendingConsultationId})`);
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.log('Background save aborted');
@@ -1925,7 +1957,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       const saved = await onSaveConsultation({
         patient_id: preFilledPatient.id,
-        appointment_id: appointmentContext?.id || null,
+        appointment_id: (appointmentContext?.id && appointmentContext.id.length > 0) ? appointmentContext.id : null,
         consultation_text: consultationText,
         original_transcript: originalTranscript || consultation,
         transcription_language: consultationLanguage,
