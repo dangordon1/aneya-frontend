@@ -1,29 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '../test/utils/render'
 import { BranchIndicator } from './BranchIndicator'
 
-// Mock the __GIT_BRANCH__ global
+// Extend the global Window interface for our custom property
 declare global {
-  // eslint-disable-next-line no-var
-  var __GIT_BRANCH__: string
+  interface Window {
+    __GIT_BRANCH__?: string
+  }
 }
 
 describe('BranchIndicator', () => {
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     vi.resetAllMocks()
-    global.__GIT_BRANCH__ = 'main'
+    ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
   })
 
   afterEach(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
   })
 
   describe('when on main branch', () => {
     it('returns null when both FE and BE are on main', async () => {
-      global.__GIT_BRANCH__ = 'main'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'main' }),
       })
 
@@ -31,7 +32,7 @@ describe('BranchIndicator', () => {
 
       // Wait for fetch to complete
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled()
+        expect(globalThis.fetch).toHaveBeenCalled()
       })
 
       // Should render nothing
@@ -39,15 +40,15 @@ describe('BranchIndicator', () => {
     })
 
     it('returns null when FE is main and BE is master', async () => {
-      global.__GIT_BRANCH__ = 'main'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'master' }),
       })
 
       const { container } = render(<BranchIndicator />)
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled()
+        expect(globalThis.fetch).toHaveBeenCalled()
       })
 
       expect(container.firstChild).toBeNull()
@@ -56,8 +57,8 @@ describe('BranchIndicator', () => {
 
   describe('when on feature branch', () => {
     it('shows frontend branch when not main/master', async () => {
-      global.__GIT_BRANCH__ = 'feature/new-ui'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'feature/new-ui'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'main' }),
       })
 
@@ -67,8 +68,8 @@ describe('BranchIndicator', () => {
     })
 
     it('shows backend branch when backend is on feature branch', async () => {
-      global.__GIT_BRANCH__ = 'main'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'feature/api-update' }),
       })
 
@@ -80,8 +81,8 @@ describe('BranchIndicator', () => {
     })
 
     it('shows both FE and BE branches when both are on feature branches', async () => {
-      global.__GIT_BRANCH__ = 'feature/frontend'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'feature/frontend'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'feature/backend' }),
       })
 
@@ -97,15 +98,15 @@ describe('BranchIndicator', () => {
 
   describe('API interaction', () => {
     it('fetches from health endpoint', async () => {
-      global.__GIT_BRANCH__ = 'main'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'develop' }),
       })
 
       render(<BranchIndicator />)
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(globalThis.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/api/health')
         )
       })
@@ -113,8 +114,8 @@ describe('BranchIndicator', () => {
 
     it('handles fetch error gracefully', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-      global.__GIT_BRANCH__ = 'feature/test'
-      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'feature/test'
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
 
       render(<BranchIndicator />)
 
@@ -132,15 +133,15 @@ describe('BranchIndicator', () => {
     })
 
     it('handles missing branch in response', async () => {
-      global.__GIT_BRANCH__ = 'main'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'main'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({}),
       })
 
       const { container } = render(<BranchIndicator />)
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled()
+        expect(globalThis.fetch).toHaveBeenCalled()
       })
 
       // No branch in response, so nothing to show
@@ -150,8 +151,8 @@ describe('BranchIndicator', () => {
 
   describe('styling', () => {
     it('has text-right class', async () => {
-      global.__GIT_BRANCH__ = 'feature/test'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'feature/test'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'main' }),
       })
 
@@ -161,8 +162,8 @@ describe('BranchIndicator', () => {
     })
 
     it('uses monospace font', async () => {
-      global.__GIT_BRANCH__ = 'feature/test'
-      global.fetch = vi.fn().mockResolvedValue({
+      ;(globalThis as unknown as { __GIT_BRANCH__: string }).__GIT_BRANCH__ = 'feature/test'
+      globalThis.fetch = vi.fn().mockResolvedValue({
         json: () => Promise.resolve({ branch: 'main' }),
       })
 

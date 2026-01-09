@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '../test/utils/render'
+import { render, screen } from '../test/utils/render'
 import { ConsultationHistoryCard } from './ConsultationHistoryCard'
-import { Consultation } from '../types/database'
+import { createMockConsultation } from '../test/fixtures'
 
 // Mock dateHelpers
 vi.mock('../utils/dateHelpers', () => ({
@@ -11,12 +11,9 @@ vi.mock('../utils/dateHelpers', () => ({
 }))
 
 describe('ConsultationHistoryCard', () => {
-  const mockConsultation: Consultation = {
+  const mockConsultation = createMockConsultation({
     id: 'cons-123',
     appointment_id: 'apt-123',
-    doctor_id: 'doc-456',
-    patient_id: 'pat-789',
-    form_data: {},
     created_at: '2024-01-15T14:30:00Z',
     consultation_duration_seconds: 900,
     consultation_text: 'Consultation Transcript:\nPatient complains of headache\n\nConsultation Summary:\nHeadache for 3 days, no red flags.',
@@ -42,7 +39,9 @@ describe('ConsultationHistoryCard', () => {
     summary_data: {
       recommendations_given: ['Rest', 'Hydration'],
       clinical_summary: {
-        plan: 'Follow-up in 1 week if symptoms persist',
+        plan: {
+          follow_up: 'Follow-up in 1 week if symptoms persist',
+        },
         investigations_ordered: ['Full blood count'],
         investigations_reviewed: ['Previous MRI - normal']
       }
@@ -53,7 +52,7 @@ describe('ConsultationHistoryCard', () => {
       allergies: 'NKDA',
       current_medications: 'None'
     }
-  }
+  })
 
   const mockOnDelete = vi.fn()
   const mockOnAnalyze = vi.fn()
@@ -92,7 +91,7 @@ describe('ConsultationHistoryCard', () => {
     })
 
     it('shows No diagnosis recorded when no diagnoses', () => {
-      const consultationNoDiagnosis = { ...mockConsultation, diagnoses: [] }
+      const consultationNoDiagnosis = createMockConsultation({ diagnoses: [] })
       render(<ConsultationHistoryCard consultation={consultationNoDiagnosis} />)
       expect(screen.getByText('No diagnosis recorded')).toBeInTheDocument()
     })
@@ -125,7 +124,7 @@ describe('ConsultationHistoryCard', () => {
   })
 
   describe('expanded content', () => {
-    const expandCard = async (user: any) => {
+    const expandCard = async (user: ReturnType<typeof import('@testing-library/user-event').default.setup>) => {
       const buttons = screen.getAllByRole('button')
       await user.click(buttons[0])
     }
@@ -181,7 +180,7 @@ describe('ConsultationHistoryCard', () => {
   })
 
   describe('investigations section', () => {
-    const expandCard = async (user: any) => {
+    const expandCard = async (user: ReturnType<typeof import('@testing-library/user-event').default.setup>) => {
       const buttons = screen.getAllByRole('button')
       await user.click(buttons[0])
     }
@@ -207,7 +206,7 @@ describe('ConsultationHistoryCard', () => {
   })
 
   describe('AI medications', () => {
-    const expandCard = async (user: any) => {
+    const expandCard = async (user: ReturnType<typeof import('@testing-library/user-event').default.setup>) => {
       const buttons = screen.getAllByRole('button')
       await user.click(buttons[0])
     }
@@ -277,7 +276,7 @@ describe('ConsultationHistoryCard', () => {
 
   describe('analyze functionality', () => {
     it('shows analyze button when no AI analysis exists', async () => {
-      const consultationNoAnalysis = { ...mockConsultation, diagnoses: [] }
+      const consultationNoAnalysis = createMockConsultation({ diagnoses: [] })
       const { user } = render(
         <ConsultationHistoryCard consultation={consultationNoAnalysis} onAnalyze={mockOnAnalyze} />
       )
@@ -290,7 +289,7 @@ describe('ConsultationHistoryCard', () => {
     })
 
     it('shows prompt to run AI analysis when not analyzed', async () => {
-      const consultationNoAnalysis = { ...mockConsultation, diagnoses: [] }
+      const consultationNoAnalysis = createMockConsultation({ diagnoses: [] })
       const { user } = render(
         <ConsultationHistoryCard consultation={consultationNoAnalysis} onAnalyze={mockOnAnalyze} />
       )

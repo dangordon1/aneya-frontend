@@ -180,11 +180,11 @@ export class MockWebSocket {
  * Returns a cleanup function to restore the original WebSocket
  */
 export function installWebSocketMock(): () => void {
-  const originalWebSocket = global.WebSocket
-  global.WebSocket = MockWebSocket as unknown as typeof WebSocket
+  const originalWebSocket = globalThis.WebSocket
+  ;(globalThis as typeof globalThis & { WebSocket: unknown }).WebSocket = MockWebSocket as unknown as typeof WebSocket
 
   return () => {
-    global.WebSocket = originalWebSocket
+    ;(globalThis as typeof globalThis & { WebSocket: unknown }).WebSocket = originalWebSocket
     MockWebSocket.reset()
   }
 }

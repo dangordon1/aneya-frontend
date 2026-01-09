@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../test/utils/render'
 import { PastAppointmentCard } from './PastAppointmentCard'
-import { AppointmentWithPatient, Consultation } from '../types/database'
+import { createMockAppointmentWithPatient, createMockConsultation, createMockDoctor } from '../test/fixtures'
 
 // Mock dateHelpers
 vi.mock('../utils/dateHelpers', () => ({
@@ -10,7 +10,7 @@ vi.mock('../utils/dateHelpers', () => ({
 }))
 
 describe('PastAppointmentCard', () => {
-  const mockAppointment: AppointmentWithPatient = {
+  const mockAppointment = createMockAppointmentWithPatient({
     id: 'apt-123',
     doctor_id: 'doc-456',
     patient_id: 'pat-789',
@@ -19,30 +19,25 @@ describe('PastAppointmentCard', () => {
     status: 'completed',
     reason: 'Follow-up consultation',
     notes: null,
-    created_at: '2024-01-01T00:00:00Z',
     patient: {
       id: 'pat-789',
       name: 'Jane Smith',
       email: 'jane@example.com',
       phone: '555-1234',
-      created_at: '2024-01-01T00:00:00Z',
     },
-    doctor: {
+    doctor: createMockDoctor({
       id: 'doc-456',
       user_id: 'user-456',
       name: 'Dr. Johnson',
       email: 'doc@example.com',
-      specialty: 'General Practice',
-    },
-  }
+      specialty: 'general',
+    }),
+  })
 
-  const mockConsultation: Consultation = {
+  const mockConsultation = createMockConsultation({
     id: 'cons-123',
     appointment_id: 'apt-123',
-    doctor_id: 'doc-456',
     patient_id: 'pat-789',
-    form_data: {},
-    created_at: '2024-01-15T15:00:00Z',
     diagnoses: [
       { diagnosis: 'Acute Bronchitis', confidence: 'high' },
     ],
@@ -55,7 +50,7 @@ describe('PastAppointmentCard', () => {
         duration: '7 days',
       },
     ],
-  }
+  })
 
   const mockOnClick = vi.fn()
 
@@ -132,14 +127,14 @@ describe('PastAppointmentCard', () => {
           viewMode="patient"
         />
       )
-      expect(screen.getByText('General Practice')).toBeInTheDocument()
+      expect(screen.getByText('general')).toBeInTheDocument()
     })
 
     it('shows fallback when doctor not available', () => {
-      const appointmentWithoutDoctor = {
+      const appointmentWithoutDoctor = createMockAppointmentWithPatient({
         ...mockAppointment,
-        doctor: undefined,
-      }
+        doctor: null,
+      })
       render(
         <PastAppointmentCard
           appointment={appointmentWithoutDoctor}
@@ -218,7 +213,10 @@ describe('PastAppointmentCard', () => {
 
   describe('without reason', () => {
     it('does not render reason line', () => {
-      const appointmentNoReason = { ...mockAppointment, reason: null }
+      const appointmentNoReason = createMockAppointmentWithPatient({
+        ...mockAppointment,
+        reason: null,
+      })
       render(
         <PastAppointmentCard
           appointment={appointmentNoReason}
@@ -259,10 +257,10 @@ describe('PastAppointmentCard', () => {
     })
 
     it('shows other status as-is', () => {
-      const cancelledAppointment = {
+      const cancelledAppointment = createMockAppointmentWithPatient({
         ...mockAppointment,
-        status: 'cancelled' as const,
-      }
+        status: 'cancelled',
+      })
       render(
         <PastAppointmentCard
           appointment={cancelledAppointment}
@@ -305,14 +303,13 @@ describe('PastAppointmentCard', () => {
 
   describe('multiple prescriptions', () => {
     it('renders all prescriptions', () => {
-      const multiPrescriptionConsultation = {
-        ...mockConsultation,
+      const multiPrescriptionConsultation = createMockConsultation({
         prescriptions: [
-          { drug_name: 'Amoxicillin', amount: '500mg' },
-          { drug_name: 'Ibuprofen', amount: '400mg' },
-          { drug_name: 'Paracetamol', amount: '1g' },
+          { drug_name: 'Amoxicillin', amount: '500mg', method: 'Oral', frequency: 'TDS', duration: '7 days' },
+          { drug_name: 'Ibuprofen', amount: '400mg', method: 'Oral', frequency: 'BD', duration: '5 days' },
+          { drug_name: 'Paracetamol', amount: '1g', method: 'Oral', frequency: 'QDS', duration: '3 days' },
         ],
-      }
+      })
 
       render(
         <PastAppointmentCard
