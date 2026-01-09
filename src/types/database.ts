@@ -162,7 +162,7 @@ export interface Consultation {
   transcription_error: string | null; // Error message if transcription_status is failed
   transcription_started_at: string | null; // When async processing started
   transcription_completed_at: string | null; // When async processing finished
-  detected_consultation_type?: 'obgyn' | 'infertility' | 'antenatal' | null; // AI-detected consultation type from form auto-fill
+  detected_consultation_type?: string | null; // AI-detected consultation type from form auto-fill (dynamic based on custom_forms)
 }
 
 // Summary data returned from /api/summarize endpoint
