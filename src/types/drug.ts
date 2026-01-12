@@ -1,5 +1,5 @@
 /**
- * Drug detail type definitions for Aneya clinical decision support system
+ * Drug detail type definitions for Aneya system
  */
 
 /**

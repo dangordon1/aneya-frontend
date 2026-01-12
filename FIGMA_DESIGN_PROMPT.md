@@ -1,7 +1,7 @@
 # Figma Design Prompt: Aneya Appointment Management System
 
 ## Project Overview
-Design a comprehensive appointment management system for healthcare professionals that integrates with the existing Aneya clinical decision support platform.
+Design a comprehensive appointment management system for healthcare professionals that integrates with the existing Aneya platform.
 
 ## Brand Identity
 **Colors:**
@@ -247,4 +247,4 @@ The design should enable a doctor to:
 5. Manage their schedule efficiently (create, modify, cancel appointments)
 6. Search and find any patient quickly
 
-The interface should feel intuitive, professional, and aligned with the existing Aneya clinical decision support aesthetic.
+The interface should feel intuitive, professional, and aligned with the existing Aneya aesthetic.
