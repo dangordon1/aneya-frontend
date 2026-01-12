@@ -34,10 +34,10 @@ const DoctorProfileTab = lazy(() => import('./components/doctor-portal/DoctorPro
 const CustomFormsTab = lazy(() => import('./components/doctor-portal/CustomFormsTab').then(m => ({ default: m.CustomFormsTab })));
 const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => ({ default: m.AllDoctorsTab })));
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
-// ✨ NEW: Single dynamic form component for all consultation types
-const DynamicConsultationForm = lazy(() => import('./components/doctor-portal/DynamicConsultationForm').then(m => ({ default: m.DynamicConsultationForm })));
-// Form selector with tabs for all forms in a specialty
-const ConsultationFormSelector = lazy(() => import('./components/doctor-portal/ConsultationFormSelector').then(m => ({ default: m.ConsultationFormSelector })));
+// ✨ FIX: Import statically to avoid mixed import patterns (these are also used by other components)
+// Lazy loading these causes "Importing a module script failed" errors in production
+import { DynamicConsultationForm } from './components/doctor-portal/DynamicConsultationForm';
+import { ConsultationFormSelector } from './components/doctor-portal/ConsultationFormSelector';
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
