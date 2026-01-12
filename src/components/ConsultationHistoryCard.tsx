@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Consultation } from '../types/database';
 import { ChevronDown, ChevronUp, Trash2, Brain, FileText, Activity, Pill, Stethoscope, RefreshCw, FlaskConical } from 'lucide-react';
 import { formatDateUK, formatTime24, formatDuration } from '../utils/dateHelpers';
+import { AnalysisModeModal, AnalysisMode } from './AnalysisModeModal';
 
 interface ConsultationHistoryCardProps {
   consultation: Consultation;
@@ -17,12 +18,31 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
   const [isDeleting, setIsDeleting] = useState(false);
   const [isResummarizing, setIsResummarizing] = useState(false);
   const [isResearchAnalyzing, setIsResearchAnalyzing] = useState(false);
+  const [showAnalysisModeModal, setShowAnalysisModeModal] = useState(false);
 
   // Check if consultation has been analyzed
   const hasAiAnalysis = consultation.diagnoses && consultation.diagnoses.length > 0;
   const hasResearchAnalysis = consultation.research_findings && consultation.research_findings.diagnoses && consultation.research_findings.diagnoses.length > 0;
   const canAnalyze = !hasAiAnalysis && onAnalyze;
   const canResummarize = onResummarize;
+
+  const handleAnalysisModeSelect = async (mode: AnalysisMode) => {
+    if (mode === 'guidelines' && onAnalyze) {
+      onAnalyze(consultation);
+    } else if (mode === 'research' && onResearchAnalysis) {
+      setIsResearchAnalyzing(true);
+      try {
+        await onResearchAnalysis(consultation);
+      } finally {
+        setIsResearchAnalyzing(false);
+      }
+    } else if (mode === 'both' && onAnalyze && onResearchAnalysis) {
+      // Run guideline analysis first
+      onAnalyze(consultation);
+      // Note: Research analysis will need to be run after guideline completes
+      // For now, user can click "Also Analyze with Research" after guidelines finish
+    }
+  };
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card expansion
@@ -518,7 +538,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                 Click the button below to run AI-assisted diagnosis.
               </p>
               <button
-                onClick={() => onAnalyze && onAnalyze(consultation)}
+                onClick={() => setShowAnalysisModeModal(true)}
                 className="w-full px-4 py-2 bg-aneya-teal text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
@@ -526,6 +546,15 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
               </button>
             </div>
           ) : null}
+
+          {/* Analysis Mode Modal */}
+          <AnalysisModeModal
+            isOpen={showAnalysisModeModal}
+            onClose={() => setShowAnalysisModeModal(false)}
+            onSelectMode={handleAnalysisModeSelect}
+            consultation={consultation}
+          />
+
 
           {/* Guidelines Referenced */}
           {consultation.guidelines_found && consultation.guidelines_found.length > 0 && (
@@ -619,7 +648,7 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
           <div className="flex gap-3 mt-2">
             {canAnalyze && (
               <button
-                onClick={() => onAnalyze && onAnalyze(consultation)}
+                onClick={() => setShowAnalysisModeModal(true)}
                 className="flex-1 px-4 py-2 bg-aneya-navy text-white rounded-[10px] text-[14px] font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center gap-2"
               >
                 <Brain className="w-4 h-4" />
