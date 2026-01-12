@@ -2724,14 +2724,14 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
                 <p className="text-[13px] text-gray-600 mb-2">
                   {determinedConsultationType && availableForms.some(f => f.form_type === determinedConsultationType)
-                    ? `Suggested form type: ${availableForms.find(f => f.form_type === determinedConsultationType)?.description || determinedConsultationType}`
+                    ? `Suggested form type: ${determinedConsultationType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
                     : 'Select consultation form type:'}
                 </p>
 
                 {/* Dynamic form buttons from database */}
                 <div className={`grid grid-cols-1 gap-2 ${availableForms.length === 2 ? 'sm:grid-cols-2' : availableForms.length >= 3 ? 'sm:grid-cols-3' : ''}`}>
                   {availableForms.map((form) => {
-                    const displayName = form.description || form.form_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    const displayName = form.form_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                     const isSelected = selectedFormType === form.form_type;
                     const isSuggested = determinedConsultationType === form.form_type;
 

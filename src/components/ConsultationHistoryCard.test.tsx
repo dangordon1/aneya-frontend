@@ -284,7 +284,7 @@ describe('ConsultationHistoryCard', () => {
       const buttons = screen.getAllByRole('button')
       await user.click(buttons[0])
 
-      const analyzeButtons = screen.getAllByRole('button', { name: /AI Analysis/i })
+      const analyzeButtons = screen.getAllByRole('button', { name: /AI Diagnosis and Treatment/i })
       expect(analyzeButtons.length).toBeGreaterThanOrEqual(1)
     })
 
@@ -297,7 +297,7 @@ describe('ConsultationHistoryCard', () => {
       const buttons = screen.getAllByRole('button')
       await user.click(buttons[0])
 
-      expect(screen.getByText('AI Analysis Not Yet Performed')).toBeInTheDocument()
+      expect(screen.getByText('AI Diagnosis and Treatment Not Yet Performed')).toBeInTheDocument()
     })
   })
 
