@@ -42,7 +42,6 @@ export function AppointmentDetailModal({
   const [isOriginalTranscriptExpanded, setIsOriginalTranscriptExpanded] = useState(false);
   const [isEnglishTranscriptExpanded, setIsEnglishTranscriptExpanded] = useState(false);
   const [showAnalysisModeModal, setShowAnalysisModeModal] = useState(false);
-  const [isResearchAnalyzing, setIsResearchAnalyzing] = useState(false);
 
   const handleAnalysisModeSelect = async (mode: AnalysisMode) => {
     console.log('🎯 handleAnalysisModeSelect called with mode:', mode);
@@ -63,12 +62,11 @@ export function AppointmentDetailModal({
       onClose(); // Close the detail modal after starting analysis
     } else if (mode === 'research' && onResearchAnalysis) {
       console.log('✅ Calling onResearchAnalysis for research mode');
-      setIsResearchAnalyzing(true);
       try {
         await onResearchAnalysis(consultation);
         onClose(); // Close the modal so user can reopen with fresh data
-      } finally {
-        setIsResearchAnalyzing(false);
+      } catch (error) {
+        console.error('Error during research analysis:', error);
       }
     } else if (mode === 'both' && onAnalyze && onResearchAnalysis) {
       console.log('✅ Calling onAnalyze for both mode');
@@ -642,7 +640,7 @@ export function AppointmentDetailModal({
         isOpen={showAnalysisModeModal}
         onClose={() => setShowAnalysisModeModal(false)}
         onSelectMode={handleAnalysisModeSelect}
-        consultation={consultation}
+        consultation={consultation || undefined}
       />
     </div>
   );
