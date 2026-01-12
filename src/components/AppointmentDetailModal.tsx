@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { AppointmentWithPatient, Consultation } from '../types/database';
-import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2, FlaskConical } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
+import { AnalysisModeModal, AnalysisMode } from './AnalysisModeModal';
 
 interface AppointmentDetailModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface AppointmentDetailModalProps {
   onRerunTranscription?: (appointment: AppointmentWithPatient, consultation: Consultation, newTranscript: string) => Promise<void>;
   onFillForm?: (appointment: AppointmentWithPatient, consultation: Consultation) => Promise<void>;
   onViewConsultationForm?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => void;
+  onResearchAnalysis?: (consultation: Consultation) => Promise<void>;
   viewMode?: 'doctor' | 'patient';
   isAdmin?: boolean;
   onDelete?: (appointmentId: string) => Promise<void>;
@@ -30,6 +32,7 @@ export function AppointmentDetailModal({
   onRerunTranscription,
   onFillForm,
   onViewConsultationForm,
+  onResearchAnalysis,
   viewMode = 'doctor',
   isAdmin,
   onDelete,
@@ -38,6 +41,46 @@ export function AppointmentDetailModal({
   const [isFillingForm, setIsFillingForm] = useState(false);
   const [isOriginalTranscriptExpanded, setIsOriginalTranscriptExpanded] = useState(false);
   const [isEnglishTranscriptExpanded, setIsEnglishTranscriptExpanded] = useState(false);
+  const [showAnalysisModeModal, setShowAnalysisModeModal] = useState(false);
+
+  const handleAnalysisModeSelect = async (mode: AnalysisMode) => {
+    console.log('🎯 handleAnalysisModeSelect called with mode:', mode);
+    console.log('   consultation:', consultation);
+    console.log('   onAnalyze:', onAnalyze);
+    console.log('   onResearchAnalysis:', onResearchAnalysis);
+
+    if (!consultation) {
+      console.log('❌ No consultation, returning');
+      return;
+    }
+
+    setShowAnalysisModeModal(false);
+
+    if (mode === 'guidelines' && onAnalyze) {
+      console.log('✅ Calling onAnalyze for guidelines mode');
+      onAnalyze(appointment, consultation);
+      onClose(); // Close the detail modal after starting analysis
+    } else if (mode === 'research' && onResearchAnalysis) {
+      console.log('✅ Calling onResearchAnalysis for research mode');
+      try {
+        await onResearchAnalysis(consultation);
+        onClose(); // Close the modal so user can reopen with fresh data
+      } catch (error) {
+        console.error('Error during research analysis:', error);
+      }
+    } else if (mode === 'both' && onAnalyze && onResearchAnalysis) {
+      console.log('✅ Calling onAnalyze for both mode');
+      onAnalyze(appointment, consultation);
+      onClose(); // Close the detail modal after starting analysis
+      // Research will need to be run after guidelines complete
+    } else {
+      console.log('⚠️ No matching condition for mode:', mode);
+      console.log('   mode === "guidelines"?', mode === 'guidelines');
+      console.log('   onAnalyze?', !!onAnalyze);
+      console.log('   mode === "research"?', mode === 'research');
+      console.log('   onResearchAnalysis?', !!onResearchAnalysis);
+    }
+  };
   const [isRerunningTranscription, setIsRerunningTranscription] = useState(false);
   const [rerunProgress, setRerunProgress] = useState<string>('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, string>>({});
@@ -349,7 +392,7 @@ export function AppointmentDetailModal({
                 )}
                 {canAnalyze && (
                   <button
-                    onClick={() => onAnalyze && onAnalyze(appointment, consultation)}
+                    onClick={() => setShowAnalysisModeModal(true)}
                     className="px-3 py-2 bg-aneya-navy text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
                   >
                     <Brain className="w-4 h-4" />
@@ -394,6 +437,66 @@ export function AppointmentDetailModal({
                     onFeedback={handleFeedback}
                     feedbackSubmitted={feedbackSubmitted}
                   />
+                )}
+
+                {/* Research Findings Section */}
+                {consultation.research_findings && consultation.research_findings.diagnoses?.length > 0 && (
+                  <div className="bg-indigo-50 rounded-[12px] p-4 border-2 border-indigo-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FlaskConical className="w-4 h-4 text-indigo-600" />
+                      <h5 className="text-[14px] text-indigo-800 font-semibold">
+                        Latest Research Findings
+                      </h5>
+                      <span className="text-[11px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+                        Last 5 years • Q1/Q2 Journals
+                      </span>
+                    </div>
+
+                    {consultation.research_findings.diagnoses.map((finding: any, idx: number) => (
+                      <div key={idx} className="mb-3 border-l-2 border-indigo-300 pl-3">
+                        <p className="text-[13px] font-semibold text-gray-800">{finding.diagnosis}</p>
+                        <p className="text-[12px] text-gray-600 mt-1">{finding.reasoning}</p>
+
+                        {finding.research_citations && finding.research_citations.length > 0 && (
+                          <div className="mt-2 text-[11px] text-gray-500">
+                            <span className="font-medium">Sources:</span>
+                            {finding.research_citations.map((cite: any, cIdx: number) => (
+                              <div key={cIdx} className="mt-1">
+                                • {cite.journal} ({cite.year}) - {cite.title}
+                                {cite.doi && (
+                                  <a
+                                    href={`https://doi.org/${cite.doi}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 ml-1 hover:underline"
+                                  >
+                                    DOI
+                                  </a>
+                                )}
+                                {cite.pmid && (
+                                  <a
+                                    href={`https://pubmed.ncbi.nlm.nih.gov/${cite.pmid}/`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 ml-1 hover:underline"
+                                  >
+                                    PMID
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    <p className="text-[11px] text-gray-500 mt-2 italic">
+                      Analyzed on {new Date(consultation.research_findings.analysis_date).toLocaleDateString()}
+                      {consultation.research_findings.papers_reviewed?.length > 0 && (
+                        <> using {consultation.research_findings.papers_reviewed.length} research papers</>
+                      )}
+                    </p>
+                  </div>
                 )}
 
                 {/* Transcript Section - Show both if different, otherwise just one */}
@@ -531,6 +634,14 @@ export function AppointmentDetailModal({
           </div>
         )}
       </div>
+
+      {/* Analysis Mode Selection Modal */}
+      <AnalysisModeModal
+        isOpen={showAnalysisModeModal}
+        onClose={() => setShowAnalysisModeModal(false)}
+        onSelectMode={handleAnalysisModeSelect}
+        consultation={consultation || undefined}
+      />
     </div>
   );
 }
