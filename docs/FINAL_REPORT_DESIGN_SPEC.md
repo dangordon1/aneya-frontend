@@ -1,6 +1,6 @@
 # Final Report Design Specification
 
-## Clinical Decision Support - Analysis Report
+## Analysis Report
 
 **Version:** 1.0
 **Last Updated:** December 2024
@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-The Final Report is the culmination of the clinical decision support workflow. It displays the analysis results from the backend after processing a clinical consultation through guideline analysis, diagnosis extraction, and drug enrichment.
+The Final Report is the culmination of the workflow. It displays the analysis results from the backend after processing a clinical consultation through guideline analysis, diagnosis extraction, and drug enrichment.
 
 ### 1.1 Purpose
 
@@ -512,7 +512,7 @@ Each item shows:
 
 > **Clinical Disclaimer**
 >
-> This analysis is provided as a clinical decision support tool and should not replace clinical judgment. Always consider individual patient factors, local antimicrobial resistance patterns, and current clinical guidelines. Verify all medication doses and interactions before prescribing. In case of clinical deterioration or uncertainty, seek senior clinical advice or specialist input.
+> This analysis should not replace clinical judgment. Always consider individual patient factors, local antimicrobial resistance patterns, and current clinical guidelines. Verify all medication doses and interactions before prescribing. In case of clinical deterioration or uncertainty, seek senior clinical advice or specialist input.
 
 ### 7.9 Action Button
 

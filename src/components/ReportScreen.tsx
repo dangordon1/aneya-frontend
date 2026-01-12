@@ -342,7 +342,7 @@ export function ReportScreen({ onStartNew, onReanalyze, result, patientDetails, 
             <div className="space-y-2">
               <h3 className="text-[18px] leading-[24px] text-aneya-navy">Clinical Disclaimer</h3>
               <p className="text-[15px] leading-[22px] text-aneya-navy">
-                This analysis is provided as a clinical decision support tool and should not replace clinical judgment.
+                This analysis should not replace clinical judgment.
                 Always consider individual patient factors, local antimicrobial resistance patterns, and current clinical guidelines.
                 Verify all medication doses and interactions before prescribing. In case of clinical deterioration or uncertainty,
                 seek senior clinical advice or specialist input.

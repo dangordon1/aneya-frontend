@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test script to run before Cloud Run deployment
-# Tests the clinical decision support workflow locally
+# Tests the workflow locally
 
 set -e  # Exit on error
 
@@ -18,7 +18,7 @@ echo "✅ Environment variables configured"
 
 # Test 1: Run streamlined workflow test
 echo ""
-echo "Test 1: Streamlined clinical decision support workflow"
+echo "Test 1: Streamlined workflow"
 echo "---------------------------------------"
 
 python test_streamlined.py > /tmp/deploy_test.log 2>&1 &
