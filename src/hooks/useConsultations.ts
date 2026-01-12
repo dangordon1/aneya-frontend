@@ -13,6 +13,7 @@ interface UseConsultationsReturn {
   saveConsultation: (input: CreateConsultationInput) => Promise<Consultation | null>;
   deleteConsultation: (consultationId: string) => Promise<boolean>;
   refetch: (patientId?: string) => Promise<void>;
+  researchAnalysis: (consultation: Consultation) => Promise<void>;
 }
 
 export function useConsultations(initialPatientId?: string): UseConsultationsReturn {
@@ -198,6 +199,51 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
     [user]
   );
 
+  const researchAnalysis = useCallback(
+    async (consultation: Consultation): Promise<void> => {
+      if (!user) {
+        setError('User not authenticated');
+        return;
+      }
+
+      try {
+        setError(null);
+
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+        const response = await fetch(`${API_BASE_URL}/api/analyze-research`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            consultation_id: consultation.id,
+            include_guidelines: true,
+            date_filter: 5,
+            quartile_filter: "Q1-Q2"
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(`Research analysis failed: ${errorData.detail || response.statusText}`);
+        }
+
+        const updatedConsultation = await response.json();
+
+        // Update local state
+        setConsultations((prev) =>
+          prev.map((c) => (c.id === consultation.id ? updatedConsultation : c))
+        );
+      } catch (err) {
+        console.error('Error running research analysis:', err);
+        setError(err instanceof Error ? err.message : 'Failed to run research analysis');
+        throw err;
+      }
+    },
+    [user]
+  );
+
   return {
     consultations,
     loading,
@@ -205,5 +251,6 @@ export function useConsultations(initialPatientId?: string): UseConsultationsRet
     saveConsultation,
     deleteConsultation,
     refetch: fetchConsultations,
+    researchAnalysis,
   };
 }

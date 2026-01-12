@@ -158,6 +158,7 @@ export interface Consultation {
   location_detected: string | null;
   backend_api_version: string | null;
   summary_data?: SummaryData | null; // Full summarization data
+  research_findings?: ResearchFindings | null; // Research paper-based analysis results
   transcription_status: 'pending' | 'processing' | 'completed' | 'failed'; // Status of async diarisation
   transcription_error: string | null; // Error message if transcription_status is failed
   transcription_started_at: string | null; // When async processing started
@@ -206,6 +207,58 @@ export interface Prescription {
   method: string | null;
   frequency: string | null;
   duration: string | null;
+}
+
+// Research findings from research paper-based analysis
+export interface ResearchFindings {
+  diagnoses: ResearchDiagnosis[];
+  papers_reviewed: PaperReviewed[];
+  analysis_date: string;
+  filters_applied: {
+    date_range: string;
+    quartile: string;
+    databases: string[];
+  };
+}
+
+export interface ResearchDiagnosis {
+  diagnosis: string;
+  confidence: string;
+  reasoning: string;
+  research_citations: ResearchCitation[];
+  primary_care?: {
+    medications?: Array<{ drug_name: string; variations: string[] }>;
+    supportive_care?: string[];
+    clinical_guidance?: string;
+    when_to_escalate?: string[];
+  };
+  surgery?: Record<string, any>;
+  diagnostics?: {
+    required?: string[];
+    monitoring?: string[];
+    referral_criteria?: string[];
+  };
+  follow_up?: {
+    timeframe?: string;
+    monitoring?: string[];
+    referral_criteria?: string[];
+  };
+}
+
+export interface ResearchCitation {
+  pmid?: string;
+  doi?: string;
+  title: string;
+  journal: string;
+  year: number;
+  authors: string[];
+  study_type?: string;
+  evidence_level?: string;
+}
+
+export interface PaperReviewed {
+  tool_name: string;
+  tool_input: Record<string, any>;
 }
 
 // Unified consultation data format from /api/summarize

@@ -8,16 +8,19 @@ interface ConsultationHistoryCardProps {
   onDelete?: (consultationId: string) => Promise<boolean>;
   onAnalyze?: (consultation: Consultation) => void;
   onResummarize?: (consultation: Consultation) => Promise<void>;
+  onResearchAnalysis?: (consultation: Consultation) => Promise<void>;
 }
 
-export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onResummarize }: ConsultationHistoryCardProps) {
+export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onResummarize, onResearchAnalysis }: ConsultationHistoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isResummarizing, setIsResummarizing] = useState(false);
+  const [isResearchAnalyzing, setIsResearchAnalyzing] = useState(false);
 
   // Check if consultation has been analyzed
   const hasAiAnalysis = consultation.diagnoses && consultation.diagnoses.length > 0;
+  const hasResearchAnalysis = consultation.research_findings && consultation.research_findings.diagnoses && consultation.research_findings.diagnoses.length > 0;
   const canAnalyze = !hasAiAnalysis && onAnalyze;
   const canResummarize = onResummarize;
 
@@ -282,19 +285,34 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
                   Consultation Summary
                 </h5>
               </div>
-              {canResummarize && (
-                <button
-                  onClick={() => {
-                    setIsResummarizing(true);
-                    onResummarize(consultation).finally(() => setIsResummarizing(false));
-                  }}
-                  disabled={isResummarizing}
-                  className="px-3 py-1 bg-aneya-teal text-white rounded-[8px] text-[12px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isResummarizing ? 'animate-spin' : ''}`} />
-                  {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {canResummarize && (
+                  <button
+                    onClick={() => {
+                      setIsResummarizing(true);
+                      onResummarize(consultation).finally(() => setIsResummarizing(false));
+                    }}
+                    disabled={isResummarizing}
+                    className="px-3 py-1 bg-aneya-teal text-white rounded-[8px] text-[12px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isResummarizing ? 'animate-spin' : ''}`} />
+                    {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
+                  </button>
+                )}
+                {hasAiAnalysis && !hasResearchAnalysis && onResearchAnalysis && (
+                  <button
+                    onClick={() => {
+                      setIsResearchAnalyzing(true);
+                      onResearchAnalysis(consultation).finally(() => setIsResearchAnalyzing(false));
+                    }}
+                    disabled={isResearchAnalyzing}
+                    className="px-3 py-1 bg-indigo-600 text-white rounded-[8px] text-[12px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    <FlaskConical className={`w-3 h-3 ${isResearchAnalyzing ? 'animate-spin' : ''}`} />
+                    {isResearchAnalyzing ? 'Getting Research...' : 'Also Analyze with Research'}
+                  </button>
+                )}
+              </div>
             </div>
             {summary ? (
               <p className="text-[13px] text-gray-700 whitespace-pre-wrap">
@@ -517,6 +535,62 @@ export function ConsultationHistoryCard({ consultation, onDelete, onAnalyze, onR
               </h5>
               <p className="text-[12px] text-gray-600">
                 NICE, BNF, and CKS guidelines consulted during analysis
+              </p>
+            </div>
+          )}
+
+          {/* Research-Based Findings */}
+          {hasResearchAnalysis && consultation.research_findings && (
+            <div className="bg-indigo-50 rounded-[12px] p-4 border-2 border-indigo-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FlaskConical className="w-4 h-4 text-indigo-600" />
+                <h5 className="text-[14px] text-indigo-800 font-semibold">
+                  Latest Research Findings
+                </h5>
+                <span className="text-[11px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+                  Last 5 years • Q1/Q2 Journals
+                </span>
+              </div>
+
+              {consultation.research_findings.diagnoses.map((finding, idx) => (
+                <div key={idx} className="mb-3 border-l-2 border-indigo-300 pl-3">
+                  <p className="text-[13px] font-semibold text-gray-800">{finding.diagnosis}</p>
+                  {finding.reasoning && (
+                    <p className="text-[12px] text-gray-600 mt-1">{finding.reasoning}</p>
+                  )}
+
+                  {finding.research_citations && finding.research_citations.length > 0 && (
+                    <div className="mt-2 text-[11px] text-gray-500 space-y-1">
+                      <span className="font-medium">Sources:</span>
+                      {finding.research_citations.map((cite, cIdx) => (
+                        <div key={cIdx} className="ml-2">
+                          • {cite.journal} ({cite.year}) - {cite.title}
+                          {cite.doi && (
+                            <a
+                              href={`https://doi.org/${cite.doi}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 ml-1 hover:underline"
+                            >
+                              DOI
+                            </a>
+                          )}
+                          {cite.evidence_level && (
+                            <span className="ml-2 text-[10px] bg-indigo-100 px-1 py-0.5 rounded">
+                              {cite.evidence_level}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <p className="text-[11px] text-gray-500 mt-3 pt-2 border-t border-indigo-200 italic">
+                Analyzed on {new Date(consultation.research_findings.analysis_date).toLocaleDateString()}
+                {' '}using {consultation.research_findings.papers_reviewed.length} research papers
+                {' '}({consultation.research_findings.filters_applied.databases.join(', ')})
               </p>
             </div>
           )}
