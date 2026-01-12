@@ -342,7 +342,15 @@ export function PatientDetailView({
           </button>
         </div>
 
-        <h1 className="text-[32px] text-aneya-navy mb-6">{patient.name}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-[32px] text-aneya-navy">{patient.name}</h1>
+          <button
+            onClick={() => onStartConsultation(patient)}
+            className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[16px] hover:bg-opacity-90 transition-colors"
+          >
+            Start New Consultation
+          </button>
+        </div>
 
         {/* Demographics */}
         <section className="mb-6 bg-white rounded-[16px] p-6 border-2 border-aneya-teal">
