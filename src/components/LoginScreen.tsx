@@ -683,7 +683,7 @@ export function LoginScreen() {
           <div className="mt-6 pt-6 border-t border-aneya-navy/10">
             <p className="text-xs text-aneya-navy/60 text-center">
               {loginMode === 'doctor'
-                ? 'For healthcare professionals only. This system provides clinical decision support and does not replace professional medical judgment.'
+                ? 'For healthcare professionals only. This system does not replace professional medical judgment.'
                 : 'Manage your health appointments and connect with your doctors. Always consult your healthcare provider for medical advice.'}
             </p>
           </div>

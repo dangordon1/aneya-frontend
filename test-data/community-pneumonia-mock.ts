@@ -106,7 +106,7 @@ export const communityPneumoniaResult = {
       }
     }
   ],
-  "summary": "\nCLINICAL DECISION SUPPORT REPORT\n\nDIAGNOSES (1):\n\n- Community-acquired pneumonia (CAP) with features of COPD exacerbation (high confidence)",
+  "summary": "\nCLINICAL ANALYSIS REPORT\n\nDIAGNOSES (1):\n\n- Community-acquired pneumonia (CAP) with features of COPD exacerbation (high confidence)",
   "bnf_prescribing_guidance": [],
   "guidelines_found": [
     {

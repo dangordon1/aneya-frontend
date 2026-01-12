@@ -1,6 +1,6 @@
 # aneya Frontend
 
-React + TypeScript frontend for clinical decision support with real-time voice transcription.
+React + TypeScript frontend with real-time voice transcription.
 
 ## Overview
 
@@ -190,7 +190,7 @@ The first transcription request is slower than subsequent ones:
 
 ## Safety and Clinical Disclaimers
 
-⚠️ **Critical:** This is a clinical decision support tool for healthcare professionals.
+⚠️ **Critical:** This is a tool for healthcare professionals.
 
 - All recommendations require professional review before prescribing
 - Verify allergies, interactions, contraindications

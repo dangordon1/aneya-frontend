@@ -91,7 +91,7 @@ export function InvalidInputScreen({ errorMessage, onReturnHome }: InvalidInputS
             </li>
             <li className="text-[15px] leading-[22px] text-blue-800 flex items-start gap-2">
               <span className="text-blue-600 font-bold mt-0.5">•</span>
-              <span>Requests for clinical decision support or treatment guidance</span>
+              <span>Requests for treatment guidance</span>
             </li>
             <li className="text-[15px] leading-[22px] text-blue-800 flex items-start gap-2">
               <span className="text-blue-600 font-bold mt-0.5">•</span>
