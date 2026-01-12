@@ -293,6 +293,70 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     }
   };
 
+  const handleResearchAnalysis = async (consultation: Consultation) => {
+    if (!consultation) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+
+      console.log('🔬 Starting research paper analysis...');
+
+      const response = await fetch(`${apiUrl}/api/analyze-research`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          consultation_id: consultation.id,
+          include_guidelines: true,
+          date_filter: 5,
+          quartile_filter: "Q1-Q2"
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to analyze research: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Update the consultation in the database with research findings
+      const { error: updateError } = await supabase
+        .from('consultations')
+        .update({
+          research_findings: data.research_findings,
+        })
+        .eq('id', consultation.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Refetch fresh consultation data
+      const { data: freshConsultation, error: refetchError } = await supabase
+        .from('consultations')
+        .select('*')
+        .eq('id', consultation.id)
+        .single();
+
+      if (refetchError) {
+        console.error('⚠️  Error refetching consultation:', refetchError);
+      } else if (freshConsultation && freshConsultation.appointment_id) {
+        setConsultationsMap((prev) => ({
+          ...prev,
+          [freshConsultation.appointment_id]: freshConsultation
+        }));
+      }
+
+      console.log('✅ Research analysis completed successfully');
+      alert('Research analysis completed! View the consultation to see latest research findings.');
+    } catch (error) {
+      console.error('Error analyzing research:', error);
+      alert('Failed to analyze research papers. Please try again.');
+    }
+  };
+
   const handleRerunTranscription = async (
     appointment: AppointmentWithPatient,
     consultation: Consultation,
@@ -767,6 +831,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           onResummarize={handleResummarize}
           onFillForm={handleFillForm}
           onRerunTranscription={handleRerunTranscription}
+          onResearchAnalysis={handleResearchAnalysis}
           onViewConsultationForm={onViewConsultationForm}
           isAdmin={isAdmin}
           onDelete={handleDeleteAppointment}

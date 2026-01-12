@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Loader2, MapPin, Search, Pill, CheckCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, MapPin, Search, Pill, CheckCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface StreamEvent {
   type: string;
@@ -158,6 +158,9 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
       case 'complete':
       case 'diagnoses':
         return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'error':
+      case 'invalid_input':
+        return <AlertCircle className="w-4 h-4 text-red-600" />;
       default:
         return <Loader2 className="w-4 h-4 text-gray-600 animate-spin" />;
     }
@@ -192,6 +195,9 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
       case 'complete':
       case 'diagnoses':
         return 'bg-emerald-50 border-emerald-400';
+      case 'error':
+      case 'invalid_input':
+        return 'bg-red-50 border-red-400';
       default:
         return 'bg-gray-50 border-gray-300';
     }
@@ -216,8 +222,17 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
         return `✅ ${event.data.diagnoses?.length || 0} diagnoses identified`;
       case 'done':
         return event.data.message || 'Done';
+      case 'error':
+      case 'invalid_input':
+        // Handle error events - display just the message, not the full JSON
+        return event.data.message || 'An error occurred';
       default:
-        return JSON.stringify(event.data);
+        // For unknown event types, try to extract a message field if it exists
+        if (event.data?.message) {
+          return event.data.message;
+        }
+        // Last resort: show a generic message instead of raw JSON
+        return `Event: ${event.type}`;
     }
   };
 
