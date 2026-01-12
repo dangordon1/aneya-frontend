@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**aneya** is a clinical decision support system with a **split repository architecture**:
+**aneya** is a healthcare system with a **split repository architecture**:
 
 - **This repo (aneya)**: React + TypeScript frontend
 - **Backend repo (aneya-backend)**: FastAPI + MCP servers (separate repository)
@@ -208,7 +208,7 @@ aneya/
 
 ## Safety and Clinical Disclaimers
 
-⚠️ **Critical:** This is a clinical decision support tool for healthcare professionals.
+⚠️ **Critical:** This is a tool for healthcare professionals.
 
 - All recommendations require professional review before prescribing
 - Verify allergies, interactions, contraindications

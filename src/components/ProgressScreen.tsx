@@ -228,7 +228,7 @@ export function ProgressScreen({ onComplete: _onComplete, streamEvents }: Progre
           Analysing Consultation
         </h1>
         <p className="text-[17px] leading-[26px] text-aneya-text-secondary mb-6">
-          Real-time progress updates from the clinical decision support system...
+          Real-time progress updates from the system...
         </p>
 
         {/* Progress Bar */}

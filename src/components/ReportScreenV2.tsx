@@ -286,7 +286,7 @@ export function ReportScreenV2({
             <div className="flex items-start gap-3 text-xs text-aneya-text-secondary">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-aneya-navy" />
               <p>
-                This analysis is for clinical decision support only and should not replace clinical judgment.
+                This analysis should not replace clinical judgment.
                 Verify all medications and consider individual patient factors before prescribing.
               </p>
             </div>
