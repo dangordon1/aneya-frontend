@@ -16,8 +16,6 @@ import { verifyOTP, resendOTP } from '../lib/api';
 interface OTPVerificationScreenProps {
   email: string;
   userId: string;
-  name?: string;
-  role: 'doctor' | 'patient';
   onVerified: () => void;
   onCancel: () => void;
 }
@@ -25,8 +23,6 @@ interface OTPVerificationScreenProps {
 export default function OTPVerificationScreen({
   email,
   userId,
-  name,
-  role,
   onVerified,
   onCancel,
 }: OTPVerificationScreenProps) {

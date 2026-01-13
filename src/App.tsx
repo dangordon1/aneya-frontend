@@ -132,8 +132,6 @@ function MainApp() {
       <OTPVerificationScreen
         email={pendingVerification.email}
         userId={pendingVerification.userId}
-        name={pendingVerification.name}
-        role={pendingVerification.role}
         onVerified={async () => {
           // If we have the password, auto-login after verification
           if (pendingVerification?.password) {
