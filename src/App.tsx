@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Download } from 'lucide-react';
 import { LoginScreen } from './components/LoginScreen';
+import OTPVerificationScreen from './components/OTPVerificationScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabNavigation, DoctorTab } from './components/TabNavigation';
 import { LocationSelector } from './components/LocationSelector';
@@ -74,7 +75,7 @@ interface StreamEvent {
 }
 
 function MainApp() {
-  const { user, loading, signOut, isPatient, userRole, doctorProfile, isAdmin } = useAuth();
+  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [currentPatientDetails, setCurrentPatientDetails] = useState<PatientDetails | null>(null);
@@ -122,6 +123,45 @@ function MainApp() {
           <p className="text-aneya-navy">Loading...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show OTP verification screen if pending
+  if (pendingVerification && !user) {
+    return (
+      <OTPVerificationScreen
+        email={pendingVerification.email}
+        userId={pendingVerification.userId}
+        onVerified={async () => {
+          // If we have the password, auto-login after verification
+          if (pendingVerification?.password) {
+            console.log('🔐 Auto-logging in after OTP verification...');
+            const result = await signIn(
+              pendingVerification.email,
+              pendingVerification.password,
+              pendingVerification.role
+            );
+
+            if (!result.error) {
+              console.log('✅ Auto-login successful!');
+              clearPendingVerification();
+              // Auth state will update automatically, no need to reload
+            } else {
+              console.error('❌ Auto-login failed:', result.error);
+              clearPendingVerification();
+              window.location.reload(); // Fall back to manual login
+            }
+          } else {
+            // No password stored, user must log in manually
+            clearPendingVerification();
+            window.location.reload();
+          }
+        }}
+        onCancel={async () => {
+          clearPendingVerification();
+          await signOut();
+        }}
+      />
     );
   }
 
