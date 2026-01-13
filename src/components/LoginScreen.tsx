@@ -177,17 +177,16 @@ export function LoginScreen() {
           console.error('Sign up error:', result.error);
           setError(result.error.message);
         } else if (result.session) {
-          // Auto-logged in after signup
+          // Auto-logged in after signup (legacy flow - no longer used)
           console.log('✅ Account created & auto-logged in as', loginMode);
           setMessage(`Account created as ${loginMode}! A verification email has been sent to your inbox.`);
           // User will be redirected automatically by auth state change
         } else {
-          // Signup succeeded but no session (shouldn't happen with Firebase)
-          console.log('✅ Sign up successful');
-          setMessage('Account created! Please check your email to verify your account, then sign in.');
-          setIsSignUp(false); // Switch to sign-in mode
-          setPassword('');
-          setConfirmPassword('');
+          // Signup succeeded - OTP verification required
+          console.log('✅ Sign up successful - redirecting to OTP verification');
+          setMessage('Account created! Please check your email for a 6-digit verification code.');
+          // User will be redirected to OTP screen automatically
+          // No need to clear form or switch modes - OTP screen will take over
         }
       } else {
         console.log('Attempting to sign in with email:', email, 'as', loginMode);
