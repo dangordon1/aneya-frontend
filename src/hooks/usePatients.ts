@@ -35,31 +35,86 @@ export function usePatients(): UsePatientsReturn {
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('patients')
-        .select(`
-          *,
-          appointments!patient_id(
-            id,
-            scheduled_time,
-            status,
-            appointment_type
-          )
-        `)
-        .eq('archived', false)
-        .order('created_at', { ascending: false });
+      // Admins can see all patients
+      if (isAdmin) {
+        const { data, error: fetchError } = await supabase
+          .from('patients')
+          .select(`
+            *,
+            appointments!patient_id(
+              id,
+              scheduled_time,
+              status,
+              appointment_type
+            )
+          `)
+          .eq('archived', false)
+          .order('created_at', { ascending: false });
 
-      // Admins can see all patients, non-admins only see their own
-      if (!isAdmin) {
-        query = query.eq('created_by', user.id);
+        if (fetchError) throw fetchError;
+
+        // Post-process patients (continue to line 62)
+        const patientsWithAppointments: PatientWithAppointments[] = (data || []).map((patient: any) => {
+          const appointments = Array.isArray(patient.appointments) ? patient.appointments : [];
+
+          // Most recent completed appointment
+          const completedAppointments = appointments
+            .filter((apt: any) => apt.status === 'completed')
+            .sort((a: any, b: any) => new Date(b.scheduled_time).getTime() - new Date(a.scheduled_time).getTime());
+
+          // Next upcoming scheduled appointment
+          const now = new Date();
+          const upcomingAppointments = appointments
+            .filter((apt: any) => apt.status === 'scheduled' && new Date(apt.scheduled_time) > now)
+            .sort((a: any, b: any) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
+
+          // Remove appointments array and add computed fields
+          const { appointments: _, ...patientData } = patient;
+
+          return {
+            ...patientData,
+            last_visit: completedAppointments[0] || null,
+            next_appointment: upcomingAppointments[0] || null,
+          };
+        });
+
+        setPatients(patientsWithAppointments);
+        return;
       }
 
-      const { data, error: fetchError } = await query;
+      // Non-admin doctors can only see patients assigned to them via patient_doctor relationship
+      if (!doctorProfile?.id) {
+        console.warn('⚠️ Doctor profile not found, cannot fetch patients');
+        setPatients([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch patients with active relationships to this doctor
+      const { data, error: fetchError } = await supabase
+        .from('patient_doctor')
+        .select(`
+          patient_id,
+          patients!inner(
+            *,
+            appointments!patient_id(
+              id,
+              scheduled_time,
+              status,
+              appointment_type
+            )
+          )
+        `)
+        .eq('doctor_id', doctorProfile.id)
+        .eq('status', 'active')
+        .eq('patients.archived', false)
+        .order('patients.created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
 
-      // Post-process to compute last visit and next appointment
-      const patientsWithAppointments: PatientWithAppointments[] = (data || []).map((patient: any) => {
+      // Extract patients from the relationship join and post-process
+      const patientsWithAppointments: PatientWithAppointments[] = (data || []).map((relationship: any) => {
+        const patient = relationship.patients;
         const appointments = Array.isArray(patient.appointments) ? patient.appointments : [];
 
         // Most recent completed appointment
@@ -91,7 +146,7 @@ export function usePatients(): UsePatientsReturn {
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, doctorProfile]);
 
   useEffect(() => {
     fetchPatients();
@@ -160,17 +215,26 @@ export function usePatients(): UsePatientsReturn {
       try {
         setError(null);
 
-        let query = supabase
-          .from('patients')
-          .update(input)
-          .eq('id', id);
+        // For non-admin doctors, verify they have an active relationship with this patient
+        if (!isAdmin && doctorProfile?.id) {
+          const { data: relationship, error: relationshipError } = await supabase
+            .from('patient_doctor')
+            .select('id')
+            .eq('patient_id', id)
+            .eq('doctor_id', doctorProfile.id)
+            .eq('status', 'active')
+            .maybeSingle();
 
-        // Admins can update any patient, non-admins only their own
-        if (!isAdmin) {
-          query = query.eq('created_by', user.id);
+          if (relationshipError) throw relationshipError;
+          if (!relationship) {
+            throw new Error('You do not have permission to update this patient');
+          }
         }
 
-        const { data, error: updateError } = await query
+        const { data, error: updateError } = await supabase
+          .from('patients')
+          .update(input)
+          .eq('id', id)
           .select()
           .single();
 
@@ -188,7 +252,7 @@ export function usePatients(): UsePatientsReturn {
         return null;
       }
     },
-    [user, isAdmin]
+    [user, isAdmin, doctorProfile]
   );
 
   const deletePatient = useCallback(
@@ -200,6 +264,22 @@ export function usePatients(): UsePatientsReturn {
 
       try {
         setError(null);
+
+        // For non-admin doctors, verify they have an active relationship with this patient
+        if (!isAdmin && doctorProfile?.id) {
+          const { data: relationship, error: relationshipError } = await supabase
+            .from('patient_doctor')
+            .select('id')
+            .eq('patient_id', id)
+            .eq('doctor_id', doctorProfile.id)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (relationshipError) throw relationshipError;
+          if (!relationship) {
+            throw new Error('You do not have permission to delete this patient');
+          }
+        }
 
         const { error: deleteError } = await supabase
           .from('patients')
@@ -218,7 +298,7 @@ export function usePatients(): UsePatientsReturn {
         return false;
       }
     },
-    [user]
+    [user, isAdmin, doctorProfile]
   );
 
   return {
