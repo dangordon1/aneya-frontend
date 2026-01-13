@@ -184,6 +184,53 @@ The first transcription request is slower than subsequent ones:
 2. Implement a warm-up request on page load
 3. Show user feedback during first transcription
 
+## Testing
+
+### Test Suite Overview
+
+The frontend includes comprehensive testing at multiple levels:
+
+#### Unit Tests
+Run fast, isolated tests for individual components:
+```bash
+npm run test:unit
+```
+
+#### Integration Tests
+Test against the **real Supabase database** to verify:
+- CRUD operations work correctly
+- **Security policies** are enforced (patient visibility, access control)
+- Database relationships and constraints function properly
+
+```bash
+npm run test:integration
+```
+
+**Security Integration Tests** (`usePatients.security.integration.test.ts`):
+- ✅ Doctors only see patients with active `patient_doctor` relationships
+- ✅ Doctors cannot see patients without relationships
+- ✅ Inactive relationships are filtered out
+- ✅ Update/delete operations require active relationships
+- ✅ Access is relationship-based, not `created_by` based
+- ✅ Archived patients are excluded from queries
+
+#### Contract Tests
+Validate API contracts against the backend OpenAPI schema:
+```bash
+npm run contracts:test
+```
+
+### Continuous Integration
+
+All tests run automatically on every pull request and push to `main`:
+
+- **Unit Tests** - Fast feedback on component logic
+- **Integration Tests** - Database and security verification
+- **Contract Tests** - API compatibility checks
+- **Build Verification** - Production bundle validation
+
+See `.github/workflows/test.yml` for the full CI pipeline.
+
 ## Related Repositories
 
 - **Backend:** [aneya-backend](https://github.com/dangordon1/aneya-backend) - FastAPI + MCP servers deployed on Cloud Run

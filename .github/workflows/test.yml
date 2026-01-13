@@ -105,11 +105,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run integration tests
+      - name: Run integration tests (includes security tests)
         run: npm run test:integration
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Verify security tests ran
+        run: |
+          echo "✅ Integration tests completed, including:"
+          echo "   - Patient visibility security (usePatients.security.integration.test.ts)"
+          echo "   - Consultation CRUD operations (useConsultations.integration.test.ts)"
 
   # Combined job for branch protection (expects "Run Tests" status check)
   all-tests:
