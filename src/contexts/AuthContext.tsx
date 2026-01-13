@@ -6,13 +6,13 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  sendEmailVerification,
   sendPasswordResetEmail,
   AuthError as FirebaseAuthError
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { supabase } from '../lib/supabase';
 import type { UserRole, Doctor, Patient } from '../types/database';
+import { sendOTP } from '../lib/api';
 
 // Compatible User interface (maps Firebase user to expected shape)
 interface User {
@@ -44,6 +44,14 @@ interface PatientSignupData {
   name: string;
 }
 
+interface PendingVerification {
+  email: string;
+  userId: string;
+  name?: string;
+  role: 'doctor' | 'patient';
+  password: string; // Store temporarily for auto-login after OTP verification
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -54,6 +62,7 @@ interface AuthContextType {
   userRole: UserRole | null;
   doctorProfile: Doctor | null;
   patientProfile: Patient | null;
+  pendingVerification: PendingVerification | null;
   signIn: (email: string, password: string, role?: 'doctor' | 'patient') => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => Promise<{ error: AuthError | null; session: Session | null }>;
   signInWithGoogle: (role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => Promise<{ error: AuthError | null }>;
@@ -62,6 +71,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   refreshProfiles: () => Promise<void>;
   refreshDoctorProfile: () => Promise<void>;
+  clearPendingVerification: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,6 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [doctorProfile, setDoctorProfile] = useState<Doctor | null>(null);
   const [patientProfile, setPatientProfile] = useState<Patient | null>(null);
+  const [pendingVerification, setPendingVerification] = useState<PendingVerification | null>(null);
+  const [isSigningUp, setIsSigningUp] = useState(false); // Flag to prevent race condition during signup
 
   // Debug: Log when doctorProfile changes
   useEffect(() => {
@@ -186,6 +198,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const sessionEnd = performance.now();
       console.log(`⏱️ Auth state check: ${(sessionEnd - sessionStart).toFixed(0)}ms`);
 
+      // Skip processing if we're in the middle of signing up (prevents race condition)
+      if (isSigningUp) {
+        console.log('⏭️ Skipping auth state change - signup in progress');
+        return;
+      }
+
       if (firebaseUser) {
         try {
           const token = await firebaseUser.getIdToken();
@@ -197,21 +215,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             user: mappedUser
           });
 
-          // Check user role
+          // Check user role and email verification status
           try {
             const { data: roleData, error: roleError } = await supabase
               .from('user_roles')
-              .select('role')
+              .select('role, email, email_verified')
               .eq('user_id', firebaseUser.uid)
               .single();
 
             if (!roleError && roleData) {
+              // Check if email is verified
+              if (roleData.email_verified === false) {
+                console.log('⚠️ Email not verified - blocking access and setting pending verification');
+                // Sign out user to prevent access
+                await firebaseSignOut(auth);
+                // Set pending verification state (no password - user must log in after verification)
+                setPendingVerification({
+                  email: roleData.email || firebaseUser.email || '',
+                  userId: firebaseUser.uid,
+                  role: roleData.role as 'doctor' | 'patient',
+                  password: '' // No password available in this flow
+                });
+                // Clear all auth state
+                setUser(null);
+                setSession(null);
+                setIsAdmin(false);
+                setIsDoctor(false);
+                setIsPatient(false);
+                setUserRole(null);
+                setDoctorProfile(null);
+                setPatientProfile(null);
+                setLoading(false);
+                return;
+              }
+
               const role = roleData.role as UserRole;
               setUserRole(role);
               setIsAdmin(role === 'admin' || role === 'superadmin');
               setIsDoctor(role === 'doctor');
               setIsPatient(role === 'patient');
               console.log('👑 User role:', role);
+              console.log('✅ Email verified:', roleData.email_verified);
 
               // Load appropriate profile based on role
               if (role === 'doctor') {
@@ -396,15 +440,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
+      // Set flag to prevent onAuthStateChanged from processing during signup
+      setIsSigningUp(true);
 
-      // Send email verification
-      try {
-        await sendEmailVerification(result.user);
-        console.log('✅ Verification email sent to:', email);
-      } catch (verifyErr) {
-        console.warn('⚠️ Could not send verification email:', verifyErr);
-      }
+      const result = await createUserWithEmailAndPassword(auth, email, password);
 
       // Create user_role entry if role is specified
       if (role) {
@@ -414,7 +453,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .insert({
               user_id: result.user.uid,
               email: email,
-              role: role
+              role: role,
+              email_verified: false
             });
 
           if (roleError) {
@@ -519,20 +559,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // User is automatically signed in after registration
-      const token = await result.user.getIdToken();
-      const mappedUser = mapFirebaseUser(result.user);
+      // Send OTP verification email
+      console.log('📧 About to send OTP to:', email, 'for user:', result.user.uid);
+      try {
+        const name = (profileData as any)?.name;
+        const otpResponse = await sendOTP(email, result.user.uid, name, role!);
+        console.log('✅ OTP verification email sent successfully:', otpResponse);
+      } catch (otpErr: any) {
+        console.error('❌ Error sending OTP:', otpErr);
+        console.error('❌ Error message:', otpErr?.message);
+        console.error('❌ Full error:', JSON.stringify(otpErr, null, 2));
+        // Don't fail signup if OTP fails, user can resend
+      }
 
-      const newSession: Session = {
-        access_token: token,
-        user: mappedUser
-      };
+      // Sign out immediately to prevent auto-login
+      await firebaseSignOut(auth);
+      console.log('✅ User signed out - pending email verification');
 
-      console.log('✅ Signup successful - auto-logged in');
-      return { error: null, session: newSession };
+      // Set pending verification state (including password for auto-login after OTP)
+      setPendingVerification({
+        email,
+        userId: result.user.uid,
+        name: (profileData as any)?.name,
+        role: role!,
+        password // Store temporarily for auto-login after verification
+      });
+
+      // Clear signup flag
+      setIsSigningUp(false);
+
+      return { error: null, session: null };
     } catch (err) {
       const firebaseError = err as FirebaseAuthError;
       console.error('❌ Signup error:', firebaseError.code, firebaseError.message);
+      setIsSigningUp(false); // Clear flag on error
       return { error: mapFirebaseError(firebaseError), session: null };
     }
   };
@@ -763,6 +823,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearPendingVerification = () => {
+    setPendingVerification(null);
+  };
+
   const value = {
     user,
     session,
@@ -773,6 +837,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRole,
     doctorProfile,
     patientProfile,
+    pendingVerification,
     signIn,
     signUp,
     signInWithGoogle,
@@ -781,6 +846,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetPassword,
     refreshProfiles,
     refreshDoctorProfile,
+    clearPendingVerification,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
