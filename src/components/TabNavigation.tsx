@@ -13,12 +13,12 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
 
   return (
     <div className="w-full bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="flex gap-2">
+      <div className="max-w-7xl mx-auto px-0 sm:px-6">
+        <div className="flex gap-0.5 sm:gap-2 overflow-x-auto">
           <button
             onClick={() => onTabChange('appointments')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
               ${activeTab === 'appointments'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -30,7 +30,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
           <button
             onClick={() => onTabChange('patients')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
               ${activeTab === 'patients'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -42,7 +42,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
           <button
             onClick={() => onTabChange('messages')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors relative
+              px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors relative whitespace-nowrap
               ${activeTab === 'messages'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -59,7 +59,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
           <button
             onClick={() => onTabChange('profile')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
               ${activeTab === 'profile'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -71,7 +71,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
           <button
             onClick={() => onTabChange('forms')}
             className={`
-              px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+              px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
               ${activeTab === 'forms'
                 ? 'bg-aneya-navy text-white'
                 : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -84,7 +84,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
             <button
               onClick={() => onTabChange('alldoctors')}
               className={`
-                px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+                px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
                 ${activeTab === 'alldoctors'
                   ? 'bg-aneya-navy text-white'
                   : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
@@ -98,7 +98,7 @@ export function TabNavigation({ activeTab, onTabChange, unreadMessagesCount = 0,
             <button
               onClick={() => onTabChange('feedback')}
               className={`
-                px-6 py-3 text-[15px] font-medium rounded-t-[10px] transition-colors
+                px-2 py-2 sm:px-6 sm:py-3 text-[13px] sm:text-[15px] font-medium rounded-t-[10px] transition-colors whitespace-nowrap
                 ${activeTab === 'feedback'
                   ? 'bg-aneya-navy text-white'
                   : 'bg-aneya-cream text-aneya-navy hover:bg-gray-100'
