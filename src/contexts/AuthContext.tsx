@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   User as FirebaseUser,
   signInWithEmailAndPassword,
@@ -120,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [patientProfile, setPatientProfile] = useState<Patient | null>(null);
   const [pendingVerification, setPendingVerification] = useState<PendingVerification | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false); // Flag to prevent race condition during signup
+  const isCheckingVerificationRef = useRef(false); // Flag to prevent race condition during sign-in verification
 
   // Debug: Log when doctorProfile changes
   useEffect(() => {
@@ -204,6 +205,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Skip processing if we're checking verification status in signIn (prevents race condition/main page flash)
+      if (isCheckingVerificationRef.current) {
+        console.log('⏭️ Skipping auth state change - verification check in progress');
+        return;
+      }
+
       if (firebaseUser) {
         try {
           const token = await firebaseUser.getIdToken();
@@ -226,15 +233,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!roleError && roleData) {
               // Check if email is verified
               if (roleData.email_verified === false) {
-                console.log('⚠️ Email not verified - blocking access and setting pending verification');
+                console.log('⚠️ Email not verified - blocking access (page refresh or direct navigation)');
+
+                // NOTE: Don't send OTP here - the signIn function already sends it
+                // This block only runs if user refreshes page while unverified
+                // User can request new OTP via "Resend" button on verification screen
+
+                const userEmail = roleData.email || firebaseUser.email || '';
+
                 // Sign out user to prevent access
                 await firebaseSignOut(auth);
                 // Set pending verification state (no password - user must log in after verification)
                 setPendingVerification({
-                  email: roleData.email || firebaseUser.email || '',
+                  email: userEmail,
                   userId: firebaseUser.uid,
                   role: roleData.role as 'doctor' | 'patient',
-                  password: '' // No password available in this flow
+                  password: '' // No password available after page refresh
                 });
                 // Clear all auth state
                 setUser(null);
@@ -332,14 +346,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signInStart = performance.now();
 
     try {
+      // Set flag BEFORE sign-in to prevent onAuthStateChanged race condition
+      if (role) {
+        isCheckingVerificationRef.current = true;
+      }
+
       const result = await signInWithEmailAndPassword(auth, email, password);
       const signInEnd = performance.now();
 
-      // Check if email is verified (optional - you can remove this check if not needed)
-      if (!result.user.emailVerified) {
-        console.log('⚠️ Email not verified, but allowing sign-in');
-        // You can optionally block unverified users here:
-        // return { error: { message: 'Please verify your email before signing in' } };
+      // Check email verification status EARLY to prevent main page flash
+      if (role) {
+
+        try {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role, email_verified')
+            .eq('user_id', result.user.uid)
+            .single();
+
+          if (roleData && roleData.email_verified === false) {
+            console.log('⚠️ Email not verified - sending OTP and blocking access');
+
+            // Send OTP verification email
+            try {
+              await sendOTP(
+                email,
+                result.user.uid,
+                result.user.displayName || undefined,
+                role
+              );
+              console.log('✅ OTP sent to:', email);
+            } catch (otpErr: any) {
+              console.error('❌ Error sending OTP:', otpErr);
+              // Continue anyway - user can resend from verification screen
+            }
+
+            // Sign out immediately to prevent main page flash
+            await firebaseSignOut(auth);
+
+            // Set pending verification WITH PASSWORD for auto-login after OTP
+            setPendingVerification({
+              email,
+              userId: result.user.uid,
+              role,
+              password  // CRITICAL: Store password for auto-login
+            });
+
+            // Clear flag after handling verification
+            isCheckingVerificationRef.current = false;
+
+            console.log('📧 Redirecting to OTP verification screen');
+            return { error: null }; // Success, but OTP verification needed
+          }
+
+          // Clear flag - email is verified, continue normally
+          isCheckingVerificationRef.current = false;
+
+          // MANUALLY process authenticated user since onAuthStateChanged was skipped
+          // Get token and set user state
+          const token = await result.user.getIdToken();
+          const mappedUser = mapFirebaseUser(result.user);
+          setUser(mappedUser);
+          setSession({ access_token: token, user: mappedUser });
+
+          // User role is already set from roleData above, load profile
+          if (roleData) {
+            const role = roleData.role as UserRole;
+            setUserRole(role);
+            setIsAdmin(role === 'admin' || role === 'superadmin');
+            setIsDoctor(role === 'doctor');
+            setIsPatient(role === 'patient');
+            console.log('👑 User role:', role);
+            console.log('✅ Email verified:', roleData.email_verified);
+
+            // Load profile based on role
+            if (role === 'doctor') {
+              console.log('🔄 Loading doctor profile for role: doctor');
+              const doctor = await loadDoctorProfile(result.user.uid);
+              console.log('📝 Setting doctorProfile to:', doctor ? { id: doctor.id, name: doctor.name } : null);
+              setDoctorProfile(doctor);
+              setPatientProfile(null);
+            } else if (role === 'patient') {
+              const patient = await loadPatientProfile(result.user.uid);
+              setPatientProfile(patient);
+              setDoctorProfile(null);
+            } else {
+              // Admin or other roles - they might also be doctors
+              const doctor = await loadDoctorProfile(result.user.uid);
+              if (doctor) {
+                console.log('📝 Setting doctorProfile for admin/other role to:', { id: doctor.id, name: doctor.name });
+                setDoctorProfile(doctor);
+              }
+            }
+          }
+
+          console.log('✅ Verified user authenticated successfully');
+          setLoading(false);
+        } catch (verifyCheckErr) {
+          console.error('❌ Error checking email verification:', verifyCheckErr);
+          // Clear flag on error
+          isCheckingVerificationRef.current = false;
+          // Continue with sign-in if check fails
+        }
       }
 
       // If a role is specified, validate and ensure the user has the appropriate records
@@ -434,6 +542,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const signInEnd = performance.now();
       const firebaseError = err as FirebaseAuthError;
       console.log(`⏱️ Sign in: ${(signInEnd - signInStart).toFixed(0)}ms ❌ Failed: ${firebaseError.code}`);
+      // Clear flag on error
+      isCheckingVerificationRef.current = false;
       return { error: mapFirebaseError(firebaseError) };
     }
   };
