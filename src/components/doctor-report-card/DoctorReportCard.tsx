@@ -505,13 +505,28 @@ export function DoctorReportCard({
         </div>
 
         {/* Footer */}
-        <div className="bg-[var(--medical-navy)] text-white px-8 py-4 text-center text-sm">
-          <p className="text-[var(--medical-cream)]">
-            This is a confidential medical document. Unauthorized disclosure is prohibited.
-          </p>
-          <p className="text-[var(--medical-cream)] mt-1">
-            © 2026 HealthCare Medical Center. All rights reserved.
-          </p>
+        <div className="bg-[var(--medical-navy)] text-white px-8 py-6">
+          {/* Aneya Branding */}
+          <div className="flex items-center justify-center gap-3 mb-4 pb-4 border-b border-[var(--medical-teal)]/30">
+            <img
+              src="/aneya-logo.png"
+              alt="Aneya"
+              className="h-12 opacity-90"
+            />
+            <p className="text-[var(--medical-cream)] text-sm">
+              Report created by <span className="font-semibold text-[var(--medical-teal)]">Aneya</span>
+            </p>
+          </div>
+
+          {/* Confidentiality Notice */}
+          <div className="text-center text-sm">
+            <p className="text-[var(--medical-cream)]">
+              This is a confidential medical document. Unauthorized disclosure is prohibited.
+            </p>
+            <p className="text-[var(--medical-cream)] mt-1">
+              © 2026 HealthCare Medical Center. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
     </div>
