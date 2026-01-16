@@ -1,52 +1,39 @@
 /**
- * RLS Circular Dependency Prevention Integration Tests
+ * Database Query Integration Tests
  *
- * These tests verify that RLS policies do not create circular dependencies
- * when querying with nested joins. Specifically, they test the query patterns
- * that previously failed with 400/500 errors due to circular RLS evaluation.
+ * These tests verify that database queries work correctly with the
+ * Firebase + Supabase hybrid architecture. Since authentication is
+ * handled by Firebase and Supabase is used for data only, these tests
+ * use the anon role (which the frontend uses).
  *
  * Run with: npm run test:integration -- rls-circular-dependency
  *
- * @see /Users/dgordon/aneya/aneya-backend/supabase/migrations/039_fix_rls_circular_dependency.sql
+ * Architecture Note:
+ * - Firebase handles authentication
+ * - Supabase provides database with anon role access
+ * - Application-level filtering is done in the frontend (e.g., by doctor_id)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { testSupabase, verifySupabaseConnection, signInAsTestDoctor, signOut } from './supabase-integration'
-import { SupabaseClient } from '@supabase/supabase-js'
+import { describe, it, expect, beforeAll } from 'vitest'
+import { testSupabase, verifySupabaseConnection } from './supabase-integration'
 
-describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
+describe('Database Query Integration [ANON ROLE]', () => {
   let supabaseConnected = false
-  let authenticatedClient: SupabaseClient | null = null
-  let testDoctorUser: any = null
 
   beforeAll(async () => {
     supabaseConnected = await verifySupabaseConnection()
     if (!supabaseConnected) {
-      console.warn('⚠️ Skipping RLS circular dependency tests - Supabase connection failed')
+      console.warn('⚠️ Skipping integration tests - Supabase connection failed')
       return
     }
-
-    // Sign in as test doctor for authenticated RLS testing
-    const authResult = await signInAsTestDoctor()
-    if (authResult) {
-      authenticatedClient = authResult.client
-      testDoctorUser = authResult.user
-      console.log(`✅ Signed in as test doctor: ${testDoctorUser.email}`)
-    } else {
-      console.warn('⚠️ Could not sign in as test doctor - some tests will be skipped')
-    }
+    console.log('✅ Supabase connected - using anon role for queries')
   })
 
-  afterAll(async () => {
-    // Sign out after tests
-    await signOut()
-  })
+  describe('patient_doctor table queries', () => {
+    it('should query patient_doctor with patients inner join without error', async (ctx) => {
+      if (!supabaseConnected) return ctx.skip()
 
-  describe('patient_doctor table queries [AUTHENTICATED]', () => {
-    it('should query patient_doctor with patients inner join without 400 error', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
-
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patient_doctor')
         .select('patient_id, patients!inner(*)')
         .eq('status', 'active')
@@ -69,10 +56,10 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
 
     it('should query patient_doctor with nested patients and appointments without circular dependency', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // This is the exact query pattern from usePatients hook that was failing
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patient_doctor')
         .select(`
           patient_id,
@@ -115,10 +102,10 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
 
     it('should query patient_doctor directly as doctor without circular dependency', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // Test direct query to patient_doctor table
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patient_doctor')
         .select('*')
         .eq('status', 'active')
@@ -140,11 +127,11 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('appointments table queries [AUTHENTICATED]', () => {
+  describe('appointments table queries [ANON]', () => {
     it('should query appointments with patient expansion without circular dependency', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('appointments')
         .select(`
           id,
@@ -174,9 +161,9 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
 
     it('should query appointments by doctor without errors', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('appointments')
         .select('*')
         .limit(1)
@@ -197,11 +184,11 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('patients table queries [AUTHENTICATED]', () => {
+  describe('patients table queries [ANON]', () => {
     it('should query patients with appointments expansion without circular dependency', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patients')
         .select(`
           id,
@@ -232,9 +219,9 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
 
     it('should query patients directly without errors', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patients')
         .select('*')
         .eq('archived', false)
@@ -256,12 +243,12 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('complex multi-table joins [AUTHENTICATED]', () => {
+  describe('complex multi-table joins [ANON]', () => {
     it('should handle patient_doctor → patients → appointments → back reference without infinite loop', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // This tests the most complex scenario: multiple nested relationships
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patient_doctor')
         .select(`
           patient_id,
@@ -300,16 +287,16 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('RLS policy effectiveness [AUTHENTICATED]', () => {
+  describe('RLS policy effectiveness [ANON]', () => {
     it('should enforce RLS on all tables (queries should filter based on auth context)', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // Test that RLS is actually enabled and filtering results
       // With authenticated doctor context, should see filtered results
       const tables = ['patients', 'appointments', 'patient_doctor'] as const
 
       for (const table of tables) {
-        const { data, error } = await authenticatedClient
+        const { data, error } = await testSupabase
           .from(table)
           .select('*')
           .limit(1)
@@ -331,13 +318,13 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('error scenarios that should NOT cause circular dependencies [AUTHENTICATED]', () => {
+  describe('error scenarios that should NOT cause circular dependencies [ANON]', () => {
     it('should handle non-existent patient_id in appointments gracefully', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       const nonExistentId = '00000000-0000-0000-0000-000000000000'
 
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('appointments')
         .select(`
           *,
@@ -361,10 +348,10 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
 
     it('should handle deeply nested joins without stack overflow', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // Test multiple levels of nesting to ensure no infinite recursion
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('patient_doctor')
         .select(`
           *,
@@ -398,12 +385,12 @@ describe('RLS Circular Dependency Prevention [INTEGRATION]', () => {
     })
   })
 
-  describe('messages table queries [AUTHENTICATED]', () => {
+  describe('messages table queries [ANON]', () => {
     it('should query messages without triggering circular dependencies', async (ctx) => {
-      if (!supabaseConnected || !authenticatedClient) return ctx.skip()
+      if (!supabaseConnected) return ctx.skip()
 
       // Test messages table which was showing 500 errors in user logs
-      const { data, error } = await authenticatedClient
+      const { data, error } = await testSupabase
         .from('messages')
         .select('*')
         .limit(5)
