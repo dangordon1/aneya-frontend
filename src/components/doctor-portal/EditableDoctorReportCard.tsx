@@ -231,7 +231,6 @@ export function EditableDoctorReportCard({
         clearTimeout(saveTimeoutRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointmentId, patientId, formType]); // Only reload if these change
 
   /**
