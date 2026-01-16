@@ -39,6 +39,7 @@ const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ 
 // Lazy loading these causes "Importing a module script failed" errors in production
 import { DynamicConsultationForm } from './components/doctor-portal/DynamicConsultationForm';
 import { ConsultationFormSelector } from './components/doctor-portal/ConsultationFormSelector';
+import { EditableDoctorReportCard } from './components/doctor-portal/EditableDoctorReportCard';
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
@@ -1169,6 +1170,43 @@ function MainApp() {
     }
   };
 
+  const handleDownloadAnalysisPdf = async () => {
+    if (!currentConsultationId) return;
+
+    setGeneratingPdf(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/consultations/${currentConsultationId}/analysis-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate analysis PDF');
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      const patientName = currentPatientDetails?.name?.replace(/\s+/g, '_') || 'patient';
+      a.download = `analysis_${patientName}_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading analysis PDF:', error);
+      alert('Failed to generate analysis PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Header */}
@@ -1330,14 +1368,12 @@ function MainApp() {
                 )}
               </div>
 
-              {/* Form selector with tabs for all forms in the specialty */}
-              <ConsultationFormSelector
-                patientId={appointmentForFormView.patient_id}
+              {/* Patient Medical Report - Read-only view */}
+              <EditableDoctorReportCard
                 appointmentId={appointmentForFormView.id}
-                doctorUserId={user?.id}
-                detectedFormType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || undefined}
-                specialty="obstetrics_gynecology"
-                onBack={handleBackFromConsultationForm}
+                patientId={appointmentForFormView.patient_id}
+                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'antenatal_2'}
+                editable={false}
               />
 
               {/* Download PDF button at bottom */}
@@ -1386,6 +1422,8 @@ function MainApp() {
               onSaveConsultation={selectedAppointment ? handleSaveConsultation : undefined}
               location={locationOverride}
               consultationId={currentConsultationId}
+              onDownloadPdf={handleDownloadAnalysisPdf}
+              generatingPdf={generatingPdf}
             />
           )}
 

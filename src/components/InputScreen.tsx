@@ -11,6 +11,7 @@ import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
 import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
+import { EditableDoctorReportCard } from './doctor-portal/EditableDoctorReportCard';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -2721,7 +2722,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-[16px] font-medium text-purple-900 mb-2">OB/GYN Clinical Assessment</h3>
+                <h3 className="text-[16px] font-medium text-purple-900 mb-2">Patient Medical Report</h3>
                 <p className="text-[13px] text-gray-600 mb-2">
                   {determinedConsultationType && availableForms.some(f => f.form_type === determinedConsultationType)
                     ? `Suggested form type: ${determinedConsultationType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
@@ -2756,17 +2757,16 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 </div>
 
                 {/* Inline Embedded Forms - Display below buttons */}
-                {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && user?.id && (
-                  <div className="mt-6 bg-purple-50 border-2 border-purple-300 rounded-[10px] p-6">
-                    <DynamicConsultationForm
-                      formType={selectedFormType}
-                      patientId={preFilledPatient.id}
+                {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
+                  <div className="mt-6">
+                    <EditableDoctorReportCard
                       appointmentId={appointmentContext.id}
-                      doctorUserId={user.id}
-                      displayMode="flat"
-                      onComplete={() => {
+                      patientId={preFilledPatient.id}
+                      formType={selectedFormType}
+                      onFormComplete={() => {
                         setSelectedFormType(null);
                       }}
+                      editable={true}
                     />
                   </div>
                 )}
