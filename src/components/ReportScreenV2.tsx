@@ -27,7 +27,8 @@ import {
   ExternalLink,
   ChevronRight,
   Save,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react';
 
 interface ReportScreenV2Props {
@@ -41,6 +42,8 @@ interface ReportScreenV2Props {
   onSaveConsultation?: () => void;
   location?: string | null;  // Country code (e.g., 'GB' for UK)
   consultationId?: string | null;  // Consultation ID for feedback system
+  onDownloadPdf?: () => void;  // Handler for downloading analysis PDF
+  generatingPdf?: boolean;  // Loading state for PDF generation
 }
 
 export function ReportScreenV2({
@@ -53,7 +56,9 @@ export function ReportScreenV2({
   appointmentContext,
   onSaveConsultation,
   location,
-  consultationId
+  consultationId,
+  onDownloadPdf,
+  generatingPdf = false
 }: ReportScreenV2Props) {
   // Determine if BNF links should be shown (UK only)
   const isUK = location === 'GB';
@@ -293,8 +298,18 @@ export function ReportScreenV2({
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="mt-6">
+        {/* Action Buttons */}
+        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          {onDownloadPdf && consultationId && (
+            <button
+              onClick={onDownloadPdf}
+              disabled={generatingPdf}
+              className="flex items-center justify-center gap-2 bg-aneya-teal text-white px-6 py-3 rounded-lg hover:bg-aneya-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
+            >
+              <Download className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
+              {generatingPdf ? 'Generating PDF...' : 'Download Report PDF'}
+            </button>
+          )}
           <PrimaryButton onClick={onStartNew} fullWidth>
             Close Consultation
           </PrimaryButton>
