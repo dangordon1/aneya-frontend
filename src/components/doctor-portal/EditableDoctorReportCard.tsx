@@ -22,7 +22,6 @@ export function EditableDoctorReportCard({
   appointmentId,
   patientId,
   formType,
-  onFormComplete,
   editable = true
 }: EditableDoctorReportCardProps) {
   const componentId = useRef(Math.random().toString(36).substr(2, 9));

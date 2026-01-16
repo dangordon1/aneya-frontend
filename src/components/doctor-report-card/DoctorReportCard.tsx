@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Activity, Plus, Printer, Save } from 'lucide-react';
 import { TransposedTable } from './TransposedTable';
 
@@ -42,7 +42,6 @@ interface DoctorReportCardProps {
 export function DoctorReportCard({
   patientData: initialPatientData,
   pregnancyHistory: initialPregnancyHistory,
-  editable = true,
   onChange
 }: DoctorReportCardProps = {}) {
   // Default sample data
