@@ -18,6 +18,45 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // Create a test-specific Supabase client
 export const testSupabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+/**
+ * Sign in as a test doctor user for authenticated RLS testing
+ * Returns the authenticated client or null if sign-in fails
+ */
+export async function signInAsTestDoctor(): Promise<{ client: SupabaseClient; user: any } | null> {
+  // Use test doctor credentials (these should exist in your Supabase auth)
+  // You'll need to create a test doctor account with these credentials
+  const TEST_DOCTOR_EMAIL = 'test-doctor@aneya.test'
+  const TEST_DOCTOR_PASSWORD = 'test-password-123'
+
+  const { data, error } = await testSupabase.auth.signInWithPassword({
+    email: TEST_DOCTOR_EMAIL,
+    password: TEST_DOCTOR_PASSWORD
+  })
+
+  if (error || !data.session) {
+    console.warn('⚠️ Failed to sign in as test doctor:', error?.message)
+    return null
+  }
+
+  // Create authenticated client with the session
+  const authenticatedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${data.session.access_token}`
+      }
+    }
+  })
+
+  return { client: authenticatedClient, user: data.user }
+}
+
+/**
+ * Sign out from current session
+ */
+export async function signOut(): Promise<void> {
+  await testSupabase.auth.signOut()
+}
+
 // Test data marker for easy identification and cleanup
 const TEST_MARKER = '[INTEGRATION-TEST]'
 
