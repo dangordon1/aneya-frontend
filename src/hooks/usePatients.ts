@@ -82,39 +82,53 @@ export function usePatients(): UsePatientsReturn {
         return;
       }
 
-      // Non-admin doctors can only see patients assigned to them via patient_doctor relationship
+      // Non-admin doctors: Filter to only patients they have active relationships with
+      // First get the patient IDs from patient_doctor, then fetch those patients
       if (!doctorProfile?.id) {
-        console.warn('⚠️ Doctor profile not found, cannot fetch patients');
+        console.log('⚠️ No doctor profile found, cannot fetch patients');
         setPatients([]);
         setLoading(false);
         return;
       }
 
-      // Fetch patients with active relationships to this doctor
-      const { data, error: fetchError } = await supabase
+      // Get patient IDs from active relationships
+      const { data: relationships, error: relError } = await supabase
         .from('patient_doctor')
+        .select('patient_id')
+        .eq('doctor_id', doctorProfile.id)
+        .eq('status', 'active');
+
+      if (relError) throw relError;
+
+      const patientIds = (relationships || []).map(r => r.patient_id);
+
+      if (patientIds.length === 0) {
+        console.log('ℹ️ Doctor has no active patient relationships');
+        setPatients([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch patients with those IDs
+      const { data, error: fetchError } = await supabase
+        .from('patients')
         .select(`
-          patient_id,
-          patients!inner(
-            *,
-            appointments!patient_id(
-              id,
-              scheduled_time,
-              status,
-              appointment_type
-            )
+          *,
+          appointments(
+            id,
+            scheduled_time,
+            status,
+            appointment_type
           )
         `)
-        .eq('doctor_id', doctorProfile.id)
-        .eq('status', 'active')
-        .eq('patients.archived', false)
-        .order('patients.created_at', { ascending: false });
+        .in('id', patientIds)
+        .eq('archived', false)
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
 
-      // Extract patients from the relationship join and post-process
-      const patientsWithAppointments: PatientWithAppointments[] = (data || []).map((relationship: any) => {
-        const patient = relationship.patients;
+      // Post-process patients
+      const patientsWithAppointments: PatientWithAppointments[] = (data || []).map((patient: any) => {
         const appointments = Array.isArray(patient.appointments) ? patient.appointments : [];
 
         // Most recent completed appointment
