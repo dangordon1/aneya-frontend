@@ -3,7 +3,6 @@
  * Exports the component in a format that can be loaded by Playwright
  */
 
-import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import { DoctorReportCard, PatientData, PregnancyRecord } from './DoctorReportCard';
 import { TransposedTable } from './TransposedTable';
