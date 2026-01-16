@@ -7,6 +7,9 @@ import { createRoot } from 'react-dom/client';
 import { DoctorReportCard, PatientData, PregnancyRecord } from './DoctorReportCard';
 import { TransposedTable } from './TransposedTable';
 
+// Import CSS to ensure styling is available for PDF generation
+import '../../index.css';
+
 // Render function with optional data
 const render = (data?: { patientData?: PatientData; pregnancyHistory?: PregnancyRecord[] }) => {
   const root = createRoot(document.getElementById('root')!);
