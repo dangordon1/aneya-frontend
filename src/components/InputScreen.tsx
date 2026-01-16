@@ -10,7 +10,6 @@ import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
-import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
 import { EditableDoctorReportCard } from './doctor-portal/EditableDoctorReportCard';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';

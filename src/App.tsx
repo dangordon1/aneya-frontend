@@ -37,8 +37,6 @@ const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => 
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 // ✨ FIX: Import statically to avoid mixed import patterns (these are also used by other components)
 // Lazy loading these causes "Importing a module script failed" errors in production
-import { DynamicConsultationForm } from './components/doctor-portal/DynamicConsultationForm';
-import { ConsultationFormSelector } from './components/doctor-portal/ConsultationFormSelector';
 import { EditableDoctorReportCard } from './components/doctor-portal/EditableDoctorReportCard';
 
 // Import PatientDetails type
@@ -1333,18 +1331,11 @@ function MainApp() {
           )}
 
           {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
-            <DynamicConsultationForm
+            <EditableDoctorReportCard
               formType="infertility"
               patientId={selectedPatient.id}
               appointmentId={selectedAppointment.id}
-              doctorUserId={user?.id}
-              onBack={() => setCurrentScreen('input')}
-              onComplete={() => {
-                // Refresh appointments and return to input screen
-                setAppointmentsRefreshKey(prev => prev + 1);
-                setCurrentScreen('input');
-              }}
-            />
+              editable={true}            />
           )}
 
           {currentScreen === 'view-consultation-form' && appointmentForFormView && (
