@@ -21,7 +21,7 @@ interface UseAppointmentsReturn {
 }
 
 export function useAppointments(initialDate?: string): UseAppointmentsReturn {
-  const { user, isAdmin, getIdToken } = useAuth();
+  const { user, isAdmin, doctorProfile, getIdToken } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentWithPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +44,15 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
           .in('status', ['scheduled', 'in_progress']) // Only fetch active appointments
           .order('scheduled_time', { ascending: true });
 
-        // Admins can see all appointments, non-admins only see their own
+        // Admins can see all appointments, non-admins only see their own doctor's appointments
         if (!isAdmin) {
-          query = query.eq('created_by', user.id);
+          if (!doctorProfile?.id) {
+            console.log('⚠️ No doctor profile found, cannot fetch appointments');
+            setAppointments([]);
+            setLoading(false);
+            return;
+          }
+          query = query.eq('doctor_id', doctorProfile.id);
         }
 
         if (date) {
@@ -87,7 +93,7 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
         setLoading(false);
       }
     },
-    [user, isAdmin]
+    [user, isAdmin, doctorProfile]
   );
 
   useEffect(() => {
