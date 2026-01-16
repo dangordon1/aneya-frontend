@@ -13,6 +13,12 @@
   --aneya-navy-hover: #0a2a42;
   --aneya-text-secondary: #517a9a;
   --aneya-text-disabled: #8fa9be;
+
+  /* Medical color aliases for DoctorReportCard component */
+  --medical-navy: var(--aneya-navy);
+  --medical-teal: var(--aneya-teal);
+  --medical-sea-green: var(--aneya-seagreen);
+  --medical-cream: var(--aneya-cream);
 }
 
 /* iOS Safari viewport height fix */
