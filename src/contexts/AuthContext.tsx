@@ -749,6 +749,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           console.log('✅ User role validated:', userRole);
+
+          // Google SSO inherently verifies email, so update email_verified to true
+          // This handles users who signed up with email/password but never verified
+          const { error: updateVerifiedError } = await supabase
+            .from('user_roles')
+            .update({ email_verified: true })
+            .eq('user_id', result.user.uid);
+
+          if (updateVerifiedError) {
+            console.error('❌ Error updating email_verified:', updateVerifiedError);
+          } else {
+            console.log('✅ Email verified via Google SSO');
+          }
         }
 
         // If no existing role, create one
