@@ -759,7 +759,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .insert({
                 user_id: result.user.uid,
                 email: result.user.email,
-                role: role
+                role: role,
+                email_verified: true
               });
 
             if (roleError) {
