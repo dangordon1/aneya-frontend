@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AppointmentWithPatient, Consultation } from '../types/database';
-import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2, FlaskConical } from 'lucide-react';
+import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2, FlaskConical, Download } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
@@ -17,6 +17,8 @@ interface AppointmentDetailModalProps {
   onFillForm?: (appointment: AppointmentWithPatient, consultation: Consultation) => Promise<void>;
   onViewConsultationForm?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => void;
   onResearchAnalysis?: (consultation: Consultation) => Promise<void>;
+  onDownloadPrescription?: (consultationId: string) => void;
+  downloadingPrescription?: boolean;
   viewMode?: 'doctor' | 'patient';
   isAdmin?: boolean;
   onDelete?: (appointmentId: string) => Promise<void>;
@@ -33,6 +35,8 @@ export function AppointmentDetailModal({
   onFillForm,
   onViewConsultationForm,
   onResearchAnalysis,
+  onDownloadPrescription,
+  downloadingPrescription = false,
   viewMode = 'doctor',
   isAdmin,
   onDelete,
@@ -407,6 +411,16 @@ export function AppointmentDetailModal({
                   >
                     <Trash2 className={`w-4 h-4 ${isDeleting ? 'animate-pulse' : ''}`} />
                     {isDeleting ? 'Deleting...' : 'Delete Appointment'}
+                  </button>
+                )}
+                {appointment.status === 'completed' && consultation?.id && onDownloadPrescription && (
+                  <button
+                    onClick={() => onDownloadPrescription(consultation.id)}
+                    disabled={downloadingPrescription}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Download className={`w-4 h-4 ${downloadingPrescription ? 'animate-bounce' : ''}`} />
+                    {downloadingPrescription ? 'Generating...' : 'Download Prescription'}
                   </button>
                 )}
               </div>
