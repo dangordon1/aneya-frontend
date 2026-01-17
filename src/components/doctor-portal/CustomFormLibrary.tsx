@@ -43,6 +43,14 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
   }, [doctorProfile?.specialty]);
 
   const loadForms = async () => {
+    // Don't try to load forms if doctor profile is incomplete (no specialty)
+    if (!doctorProfile?.specialty) {
+      console.log('⚠️ Doctor profile incomplete - skipping forms load');
+      setLoading(false);
+      setError('Please complete your profile by selecting a specialty before accessing forms.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -59,7 +67,8 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
       const response = await fetch(`${API_URL}/api/custom-forms/my-forms`, { headers });
 
       if (!response.ok) {
-        throw new Error('Failed to load forms');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to load forms');
       }
 
       const data = await response.json();
@@ -299,12 +308,27 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     <div className="space-y-8">
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className={`border rounded-lg p-4 ${
+          error.includes('complete your profile')
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-red-50 border-red-200'
+        }`}>
           <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-5 h-5 mt-0.5 ${
+              error.includes('complete your profile') ? 'text-amber-600' : 'text-red-600'
+            }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm text-red-700">{error}</p>
+            <div>
+              <p className={`text-sm ${
+                error.includes('complete your profile') ? 'text-amber-700' : 'text-red-700'
+              }`}>{error}</p>
+              {error.includes('complete your profile') && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Go to the <span className="font-semibold">My Details</span> tab to set your specialty.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

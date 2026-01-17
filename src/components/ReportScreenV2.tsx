@@ -43,6 +43,7 @@ interface ReportScreenV2Props {
   location?: string | null;  // Country code (e.g., 'GB' for UK)
   consultationId?: string | null;  // Consultation ID for feedback system
   onDownloadPdf?: () => void;  // Handler for downloading analysis PDF
+  onDownloadPrescriptionPdf?: () => void;  // Handler for downloading prescription PDF
   generatingPdf?: boolean;  // Loading state for PDF generation
 }
 
@@ -58,6 +59,7 @@ export function ReportScreenV2({
   location,
   consultationId,
   onDownloadPdf,
+  onDownloadPrescriptionPdf,
   generatingPdf = false
 }: ReportScreenV2Props) {
   // Determine if BNF links should be shown (UK only)
@@ -307,7 +309,17 @@ export function ReportScreenV2({
               className="flex items-center justify-center gap-2 bg-aneya-teal text-white px-6 py-3 rounded-lg hover:bg-aneya-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
             >
               <Download className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
-              {generatingPdf ? 'Generating PDF...' : 'Download Report PDF'}
+              {generatingPdf ? 'Generating...' : 'Download Report'}
+            </button>
+          )}
+          {onDownloadPrescriptionPdf && consultationId && (
+            <button
+              onClick={onDownloadPrescriptionPdf}
+              disabled={generatingPdf}
+              className="flex items-center justify-center gap-2 bg-aneya-navy text-white px-6 py-3 rounded-lg hover:bg-aneya-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
+            >
+              <Pill className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
+              {generatingPdf ? 'Generating...' : 'Download Prescription'}
             </button>
           )}
           <PrimaryButton onClick={onStartNew} fullWidth>
