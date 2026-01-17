@@ -1,0 +1,307 @@
+/**
+ * PDF Print Styles
+ * Optimized for PDF generation via headless browser
+ */
+
+/* Print Media Queries */
+@media print {
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  /* Hide elements that shouldn't appear in PDF */
+  button,
+  .no-print,
+  .interactive-only,
+  nav,
+  .navigation {
+    display: none !important;
+  }
+
+  /* Page breaks */
+  .section-break {
+    page-break-after: always;
+  }
+
+  .avoid-break {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Ensure backgrounds print */
+  .print-background {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  /* Remove shadows for cleaner print */
+  .shadow-2xl,
+  .shadow-lg,
+  .shadow-md {
+    box-shadow: none !important;
+  }
+
+  /* Optimize spacing for print */
+  body {
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Ensure links are visible */
+  a {
+    text-decoration: underline;
+    color: inherit;
+  }
+
+  /* Show link URLs after text */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+
+  /* Don't show URLs for anchor links */
+  a[href^="#"]::after {
+    content: "";
+  }
+
+  /* Table optimization */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+}
+
+/* Screen and PDF styles */
+.page-margin {
+  margin: 20mm auto;
+  max-width: 210mm; /* A4 width */
+}
+
+/* Clinic branding color overrides */
+.clinic-primary {
+  color: var(--clinic-primary, var(--medical-navy));
+}
+
+.clinic-accent {
+  color: var(--clinic-accent, var(--medical-teal));
+}
+
+.clinic-background {
+  background-color: var(--clinic-background, var(--medical-cream));
+}
+
+.bg-clinic-primary {
+  background-color: var(--clinic-primary, var(--medical-navy));
+}
+
+.bg-clinic-accent {
+  background-color: var(--clinic-accent, var(--medical-teal));
+}
+
+.bg-clinic-background {
+  background-color: var(--clinic-background, var(--medical-cream));
+}
+
+.border-clinic-primary {
+  border-color: var(--clinic-primary, var(--medical-navy));
+}
+
+.border-clinic-accent {
+  border-color: var(--clinic-accent, var(--medical-teal));
+}
+
+/* Typography optimization for PDF */
+.pdf-text-sm {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pdf-text-base {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pdf-text-lg {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.pdf-text-xl {
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.pdf-text-2xl {
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+/* Table styles for PDF */
+.pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.pdf-table th,
+.pdf-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+
+.pdf-table th {
+  background-color: var(--medical-navy);
+  color: white;
+  font-weight: 600;
+}
+
+.pdf-table tr:nth-child(even) {
+  background-color: var(--medical-cream);
+}
+
+/* Signature box styling */
+.signature-box {
+  min-height: 60px;
+  border: 2px dashed var(--medical-teal);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-center;
+  color: #999;
+}
+
+/* Confidence badges for diagnoses */
+.confidence-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.confidence-high {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+
+.confidence-medium {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.confidence-low {
+  background-color: #fed7aa;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+
+/* Warning/Alert boxes */
+.alert-box {
+  padding: 12px 16px;
+  border-radius: 6px;
+  border-left: 4px solid;
+  margin-bottom: 12px;
+}
+
+.alert-warning {
+  background-color: #fef3c7;
+  border-left-color: #f59e0b;
+  color: #92400e;
+}
+
+.alert-danger {
+  background-color: #fee2e2;
+  border-left-color: #dc2626;
+  color: #7f1d1d;
+}
+
+.alert-info {
+  background-color: #dbeafe;
+  border-left-color: #3b82f6;
+  color: #1e3a8a;
+}
+
+/* Ensure proper text wrapping */
+.break-words {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Field display styles */
+.field-display {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #f9fafb;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--medical-navy);
+  margin-bottom: 4px;
+}
+
+/* Checkbox styles for PDF */
+.checkbox-display {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--medical-teal);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.checkbox-checked {
+  background-color: var(--medical-teal);
+}
+
+.checkmark {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+/* Logo styles */
+.clinic-logo {
+  max-width: 80px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+/* Footer styles */
+.pdf-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 2px solid var(--medical-navy);
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+/* Ensure SVG icons render properly */
+svg {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}

@@ -1,0 +1,50 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run daily at 6am UTC to detect backend schema drift
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  contract-tests:
+    name: Validate API Contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync OpenAPI schema from backend
+        run: npm run contracts:sync
+        env:
+          BACKEND_URL: https://aneya-backend-xao3xivzia-el.a.run.app
+
+      - name: Run contract tests
+        run: npm run contracts:test
+
+      - name: Check for schema drift
+        if: github.event_name == 'schedule'
+        run: |
+          if git diff --exit-code src/contracts/__generated__/; then
+            echo "No schema changes detected"
+          else
+            echo "::warning::Backend schema has changed! Review the diff below."
+            git diff src/contracts/__generated__/
+            echo ""
+            echo "Consider updating the frontend types to match the new backend schema."
+          fi

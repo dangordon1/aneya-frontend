@@ -41,6 +41,42 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
   const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [pastAppointmentsSearch, setPastAppointmentsSearch] = useState('');
+  const [downloadingPrescriptionId, setDownloadingPrescriptionId] = useState<string | null>(null);
+
+  // Get API URL from environment
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  // Handler for downloading prescription PDF
+  const handleDownloadPrescription = async (consultationId: string) => {
+    setDownloadingPrescriptionId(consultationId);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/consultations/${consultationId}/prescription-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate prescription PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      a.download = `prescription_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading prescription PDF:', error);
+      alert('Failed to generate prescription PDF. Please try again.');
+    } finally {
+      setDownloadingPrescriptionId(null);
+    }
+  };
 
   // Filter past appointments based on search
   const filteredPastAppointments = useMemo(() => {
@@ -833,6 +869,8 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           onRerunTranscription={handleRerunTranscription}
           onResearchAnalysis={handleResearchAnalysis}
           onViewConsultationForm={onViewConsultationForm}
+          onDownloadPrescription={handleDownloadPrescription}
+          downloadingPrescription={downloadingPrescriptionId !== null}
           isAdmin={isAdmin}
           onDelete={handleDeleteAppointment}
         />

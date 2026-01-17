@@ -1221,12 +1221,14 @@ function MainApp() {
   };
 
   const handleDownloadPrescriptionPdf = async () => {
-    if (!currentConsultationId) return;
+    // Use consultation ID from form view (past appointments) or current consultation (new analysis)
+    const consultationId = appointmentForFormView?.consultation_id || currentConsultationId;
+    if (!consultationId) return;
 
     setGeneratingPdf(true);
     try {
       const response = await fetch(
-        `${API_URL}/api/consultations/${currentConsultationId}/prescription-pdf`,
+        `${API_URL}/api/consultations/${consultationId}/prescription-pdf`,
         { method: 'GET' }
       );
 
@@ -1424,24 +1426,16 @@ function MainApp() {
                 editable={false}
               />
 
-              {/* Download PDF buttons at bottom */}
+              {/* Download Consultation Report */}
               {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                <div className="mt-6 flex justify-center gap-4">
+                <div className="mt-6 flex justify-center">
                   <button
                     onClick={handleDownloadPdf}
                     disabled={generatingPdf}
                     className="px-4 py-2 bg-blue-600 text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Report'}
-                  </button>
-                  <button
-                    onClick={handleDownloadPrescriptionPdf}
-                    disabled={generatingPdf}
-                    className="px-4 py-2 bg-aneya-teal text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Prescription'}
+                    {generatingPdf ? 'Generating...' : 'Download Consultation Report'}
                   </button>
                 </div>
               )}

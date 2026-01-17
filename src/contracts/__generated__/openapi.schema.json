@@ -1,0 +1,6215 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aneya Clinical Decision Support API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/doctor-logo/upload": {
+      "post": {
+        "summary": "Upload Clinic Logo",
+        "description": "Upload and process clinic logo for a doctor\n\n- Validates file type (PNG, JPEG) and size (max 2MB)\n- Resizes to fit within 200x80px\n- Uploads to Supabase Storage\n- Updates doctor record in Supabase\n- Deletes old logo if exists\n- Requires JWT authentication",
+        "operationId": "upload_clinic_logo_api_doctor_logo_upload_post",
+        "parameters": [
+          {
+            "name": "doctor_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Doctor's UUID",
+              "title": "Doctor Id"
+            },
+            "description": "Doctor's UUID"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_clinic_logo_api_doctor_logo_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor-logo/delete": {
+      "delete": {
+        "summary": "Delete Clinic Logo",
+        "description": "Delete clinic logo for a doctor\n\n- Deletes logo from Supabase Storage\n- Sets clinic_logo_url to NULL in Supabase\n- Requires JWT authentication",
+        "operationId": "delete_clinic_logo_api_doctor_logo_delete_delete",
+        "parameters": [
+          {
+            "name": "doctor_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Doctor's UUID",
+              "title": "Doctor Id"
+            },
+            "description": "Doctor's UUID"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoDeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor-logo/current": {
+      "get": {
+        "summary": "Get Current Logo",
+        "description": "Get current clinic logo URL for a doctor\nRequires JWT authentication",
+        "operationId": "get_current_logo_api_doctor_logo_current_get",
+        "parameters": [
+          {
+            "name": "doctor_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Doctor's UUID",
+              "title": "Doctor Id"
+            },
+            "description": "Doctor's UUID"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoCurrentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/upload": {
+      "post": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Upload Custom Form",
+        "description": "Upload form images and extract schema + PDF template for review.\nDOES NOT save to database - returns extraction results for doctor to review.\n\nArgs:\n    form_name: Name for the form in snake_case\n    specialty: Medical specialty (e.g., 'cardiology', 'neurology')\n    description: Optional description of the form\n    is_public: Whether to make form available to all doctors\n    files: List of HEIC/JPEG/PNG image files\n\nReturns:\n    Extraction results with schema and PDF template for review",
+        "operationId": "upload_custom_form_api_custom_forms_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_custom_form_api_custom_forms_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormExtractionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/save": {
+      "post": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Save Custom Form",
+        "description": "Save doctor-reviewed form schema + PDF template to database.\nCalled AFTER doctor has reviewed and edited the extracted schema.\n\nArgs:\n    request: SaveFormRequest with reviewed schema and PDF template\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    CustomFormResponse with saved form details",
+        "operationId": "save_custom_form_api_custom_forms_save_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveFormRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/preview-pdf": {
+      "post": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Preview Pdf",
+        "description": "Generate a preview PDF based on the form schema and PDF template.\nShows sample/dummy data for layout review before form is activated.\n\nArgs:\n    request: PreviewPDFRequest with form schema, PDF template, and optional branding\n\nReturns:\n    StreamingResponse with PDF file for inline display",
+        "operationId": "preview_pdf_api_custom_forms_preview_pdf_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewPDFRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/{form_id}/preview-pdf": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Preview Saved Form Pdf",
+        "description": "Generate PDF preview for a saved custom form.\n\nArgs:\n    form_id: UUID of the custom form\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    PDF file as downloadable response",
+        "operationId": "preview_saved_form_pdf_api_custom_forms_forms__form_id__preview_pdf_get",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/browse": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Browse Forms To Add",
+        "description": "Browse all public forms that can be added to \"My Forms\".\nExcludes forms already in the doctor's library (owned or adopted).\n\nArgs:\n    specialty: Optional filter by specialty\n    search: Optional search in form name or description\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Dict with available forms to add",
+        "operationId": "browse_forms_to_add_api_custom_forms_forms_browse_get",
+        "parameters": [
+          {
+            "name": "specialty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/{form_id}": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Get Custom Form",
+        "description": "Get a single custom form with full details (schema and PDF template).\n\nArgs:\n    form_id: UUID of the custom form\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Complete form details",
+        "operationId": "get_custom_form_api_custom_forms_forms__form_id__get",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Delete Custom Form",
+        "description": "Delete a custom form.\n\nArgs:\n    form_id: UUID of the custom form to delete\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Success message",
+        "operationId": "delete_custom_form_api_custom_forms_forms__form_id__delete",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Update Custom Form",
+        "description": "Update an existing custom form's schema and PDF template.\n\nArgs:\n    form_id: UUID of the custom form to update\n    request: Updated form data (schema, pdf_template, etc.)\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Updated form details",
+        "operationId": "update_custom_form_api_custom_forms_forms__form_id__put",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveFormRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/{form_id}/share": {
+      "patch": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Share Custom Form",
+        "description": "Make a custom form public so all doctors can use it.\n\nArgs:\n    form_id: UUID of the custom form to share\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Updated form details",
+        "operationId": "share_custom_form_api_custom_forms_forms__form_id__share_patch",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/my-forms": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Get My Forms Library",
+        "description": "Get doctor's complete form library (owned + adopted forms).\nThis is the list of forms available for consultation selection.\n\nAuto-adopts public forms in doctor's specialty on first call (idempotent).\n\nArgs:\n    specialty: Optional filter by specialty\n    status: Optional filter by status (draft, active, archived)\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Dict with forms (owned + adopted), counts, and ownership metadata",
+        "operationId": "get_my_forms_library_api_custom_forms_my_forms_get",
+        "parameters": [
+          {
+            "name": "specialty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/public-forms": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Get Public Custom Forms",
+        "description": "Get all public custom forms available to use.\n\nArgs:\n    specialty: Optional filter by specialty\n\nReturns:\n    List of public custom forms",
+        "operationId": "get_public_custom_forms_api_custom_forms_public_forms_get",
+        "parameters": [
+          {
+            "name": "specialty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomFormResponse"
+                  },
+                  "title": "Response Get Public Custom Forms Api Custom Forms Public Forms Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/{form_id}/adopt": {
+      "post": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Adopt Form To Library",
+        "description": "Add a public form to the doctor's \"My Forms\" library.\n\nArgs:\n    form_id: UUID of the form to adopt\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Success message with form details",
+        "operationId": "adopt_form_to_library_api_custom_forms_forms__form_id__adopt_post",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/forms/{form_id}/remove": {
+      "delete": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Remove Form From Library",
+        "description": "Remove an adopted form from the doctor's library.\nCannot remove forms you created (use DELETE /forms/{id} instead).\n\nArgs:\n    form_id: UUID of the form to remove\n    authorization: Firebase JWT token in Authorization header\n\nReturns:\n    Success message",
+        "operationId": "remove_form_from_library_api_custom_forms_forms__form_id__remove_delete",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/{form_id}/activate": {
+      "patch": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Activate Custom Form",
+        "description": "Activate a custom form to make it usable",
+        "operationId": "activate_custom_form_api_custom_forms__form_id__activate_patch",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/{form_id}": {
+      "delete": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Delete Custom Form",
+        "description": "Delete a draft custom form",
+        "operationId": "delete_custom_form_api_custom_forms__form_id__delete",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/default-forms/{specialty}": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Get Default Forms For Specialty",
+        "description": "Get all built-in/default forms for a specific medical specialty.\n\nArgs:\n    specialty: Medical specialty (e.g., 'obstetrics_gynecology', 'cardiology')\n\nReturns:\n    List of default forms for that specialty",
+        "operationId": "get_default_forms_for_specialty_api_custom_forms_default_forms__specialty__get",
+        "parameters": [
+          {
+            "name": "specialty",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specialty"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomFormResponse"
+                  },
+                  "title": "Response Get Default Forms For Specialty Api Custom Forms Default Forms  Specialty  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/filled-forms/{filled_form_id}/pdf": {
+      "get": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Download Filled Form Pdf",
+        "description": "Generate and download PDF for a filled custom form using stored pdf_template.\n\nArgs:\n    filled_form_id: ID of the filled form record\n\nReturns:\n    StreamingResponse with PDF file",
+        "operationId": "download_filled_form_pdf_api_custom_forms_filled_forms__filled_form_id__pdf_get",
+        "parameters": [
+          {
+            "name": "filled_form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filled Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/custom-forms/select-form-for-consultation": {
+      "post": {
+        "tags": [
+          "custom-forms"
+        ],
+        "summary": "Select Form For Consultation",
+        "description": "Smart form selection for consultations.\n\nLogic:\n- If only 1 form available for specialty → return it immediately (no LLM call)\n- If multiple forms available → call LLM with patient_criteria to decide which form to use\n\nArgs:\n    specialty: Doctor's specialty\n    patient_context: Brief description of patient (age, gender, chief complaint, pregnancy status, etc.)\n    authorization: Firebase JWT token\n\nReturns:\n    Selected form details with form_id and form_name",
+        "operationId": "select_form_for_consultation_api_custom_forms_select_form_for_consultation_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bearer token",
+              "title": "Authorization"
+            },
+            "description": "Bearer token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_select_form_for_consultation_api_custom_forms_select_form_for_consultation_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Root endpoint",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Api Health Check",
+        "description": "API health check endpoint (frontend compatibility)",
+        "operationId": "api_health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/geolocation": {
+      "get": {
+        "summary": "Get Geolocation",
+        "description": "Get geolocation info including timezone based on the caller's IP address.\nUses ip-api.com for geolocation lookups.\n\nReturns:\n    Dictionary with ip, country, country_code, timezone, city, region",
+        "operationId": "get_geolocation_api_geolocation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyze": {
+      "post": {
+        "summary": "Analyze Consultation",
+        "description": "Analyze a clinical consultation and return recommendations\n\nArgs:\n    request: AnalysisRequest with consultation text and optional patient info\n\nReturns:\n    Complete clinical decision support analysis",
+        "operationId": "analyze_consultation_api_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyze-stream": {
+      "post": {
+        "summary": "Analyze Consultation Stream",
+        "description": "Analyze a clinical consultation with real-time progress updates via Server-Sent Events (SSE)\n\nThis endpoint streams progress updates as the analysis proceeds:\n- Location detection\n- Guidelines being searched\n- Diagnoses identified\n- BNF drug lookups\n- Final results\n\nArgs:\n    request: AnalysisRequest with consultation text and optional patient info\n\nReturns:\n    StreamingResponse with SSE events containing progress updates and final results",
+        "operationId": "analyze_consultation_stream_api_analyze_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test-sse": {
+      "get": {
+        "summary": "Test Sse",
+        "description": "Simple SSE test endpoint - yields events with 2 second delays",
+        "operationId": "test_sse_api_test_sse_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/examples": {
+      "get": {
+        "summary": "Get Examples",
+        "description": "Get example clinical scenarios for testing",
+        "operationId": "get_examples_api_examples_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/translate": {
+      "post": {
+        "summary": "Translate Text",
+        "description": "Translate text to English using Google Translate\n\nAutomatically detects the source language and translates to English.\nIf the text is already in English, returns it unchanged.\n\nArgs:\n    request: {\"text\": \"text to translate\"}\n\nReturns:\n    {\n        \"success\": true,\n        \"original_text\": \"original text\",\n        \"translated_text\": \"translated text\",\n        \"detected_language\": \"hi\",\n        \"detected_language_name\": \"Hindi\"\n    }",
+        "operationId": "translate_text_api_translate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summarize": {
+      "post": {
+        "summary": "Summarize Text",
+        "description": "Summarize consultation transcript using ConsultationSummary system\n\nTakes a diarized consultation transcript and generates a comprehensive\nclinical summary with speaker identification, timeline extraction, and\nstructured SOAP note format.\n\nArgs:\n    request: {\n        \"text\": \"diarized transcript with [timestamp] speaker_X: format\",\n        \"original_text\": \"original language transcript (optional)\",\n        \"patient_info\": {  # Optional\n            \"patient_id\": \"P001\",\n            \"patient_age\": \"30 years old\",\n            \"allergies\": \"None\"\n        },\n        \"is_from_transcription\": true,  # Default true - enables transcription error handling\n        \"transcription_language\": \"en\"  # Optional - language of original speech for homophone handling\n    }\n\nReturns:\n    Comprehensive JSON summary with:\n    - speakers: Doctor/patient mapping\n    - metadata: Patient info, consultation duration\n    - timeline: Symptom onset and progression\n    - clinical_summary: Full SOAP note\n    - key_concerns: Patient concerns\n    - recommendations_given: Medical advice",
+        "operationId": "summarize_text_api_summarize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/get-transcription-token": {
+      "get": {
+        "summary": "Get Transcription Token",
+        "description": "Generate a temporary token for ElevenLabs speech-to-text WebSocket connection\n\nThis endpoint provides secure client-side access to ElevenLabs by generating\na single-use token that expires after 15 minutes.\n\nReturns:\n    JSON with temporary token for WebSocket authentication",
+        "operationId": "get_transcription_token_api_get_transcription_token_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/get-sarvam-token": {
+      "get": {
+        "summary": "Get Sarvam Token",
+        "description": "Return the Sarvam API key for WebSocket connection (Indian languages)\n\nSarvam AI is used for Indian language transcription and translation.\nThe API key is passed as a query parameter to the WebSocket endpoint.\n\nReturns:\n    JSON with API key for WebSocket authentication",
+        "operationId": "get_sarvam_token_api_get_sarvam_token_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diarize": {
+      "post": {
+        "summary": "Diarize Audio",
+        "description": "Perform speaker diarization on audio using ElevenLabs Scribe v1 API\n\nThis endpoint uses the batch Scribe v1 model which supports speaker segmentation.\nReturns word-level timestamps with speaker IDs for multi-speaker conversations.\n\nArgs:\n    audio: Audio file (webm, wav, mp3, etc.)\n    num_speakers: Optional expected number of speakers (if known)\n    diarization_threshold: Threshold for speaker change detection (0.1-0.4, default 0.22)\n\nReturns:\n    {\n        \"success\": true,\n        \"segments\": [{\"speaker_id\": \"speaker_1\", \"text\": \"...\", \"start_time\": 0.0, \"end_time\": 1.5}],\n        \"detected_speakers\": [\"speaker_1\", \"speaker_2\", ...],\n        \"full_transcript\": \"complete text\"\n    }",
+        "operationId": "diarize_audio_api_diarize_post",
+        "parameters": [
+          {
+            "name": "num_speakers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Num Speakers"
+            }
+          },
+          {
+            "name": "diarization_threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 0.22,
+              "title": "Diarization Threshold"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_diarize_audio_api_diarize_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diarize-sarvam": {
+      "post": {
+        "summary": "Diarize Audio Sarvam",
+        "description": "Perform speaker diarization on audio using Sarvam AI Batch API\n\nThis endpoint uses Sarvam's speech-to-text-translate batch API with diarization\nfor Indian language consultations. Returns diarized transcript with speaker labels\nand automatic English translation.\n\nArgs:\n    audio: Audio file (webm, wav, mp3, etc.)\n    num_speakers: Expected number of speakers (default 2 for doctor-patient)\n\nReturns:\n    {\n        \"success\": true,\n        \"segments\": [{\"speaker_id\": \"speaker 1\", \"text\": \"...\", \"start_time\": 0.0, \"end_time\": 1.5}],\n        \"detected_speakers\": [\"speaker 1\", \"speaker 2\"],\n        \"full_transcript\": \"complete translated text in English\"\n    }",
+        "operationId": "diarize_audio_sarvam_api_diarize_sarvam_post",
+        "parameters": [
+          {
+            "name": "num_speakers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 2,
+              "title": "Num Speakers"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_diarize_audio_sarvam_api_diarize_sarvam_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identify-speaker-roles": {
+      "post": {
+        "summary": "Identify Speaker Roles",
+        "description": "Identify which speaker is the doctor vs patient using LLM analysis\n\nAnalyzes the FULL conversation to determine speaker roles.\nUses Claude Haiku for fast, cost-effective inference.\n\nArgs:\n    segments: ALL diarized segments from the consultation\n    language: Conversation language (for context)\n\nReturns:\n    Speaker role mapping: {\"speaker_0\": \"Doctor\", \"speaker_1\": \"Patient\"}",
+        "operationId": "identify_speaker_roles_api_identify_speaker_roles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakerRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rerun-transcription": {
+      "post": {
+        "summary": "Rerun Transcription",
+        "description": "Rerun transcription/diarization on a past consultation's audio file.\n\nProcesses the entire audio file at once with speaker diarization and role\nidentification (Doctor vs Patient), then updates the consultation record.\n\nArgs:\n    consultation_id: UUID of the consultation to reprocess\n    language: Optional language code override (e.g., \"en-IN\", \"hi-IN\")\n\nReturns:\n    {\n        \"success\": true,\n        \"consultation_id\": \"uuid\",\n        \"transcript\": \"Doctor: ... Patient: ...\",\n        \"language\": \"en-IN\",\n        \"provider\": \"sarvam\" | \"elevenlabs\",\n        \"speaker_roles\": {\"speaker_0\": \"Doctor\", \"speaker_1\": \"Patient\"},\n        \"segments_count\": 42,\n        \"processing_time_seconds\": 45.2\n    }",
+        "operationId": "rerun_transcription_api_rerun_transcription_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RerunTranscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diarize-chunk": {
+      "post": {
+        "summary": "Diarize Audio Chunk",
+        "description": "Diarize audio chunk with overlap metadata for speaker ID matching\n\nThis endpoint processes 30-second audio chunks during recording, enabling\nreal-time speaker-labeled transcription. Returns segments with overlap\nstatistics for cross-chunk speaker matching.\n\nArgs:\n    audio: Audio chunk file (webm, 30 seconds)\n    chunk_index: Chunk number (0, 1, 2, ...)\n    chunk_start: Start time in full recording (seconds)\n    chunk_end: End time in full recording (seconds)\n    num_speakers: Optional expected number of speakers\n    diarization_threshold: Speaker change detection threshold\n    language: Language code (e.g., \"en-IN\", \"hi-IN\")\n\nReturns:\n    {\n        \"success\": true,\n        \"chunk_index\": 0,\n        \"chunk_start\": 0.0,\n        \"chunk_end\": 30.0,\n        \"segments\": [...],\n        \"detected_speakers\": [\"speaker_0\", \"speaker_1\"],\n        \"start_overlap_stats\": {...},\n        \"end_overlap_stats\": {...},\n        \"latency_seconds\": 2.3\n    }",
+        "operationId": "diarize_audio_chunk_api_diarize_chunk_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_diarize_audio_chunk_api_diarize_chunk_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/process-final-chunk-async": {
+      "post": {
+        "summary": "Process Final Chunk Async",
+        "description": "Process final audio chunk asynchronously and update consultation\n\nThis endpoint returns immediately after queuing the background task.\nThe consultation is updated via Supabase when processing completes.\n\nArgs:\n    consultation_id: UUID of the consultation to update\n    audio: Audio chunk file (webm)\n    chunk_index: Chunk number\n    chunk_start: Start time in full recording (seconds)\n    chunk_end: End time in full recording (seconds)\n    language: Language code (e.g., \"en-IN\", \"hi-IN\")\n    num_speakers: Expected number of speakers\n    diarization_threshold: Speaker change detection threshold\n\nReturns:\n    {\n        \"success\": true,\n        \"consultation_id\": \"...\",\n        \"message\": \"Processing in background\"\n    }",
+        "operationId": "process_final_chunk_async_api_process_final_chunk_async_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_process_final_chunk_async_api_process_final_chunk_async_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcribe": {
+      "post": {
+        "summary": "Transcribe Audio",
+        "description": "Transcribe audio using ElevenLabs Scribe v2 Realtime API\n\nArgs:\n    audio: Audio file (webm, wav, mp3, etc.)\n\nReturns:\n    Transcribed text with ultra-low latency (~150ms) and automatic language detection",
+        "operationId": "transcribe_audio_api_transcribe_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_audio_api_transcribe_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/upload-audio": {
+      "post": {
+        "summary": "Upload Audio To Gcs",
+        "description": "Upload audio recording to Google Cloud Storage\n\nArgs:\n    audio: Audio file (webm, wav, mp3, etc.)\n    session_id: Optional session ID for organizing recordings\n\nReturns:\n    {\n        \"success\": true,\n        \"gcs_uri\": \"gs://aneya-audio-recordings/...\",\n        \"public_url\": \"https://storage.googleapis.com/...\",\n        \"filename\": \"...\",\n        \"size_bytes\": 12345\n    }",
+        "operationId": "upload_audio_to_gcs_api_upload_audio_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_audio_to_gcs_api_upload_audio_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send-invitation-email": {
+      "post": {
+        "summary": "Send Invitation Email",
+        "description": "Send a patient invitation email using Resend\n\nArgs:\n    request: SendInvitationEmailRequest with email, names, and invitation token\n\nReturns:\n    {\n        \"success\": true,\n        \"message_id\": \"resend-message-id\",\n        \"recipient\": \"email@example.com\"\n    }",
+        "operationId": "send_invitation_email_api_send_invitation_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendInvitationEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send-password-reset-email": {
+      "post": {
+        "summary": "Send Password Reset Email",
+        "description": "Send a password reset email using Resend with Firebase password reset link\n\nThis bypasses Firebase's default email sending which has poor deliverability.\nInstead, we generate the reset link using Firebase Admin SDK and send it\nvia Resend from our custom domain (aneya.health).\n\nArgs:\n    request: PasswordResetRequest with email address\n\nReturns:\n    {\n        \"success\": true,\n        \"message\": \"Password reset email sent\"\n    }",
+        "operationId": "send_password_reset_email_api_send_password_reset_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/appointments/{appointment_id}/status": {
+      "patch": {
+        "summary": "Update Appointment Status",
+        "description": "Update appointment status (e.g., mark as completed, cancelled)\n\nThis is a placeholder endpoint for the appointments feature.\nIn production, this would update a database.",
+        "operationId": "update_appointment_status_api_appointments__appointment_id__status_patch",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Appointment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/appointments/{appointment_id}": {
+      "delete": {
+        "summary": "Delete Appointment",
+        "description": "Delete an appointment by ID.\n\nArgs:\n    appointment_id: The ID of the appointment to delete\n\nReturns:\n    Success response with deletion confirmation",
+        "operationId": "delete_appointment_api_appointments__appointment_id__delete",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Appointment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/appointments/{appointment_id}/consultation-pdf": {
+      "get": {
+        "summary": "Download Consultation Pdf",
+        "description": "Generate and download a PDF of the consultation form and appointment details.\n\nArgs:\n    appointment_id: UUID of the appointment\n\nReturns:\n    StreamingResponse with PDF file\n\nRaises:\n    400: Invalid appointment ID format\n    404: Appointment not found or no consultation form found\n    500: PDF generation failed",
+        "operationId": "download_consultation_pdf_api_appointments__appointment_id__consultation_pdf_get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Appointment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/structure-symptom": {
+      "post": {
+        "summary": "Structure Symptom",
+        "description": "Use Claude to structure free-form symptom text into structured data,\nthen save to Supabase patient_symptoms table.",
+        "operationId": "structure_symptom_api_structure_symptom_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StructureSymptomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/obgyn-forms": {
+      "post": {
+        "summary": "Create Obgyn Form",
+        "description": "Create a new OB/GYN form for a patient.\n\nArgs:\n    request: OBGYNFormCreateRequest with patient_id, form_data, and optional appointment_id\n\nReturns:\n    OBGYNFormResponse with the created form details",
+        "operationId": "create_obgyn_form_api_obgyn_forms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OBGYNFormCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OBGYNFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/obgyn-forms/{form_id}": {
+      "get": {
+        "summary": "Get Obgyn Form",
+        "description": "Retrieve an OB/GYN form by ID.\n\nArgs:\n    form_id: The ID of the form to retrieve\n\nReturns:\n    OBGYNFormResponse with the form details",
+        "operationId": "get_obgyn_form_api_obgyn_forms__form_id__get",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OBGYNFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Obgyn Form",
+        "description": "Update an existing OB/GYN form.\n\nArgs:\n    form_id: The ID of the form to update\n    request: OBGYNFormUpdateRequest with updated form_data and optional status\n\nReturns:\n    OBGYNFormResponse with the updated form details",
+        "operationId": "update_obgyn_form_api_obgyn_forms__form_id__put",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OBGYNFormUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OBGYNFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Obgyn Form",
+        "description": "Delete an OB/GYN form by ID.\n\nArgs:\n    form_id: The ID of the form to delete\n\nReturns:\n    Success response with deletion confirmation",
+        "operationId": "delete_obgyn_form_api_obgyn_forms__form_id__delete",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/obgyn-forms/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Obgyn Forms",
+        "description": "Retrieve all OB/GYN forms for a specific patient.\n\nArgs:\n    patient_id: The ID of the patient\n\nReturns:\n    List of OBGYNFormResponse objects for the patient",
+        "operationId": "get_patient_obgyn_forms_api_obgyn_forms_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/obgyn-forms/appointment/{appointment_id}": {
+      "get": {
+        "summary": "Get Appointment Obgyn Form",
+        "description": "Retrieve the OB/GYN form associated with a specific appointment.\n\nArgs:\n    appointment_id: The ID of the appointment\n\nReturns:\n    OBGYNFormResponse for the appointment, or 404 if not found",
+        "operationId": "get_appointment_obgyn_form_api_obgyn_forms_appointment__appointment_id__get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Appointment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/obgyn-forms/validate": {
+      "post": {
+        "summary": "Validate Obgyn Form Section",
+        "description": "Validate a specific section of an OB/GYN form.\n\nThis endpoint validates form sections against expected data structures\nand can be called to check individual sections during form filling.\n\nArgs:\n    request: OBGYNFormSectionRequest with section_name and section_data\n\nReturns:\n    Validation result with success status and any errors found",
+        "operationId": "validate_obgyn_form_section_api_obgyn_forms_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OBGYNFormSectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-vitals": {
+      "post": {
+        "summary": "Create Patient Vitals",
+        "description": "Create a new patient vitals record",
+        "operationId": "create_patient_vitals_api_patient_vitals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientVitalsCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientVitalsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-vitals/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Vitals",
+        "description": "Get all vitals records for a patient (most recent first)",
+        "operationId": "get_patient_vitals_api_patient_vitals_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-vitals/{vitals_id}": {
+      "get": {
+        "summary": "Get Vitals By Id",
+        "description": "Get a specific vitals record by ID",
+        "operationId": "get_vitals_by_id_api_patient_vitals__vitals_id__get",
+        "parameters": [
+          {
+            "name": "vitals_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vitals Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientVitalsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-medications": {
+      "post": {
+        "summary": "Create Patient Medication",
+        "description": "Create a new patient medication record",
+        "operationId": "create_patient_medication_api_patient_medications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientMedicationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientMedicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-medications/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Medications",
+        "description": "Get all medications for a patient (optionally filtered by status)",
+        "operationId": "get_patient_medications_api_patient_medications_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-medications/{medication_id}": {
+      "put": {
+        "summary": "Update Patient Medication",
+        "description": "Update a patient medication record (e.g., stop date, status)",
+        "operationId": "update_patient_medication_api_patient_medications__medication_id__put",
+        "parameters": [
+          {
+            "name": "medication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Medication Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Updates"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientMedicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-allergies": {
+      "post": {
+        "summary": "Create Patient Allergy",
+        "description": "Create a new patient allergy record",
+        "operationId": "create_patient_allergy_api_patient_allergies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientAllergyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientAllergyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-allergies/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Allergies",
+        "description": "Get all allergies for a patient (default: active only)",
+        "operationId": "get_patient_allergies_api_patient_allergies_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "active",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-allergies/{allergy_id}": {
+      "put": {
+        "summary": "Update Patient Allergy",
+        "description": "Update a patient allergy record (e.g., mark as resolved)",
+        "operationId": "update_patient_allergy_api_patient_allergies__allergy_id__put",
+        "parameters": [
+          {
+            "name": "allergy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Allergy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Updates"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientAllergyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-conditions": {
+      "post": {
+        "summary": "Create Patient Condition",
+        "description": "Create a new patient condition record",
+        "operationId": "create_patient_condition_api_patient_conditions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientConditionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientConditionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-conditions/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Conditions",
+        "description": "Get all conditions for a patient (optionally filtered by status)",
+        "operationId": "get_patient_conditions_api_patient_conditions_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-conditions/{condition_id}": {
+      "put": {
+        "summary": "Update Patient Condition",
+        "description": "Update a patient condition record (e.g., mark as resolved)",
+        "operationId": "update_patient_condition_api_patient_conditions__condition_id__put",
+        "parameters": [
+          {
+            "name": "condition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Condition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Updates"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientConditionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-lab-results": {
+      "post": {
+        "summary": "Create Patient Lab Result",
+        "description": "Create a new patient lab result record",
+        "operationId": "create_patient_lab_result_api_patient_lab_results_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientLabResultCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientLabResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-lab-results/patient/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Lab Results",
+        "description": "Get all lab results for a patient (optionally filtered by test type)",
+        "operationId": "get_patient_lab_results_api_patient_lab_results_patient__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "test_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Type"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-lab-results/{result_id}": {
+      "get": {
+        "summary": "Get Lab Result By Id",
+        "description": "Get a specific lab result by ID",
+        "operationId": "get_lab_result_by_id_api_patient_lab_results__result_id__get",
+        "parameters": [
+          {
+            "name": "result_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Result Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientLabResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient-health-summary/{patient_id}": {
+      "get": {
+        "summary": "Get Patient Health Summary",
+        "description": "Get a comprehensive health summary for a patient including:\n- Latest vitals\n- Active medications\n- Active allergies\n- Active conditions\n- Recent lab results",
+        "operationId": "get_patient_health_summary_api_patient_health_summary__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/determine-consultation-type": {
+      "post": {
+        "summary": "Determine Consultation Type",
+        "description": "Analyze the first chunk of a consultation to determine the appropriate form type.\n\nThis helps auto-select the correct consultation form based on the conversation content,\nespecially for specialists who handle multiple types of consultations (e.g., OBGyn doctors\nseeing general gynecology, infertility, or antenatal patients).",
+        "operationId": "determine_consultation_type_api_determine_consultation_type_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetermineConsultationTypeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetermineConsultationTypeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extract-form-fields": {
+      "post": {
+        "summary": "Extract Form Fields",
+        "description": "Extract structured form fields from diarized conversation segments.\n\nThis endpoint processes doctor-patient conversation segments from real-time\ndiarization and extracts relevant clinical data to auto-populate form fields.",
+        "operationId": "extract_form_fields_api_extract_form_fields_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractFormFieldsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractFormFieldsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auto-fill-consultation-form": {
+      "post": {
+        "summary": "Auto Fill Consultation Form",
+        "description": "Intelligently detect consultation type, create/update form, and auto-fill fields.\n\nWorkflow:\n1. Parse diarized transcript\n2. Call determine_consultation_type() to detect type\n3. Check if form already exists in database\n4. Create new form if missing, or get existing form\n5. Call extract_form_fields() to extract data\n6. Update form with extracted fields\n7. Return success response with form details",
+        "operationId": "auto_fill_consultation_form_api_auto_fill_consultation_form_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoFillConsultationFormRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoFillConsultationFormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "summary": "Submit Ai Feedback",
+        "description": "Submit feedback on AI-generated content.\n\nSupports:\n- Transcription quality feedback\n- Summary quality feedback\n- Diagnosis accuracy feedback (with \"correct diagnosis\" marking)\n- Drug recommendation feedback\n\nDeduplication: Uses fingerprint to prevent duplicate submissions.",
+        "operationId": "submit_ai_feedback_api_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback/consultation/{consultation_id}": {
+      "get": {
+        "summary": "Get Consultation Feedback",
+        "description": "Retrieve all feedback for a specific consultation.\nUseful for displaying feedback history in the UI.",
+        "operationId": "get_consultation_feedback_api_feedback_consultation__consultation_id__get",
+        "parameters": [
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Consultation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback/stats": {
+      "get": {
+        "summary": "Get Feedback Stats",
+        "description": "Get aggregated feedback statistics for RLHF analysis.\n\nQuery parameters:\n- days: Number of days to look back (default: 30)\n- feedback_type: Filter by specific type (optional)",
+        "operationId": "get_feedback_stats_api_feedback_stats_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "feedback_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feedback Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/form-schema/{form_type}": {
+      "get": {
+        "summary": "Get Form Schema",
+        "description": "Get form schema from database.\n\nReturns the active schema definition for the specified form type.\nFrontend uses this to render forms dynamically.\n\nPath parameters:\n- form_type: Any form type registered in the database (e.g., 'antenatal', 'obgyn', 'infertility')\n\nNote: No hardcoded validation - any form type in the database is valid.\nThis allows adding new form types without code changes.",
+        "operationId": "get_form_schema_api_form_schema__form_type__get",
+        "parameters": [
+          {
+            "name": "form_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/form-schemas": {
+      "get": {
+        "summary": "List Form Schemas",
+        "description": "List all available form schemas.\n\nReturns metadata about all active form schemas in the system.",
+        "operationId": "list_form_schemas_api_form_schemas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cache-stats": {
+      "get": {
+        "summary": "Get Cache Stats",
+        "description": "Get cache statistics for monitoring schema cache performance.\n\nReturns hit/miss ratios and cache size information.",
+        "operationId": "get_cache_stats_api_cache_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/consultation-form": {
+      "get": {
+        "summary": "Get Consultation Form",
+        "description": "Get consultation form by appointment ID and form type.",
+        "operationId": "get_consultation_form_api_consultation_form_get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "form_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Consultation Form",
+        "description": "Create a new consultation form in unified table.\n\nRequest body:\n{\n    \"patient_id\": \"uuid\",\n    \"appointment_id\": \"uuid\",\n    \"form_type\": \"antenatal|obgyn|infertility|...\",\n    \"form_data\": {...},  // JSONB data\n    \"status\": \"draft|partial|completed\",\n    \"created_by\": \"firebase_uid\",\n    \"updated_by\": \"firebase_uid\",\n    \"filled_by\": \"firebase_uid\"\n}",
+        "operationId": "create_consultation_form_api_consultation_form_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Form Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/consultation-form/{form_id}": {
+      "put": {
+        "summary": "Update Consultation Form",
+        "description": "Update an existing consultation form.\n\nRequest body: Same as create, but only include fields to update.",
+        "operationId": "update_consultation_form_api_consultation_form__form_id__put",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Form Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisRequest": {
+        "properties": {
+          "consultation": {
+            "type": "string",
+            "title": "Consultation"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          },
+          "patient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Name"
+          },
+          "patient_age": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Age"
+          },
+          "patient_sex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Sex"
+          },
+          "patient_height": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Height"
+          },
+          "patient_weight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Weight"
+          },
+          "current_medications": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Medications"
+          },
+          "current_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Conditions"
+          },
+          "allergies": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allergies"
+          },
+          "user_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Ip"
+          },
+          "location_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation"
+        ],
+        "title": "AnalysisRequest",
+        "description": "Request body for consultation analysis"
+      },
+      "AutoFillConsultationFormRequest": {
+        "properties": {
+          "consultation_id": {
+            "type": "string",
+            "title": "Consultation Id"
+          },
+          "appointment_id": {
+            "type": "string",
+            "title": "Appointment Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "original_transcript": {
+            "type": "string",
+            "title": "Original Transcript"
+          },
+          "consultation_text": {
+            "type": "string",
+            "title": "Consultation Text"
+          },
+          "patient_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Patient Snapshot"
+          },
+          "force_consultation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Force Consultation Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation_id",
+          "appointment_id",
+          "patient_id",
+          "original_transcript",
+          "consultation_text",
+          "patient_snapshot"
+        ],
+        "title": "AutoFillConsultationFormRequest",
+        "description": "Request model for auto-filling consultation forms from past consultations"
+      },
+      "AutoFillConsultationFormResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "consultation_type": {
+            "type": "string",
+            "title": "Consultation Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning"
+          },
+          "form_id": {
+            "type": "string",
+            "title": "Form Id"
+          },
+          "form_created": {
+            "type": "boolean",
+            "title": "Form Created"
+          },
+          "field_updates": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Field Updates"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "consultation_type",
+          "confidence",
+          "reasoning",
+          "form_id",
+          "form_created",
+          "field_updates"
+        ],
+        "title": "AutoFillConsultationFormResponse",
+        "description": "Response model for auto-fill consultation form"
+      },
+      "Body_diarize_audio_api_diarize_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_diarize_audio_api_diarize_post"
+      },
+      "Body_diarize_audio_chunk_api_diarize_chunk_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index",
+            "default": 0
+          },
+          "chunk_start": {
+            "type": "number",
+            "title": "Chunk Start",
+            "default": 0
+          },
+          "chunk_end": {
+            "type": "number",
+            "title": "Chunk End",
+            "default": 30
+          },
+          "num_speakers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Speakers"
+          },
+          "diarization_threshold": {
+            "type": "number",
+            "title": "Diarization Threshold",
+            "default": 0.22
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          },
+          "appointment_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_diarize_audio_chunk_api_diarize_chunk_post"
+      },
+      "Body_diarize_audio_sarvam_api_diarize_sarvam_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_diarize_audio_sarvam_api_diarize_sarvam_post"
+      },
+      "Body_process_final_chunk_async_api_process_final_chunk_async_post": {
+        "properties": {
+          "consultation_id": {
+            "type": "string",
+            "title": "Consultation Id"
+          },
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index",
+            "default": 0
+          },
+          "chunk_start": {
+            "type": "number",
+            "title": "Chunk Start",
+            "default": 0
+          },
+          "chunk_end": {
+            "type": "number",
+            "title": "Chunk End",
+            "default": 30
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "num_speakers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Speakers"
+          },
+          "diarization_threshold": {
+            "type": "number",
+            "title": "Diarization Threshold",
+            "default": 0.22
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation_id",
+          "audio"
+        ],
+        "title": "Body_process_final_chunk_async_api_process_final_chunk_async_post"
+      },
+      "Body_select_form_for_consultation_api_custom_forms_select_form_for_consultation_post": {
+        "properties": {
+          "specialty": {
+            "type": "string",
+            "title": "Specialty"
+          },
+          "patient_context": {
+            "type": "string",
+            "title": "Patient Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "specialty",
+          "patient_context"
+        ],
+        "title": "Body_select_form_for_consultation_api_custom_forms_select_form_for_consultation_post"
+      },
+      "Body_transcribe_audio_api_transcribe_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_transcribe_audio_api_transcribe_post"
+      },
+      "Body_upload_audio_to_gcs_api_upload_audio_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_upload_audio_to_gcs_api_upload_audio_post"
+      },
+      "Body_upload_clinic_logo_api_doctor_logo_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_clinic_logo_api_doctor_logo_upload_post"
+      },
+      "Body_upload_custom_form_api_custom_forms_upload_post": {
+        "properties": {
+          "form_name": {
+            "type": "string",
+            "title": "Form Name"
+          },
+          "specialty": {
+            "type": "string",
+            "title": "Specialty"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          },
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "form_name",
+          "specialty",
+          "files"
+        ],
+        "title": "Body_upload_custom_form_api_custom_forms_upload_post"
+      },
+      "CustomFormResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "form_name": {
+            "type": "string",
+            "title": "Form Name"
+          },
+          "specialty": {
+            "type": "string",
+            "title": "Specialty"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "patient_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Criteria"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "field_count": {
+            "type": "integer",
+            "title": "Field Count"
+          },
+          "section_count": {
+            "type": "integer",
+            "title": "Section Count"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "form_name",
+          "specialty",
+          "description",
+          "created_by",
+          "is_public",
+          "status",
+          "version",
+          "field_count",
+          "section_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CustomFormResponse"
+      },
+      "DetermineConsultationTypeRequest": {
+        "properties": {
+          "diarized_segments": {
+            "items": {},
+            "type": "array",
+            "title": "Diarized Segments"
+          },
+          "doctor_specialty": {
+            "type": "string",
+            "title": "Doctor Specialty"
+          },
+          "patient_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Patient Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "diarized_segments",
+          "doctor_specialty",
+          "patient_context"
+        ],
+        "title": "DetermineConsultationTypeRequest",
+        "description": "Request model for determining consultation type from conversation"
+      },
+      "DetermineConsultationTypeResponse": {
+        "properties": {
+          "consultation_type": {
+            "type": "string",
+            "title": "Consultation Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation_type",
+          "confidence",
+          "reasoning"
+        ],
+        "title": "DetermineConsultationTypeResponse",
+        "description": "Response model for consultation type determination"
+      },
+      "ExtractFormFieldsRequest": {
+        "properties": {
+          "diarized_segments": {
+            "items": {},
+            "type": "array",
+            "title": "Diarized Segments"
+          },
+          "form_type": {
+            "type": "string",
+            "title": "Form Type"
+          },
+          "patient_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Patient Context"
+          },
+          "current_form_state": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current Form State"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "diarized_segments",
+          "form_type",
+          "patient_context",
+          "current_form_state",
+          "chunk_index"
+        ],
+        "title": "ExtractFormFieldsRequest",
+        "description": "Request model for extracting form fields from diarized segments"
+      },
+      "ExtractFormFieldsResponse": {
+        "properties": {
+          "field_updates": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Field Updates"
+          },
+          "confidence_scores": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Confidence Scores"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "extraction_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extraction Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_updates",
+          "confidence_scores",
+          "chunk_index",
+          "extraction_metadata"
+        ],
+        "title": "ExtractFormFieldsResponse",
+        "description": "Response model for extracted form fields"
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "feedback_type": {
+            "type": "string",
+            "title": "Feedback Type"
+          },
+          "feedback_sentiment": {
+            "type": "string",
+            "title": "Feedback Sentiment"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "success",
+          "message",
+          "feedback_type",
+          "feedback_sentiment",
+          "created_at"
+        ],
+        "title": "FeedbackResponse",
+        "description": "Response after submitting feedback"
+      },
+      "FeedbackStatsResponse": {
+        "properties": {
+          "total_feedback_count": {
+            "type": "integer",
+            "title": "Total Feedback Count"
+          },
+          "feedback_by_type": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feedback By Type"
+          },
+          "feedback_by_sentiment": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feedback By Sentiment"
+          },
+          "positive_percentage": {
+            "type": "number",
+            "title": "Positive Percentage"
+          },
+          "top_diagnoses": {
+            "items": {},
+            "type": "array",
+            "title": "Top Diagnoses"
+          },
+          "top_drugs": {
+            "items": {},
+            "type": "array",
+            "title": "Top Drugs"
+          },
+          "recent_feedback": {
+            "items": {},
+            "type": "array",
+            "title": "Recent Feedback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_feedback_count",
+          "feedback_by_type",
+          "feedback_by_sentiment",
+          "positive_percentage",
+          "top_diagnoses",
+          "top_drugs",
+          "recent_feedback"
+        ],
+        "title": "FeedbackStatsResponse",
+        "description": "Aggregated feedback statistics"
+      },
+      "FeedbackSubmitRequest": {
+        "properties": {
+          "consultation_id": {
+            "type": "string",
+            "title": "Consultation Id"
+          },
+          "feedback_type": {
+            "type": "string",
+            "title": "Feedback Type"
+          },
+          "feedback_sentiment": {
+            "type": "string",
+            "title": "Feedback Sentiment"
+          },
+          "component_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Identifier"
+          },
+          "component_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Data"
+          },
+          "diagnosis_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Text"
+          },
+          "is_correct_diagnosis": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct Diagnosis",
+            "default": false
+          },
+          "drug_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drug Name"
+          },
+          "drug_dosage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drug Dosage"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "user_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Role"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation_id",
+          "feedback_type",
+          "feedback_sentiment"
+        ],
+        "title": "FeedbackSubmitRequest",
+        "description": "Request body for submitting AI feedback"
+      },
+      "FormExtractionResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "form_name": {
+            "type": "string",
+            "title": "Form Name"
+          },
+          "specialty": {
+            "type": "string",
+            "title": "Specialty"
+          },
+          "form_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Schema"
+          },
+          "pdf_template": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Pdf Template"
+          },
+          "patient_criteria": {
+            "type": "string",
+            "title": "Patient Criteria",
+            "default": ""
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "form_name",
+          "specialty",
+          "form_schema",
+          "pdf_template",
+          "metadata"
+        ],
+        "title": "FormExtractionResponse",
+        "description": "Response for initial extraction (before review)"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "HealthResponse",
+        "description": "Health check response"
+      },
+      "LogoCurrentResponse": {
+        "properties": {
+          "clinic_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Logo Url"
+          }
+        },
+        "type": "object",
+        "title": "LogoCurrentResponse"
+      },
+      "LogoDeleteResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "LogoDeleteResponse"
+      },
+      "LogoUploadResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "clinic_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Logo Url"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "LogoUploadResponse"
+      },
+      "OBGYNFormCreateRequest": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "form_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Data"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id",
+          "form_data"
+        ],
+        "title": "OBGYNFormCreateRequest",
+        "description": "Request body for creating a new OB/GYN form"
+      },
+      "OBGYNFormResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "form_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Data"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "form_data",
+          "status"
+        ],
+        "title": "OBGYNFormResponse",
+        "description": "Response model for OB/GYN form operations"
+      },
+      "OBGYNFormSectionRequest": {
+        "properties": {
+          "section_name": {
+            "type": "string",
+            "title": "Section Name"
+          },
+          "section_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Section Data"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_name",
+          "section_data"
+        ],
+        "title": "OBGYNFormSectionRequest",
+        "description": "Request body for validating OB/GYN form sections"
+      },
+      "OBGYNFormUpdateRequest": {
+        "properties": {
+          "form_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Data"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "form_data"
+        ],
+        "title": "OBGYNFormUpdateRequest",
+        "description": "Request body for updating an OB/GYN form"
+      },
+      "PasswordResetRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "PasswordResetRequest",
+        "description": "Request body for password reset"
+      },
+      "PatientAllergyCreate": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "allergen": {
+            "type": "string",
+            "title": "Allergen"
+          },
+          "allergen_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allergen Category"
+          },
+          "reaction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reaction"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "onset_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onset Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id",
+          "allergen"
+        ],
+        "title": "PatientAllergyCreate",
+        "description": "Request model for creating patient allergy"
+      },
+      "PatientAllergyResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "allergen": {
+            "type": "string",
+            "title": "Allergen"
+          },
+          "allergen_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allergen Category"
+          },
+          "reaction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reaction"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "onset_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onset Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "recorded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded By"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "allergen",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PatientAllergyResponse",
+        "description": "Response model for patient allergy"
+      },
+      "PatientConditionCreate": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "condition_name": {
+            "type": "string",
+            "title": "Condition Name"
+          },
+          "icd10_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icd10 Code"
+          },
+          "diagnosed_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosed Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id",
+          "condition_name"
+        ],
+        "title": "PatientConditionCreate",
+        "description": "Request model for creating patient condition"
+      },
+      "PatientConditionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "condition_name": {
+            "type": "string",
+            "title": "Condition Name"
+          },
+          "icd10_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icd10 Code"
+          },
+          "diagnosed_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosed Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "diagnosed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosed By"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "condition_name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PatientConditionResponse",
+        "description": "Response model for patient condition"
+      },
+      "PatientLabResultCreate": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "test_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Date"
+          },
+          "test_type": {
+            "type": "string",
+            "title": "Test Type"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "results": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Results"
+          },
+          "interpretation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interpretation"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "lab_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lab Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id",
+          "test_type",
+          "results"
+        ],
+        "title": "PatientLabResultCreate",
+        "description": "Request model for creating patient lab result"
+      },
+      "PatientLabResultResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "test_date": {
+            "type": "string",
+            "title": "Test Date"
+          },
+          "test_type": {
+            "type": "string",
+            "title": "Test Type"
+          },
+          "ordered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered By"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "results": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Results"
+          },
+          "interpretation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interpretation"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "lab_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lab Name"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "test_date",
+          "test_type",
+          "results",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PatientLabResultResponse",
+        "description": "Response model for patient lab result"
+      },
+      "PatientMedicationCreate": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "medication_name": {
+            "type": "string",
+            "title": "Medication Name"
+          },
+          "dosage": {
+            "type": "string",
+            "title": "Dosage"
+          },
+          "frequency": {
+            "type": "string",
+            "title": "Frequency"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "started_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started Date"
+          },
+          "stopped_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "indication": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indication"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id",
+          "medication_name",
+          "dosage",
+          "frequency"
+        ],
+        "title": "PatientMedicationCreate",
+        "description": "Request model for creating patient medication"
+      },
+      "PatientMedicationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "medication_name": {
+            "type": "string",
+            "title": "Medication Name"
+          },
+          "dosage": {
+            "type": "string",
+            "title": "Dosage"
+          },
+          "frequency": {
+            "type": "string",
+            "title": "Frequency"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "started_date": {
+            "type": "string",
+            "title": "Started Date"
+          },
+          "stopped_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "prescribed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescribed By"
+          },
+          "prescribed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescribed At"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "indication": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indication"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "medication_name",
+          "dosage",
+          "frequency",
+          "started_date",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PatientMedicationResponse",
+        "description": "Response model for patient medication"
+      },
+      "PatientVitalsCreate": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "consultation_form_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consultation Form Id"
+          },
+          "consultation_form_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consultation Form Type"
+          },
+          "systolic_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systolic Bp"
+          },
+          "diastolic_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diastolic Bp"
+          },
+          "heart_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heart Rate"
+          },
+          "respiratory_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Respiratory Rate"
+          },
+          "temperature_celsius": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Celsius"
+          },
+          "spo2": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spo2"
+          },
+          "blood_glucose_mg_dl": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blood Glucose Mg Dl"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "height_cm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Cm"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "source_form_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Form Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id"
+        ],
+        "title": "PatientVitalsCreate",
+        "description": "Request model for creating patient vitals"
+      },
+      "PatientVitalsResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          },
+          "recorded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded By"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "systolic_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systolic Bp"
+          },
+          "diastolic_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diastolic Bp"
+          },
+          "heart_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heart Rate"
+          },
+          "respiratory_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Respiratory Rate"
+          },
+          "temperature_celsius": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Celsius"
+          },
+          "spo2": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spo2"
+          },
+          "blood_glucose_mg_dl": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blood Glucose Mg Dl"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "height_cm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Cm"
+          },
+          "bmi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmi"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "patient_id",
+          "recorded_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PatientVitalsResponse",
+        "description": "Response model for patient vitals"
+      },
+      "PreviewPDFRequest": {
+        "properties": {
+          "form_name": {
+            "type": "string",
+            "title": "Form Name"
+          },
+          "form_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Schema"
+          },
+          "pdf_template": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Pdf Template"
+          },
+          "clinic_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Logo Url"
+          },
+          "clinic_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Name"
+          },
+          "primary_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Color"
+          },
+          "accent_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accent Color"
+          },
+          "text_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Color"
+          },
+          "light_gray_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Light Gray Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "form_name",
+          "form_schema",
+          "pdf_template"
+        ],
+        "title": "PreviewPDFRequest",
+        "description": "Request body for PDF preview generation"
+      },
+      "RerunTranscriptionRequest": {
+        "properties": {
+          "consultation_id": {
+            "type": "string",
+            "title": "Consultation Id"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consultation_id"
+        ],
+        "title": "RerunTranscriptionRequest"
+      },
+      "SaveFormRequest": {
+        "properties": {
+          "form_name": {
+            "type": "string",
+            "title": "Form Name"
+          },
+          "specialty": {
+            "type": "string",
+            "title": "Specialty"
+          },
+          "form_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Form Schema"
+          },
+          "pdf_template": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Pdf Template"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "patient_criteria": {
+            "type": "string",
+            "title": "Patient Criteria"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "form_name",
+          "specialty",
+          "form_schema",
+          "pdf_template",
+          "patient_criteria"
+        ],
+        "title": "SaveFormRequest",
+        "description": "Request body for saving reviewed form"
+      },
+      "SendInvitationEmailRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "patient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Name"
+          },
+          "doctor_name": {
+            "type": "string",
+            "title": "Doctor Name"
+          },
+          "invitation_token": {
+            "type": "string",
+            "title": "Invitation Token"
+          },
+          "invitation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invitation Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "doctor_name",
+          "invitation_token"
+        ],
+        "title": "SendInvitationEmailRequest",
+        "description": "Request body for sending patient invitation emails"
+      },
+      "SpeakerRoleRequest": {
+        "properties": {
+          "segments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "default": "en-IN"
+          }
+        },
+        "type": "object",
+        "required": [
+          "segments"
+        ],
+        "title": "SpeakerRoleRequest"
+      },
+      "StructureSymptomRequest": {
+        "properties": {
+          "symptom_text": {
+            "type": "string",
+            "title": "Symptom Text"
+          },
+          "original_transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Transcript"
+          },
+          "transcription_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Language"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symptom_text",
+          "patient_id"
+        ],
+        "title": "StructureSymptomRequest",
+        "description": "Request body for symptom structuring"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

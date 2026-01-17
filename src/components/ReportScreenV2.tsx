@@ -309,23 +309,33 @@ export function ReportScreenV2({
               className="flex items-center justify-center gap-2 bg-aneya-teal text-white px-6 py-3 rounded-lg hover:bg-aneya-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
             >
               <Download className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
-              {generatingPdf ? 'Generating...' : 'Download Report'}
-            </button>
-          )}
-          {onDownloadPrescriptionPdf && consultationId && (
-            <button
-              onClick={onDownloadPrescriptionPdf}
-              disabled={generatingPdf}
-              className="flex items-center justify-center gap-2 bg-aneya-navy text-white px-6 py-3 rounded-lg hover:bg-aneya-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
-            >
-              <Pill className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
-              {generatingPdf ? 'Generating...' : 'Download Prescription'}
+              {generatingPdf ? 'Generating...' : 'Download Analysis Report'}
             </button>
           )}
           <PrimaryButton onClick={onStartNew} fullWidth>
             Close Consultation
           </PrimaryButton>
         </div>
+
+        {/* Prescription Section - Separate from consultation */}
+        {onDownloadPrescriptionPdf && consultationId && (
+          <div className="mt-6 p-4 bg-aneya-cream rounded-lg border border-aneya-teal/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-aneya-navy">Prescription</h3>
+                <p className="text-sm text-gray-600">Download prescription document for this consultation</p>
+              </div>
+              <button
+                onClick={onDownloadPrescriptionPdf}
+                disabled={generatingPdf}
+                className="flex items-center justify-center gap-2 bg-aneya-navy text-white px-4 py-2 rounded-lg hover:bg-aneya-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Pill className={`w-5 h-5 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                {generatingPdf ? 'Generating...' : 'Download Prescription'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
