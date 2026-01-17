@@ -189,6 +189,43 @@ function MainApp() {
     return <PatientDashboard />;
   }
 
+  // Block doctors without complete profile from seeing main content
+  // Render profile setup directly instead of allowing render + redirect
+  // This prevents brief flash of content and provides defense-in-depth with RLS
+  if (needsProfileSetup) {
+    return (
+      <div className="min-h-screen bg-aneya-cream flex flex-col">
+        <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <img src="/aneya-logo.png" alt="aneya" className="h-24 sm:h-32" />
+          </div>
+        </header>
+        <main className="flex-1 p-4">
+          <Suspense fallback={
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+                <p className="text-aneya-navy">Loading...</p>
+              </div>
+            </div>
+          }>
+            <DoctorProfileTab />
+          </Suspense>
+        </main>
+        <footer className="bg-aneya-navy py-3 px-4 border-t border-aneya-teal">
+          <div className="max-w-7xl mx-auto flex justify-center">
+            <button
+              onClick={() => signOut()}
+              className="text-white hover:text-aneya-teal transition-colors text-sm"
+            >
+              Sign Out
+            </button>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   const handleAnalyze = async (
     consultation: string,
     patientDetails: PatientDetails,
