@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.log('ℹ️ No doctor profile found for userId:', userId, 'error:', error);
+        console.log('ℹ️ No doctor profile found for userId:', userId);
         return null;
       }
       console.log('✅ Doctor profile loaded:', { id: data.id, name: data.name, user_id: data.user_id });

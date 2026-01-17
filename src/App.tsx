@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Download } from 'lucide-react';
 import { LoginScreen } from './components/LoginScreen';
@@ -112,6 +112,21 @@ function MainApp() {
   const { myPatients } = usePatientDoctors();
   // Compute pending requests count from patients with pending status initiated by patient
   const pendingRequestsCount = myPatients.filter(rel => rel.status === 'pending' && rel.initiated_by === 'patient').length;
+
+  // Check if doctor profile needs to be created or is incomplete
+  // This applies when: user is a doctor AND (no profile exists OR profile is missing specialty)
+  // AND not during OTP verification (to avoid race condition during sign-up)
+  const needsProfileSetup = userRole === 'doctor' && (!doctorProfile || !doctorProfile.specialty) && !pendingVerification;
+
+  // Redirect to profile page if doctor profile needs setup
+  // This runs on mount and whenever profile changes or user tries to navigate away
+  useEffect(() => {
+    if (needsProfileSetup && currentScreen !== 'profile') {
+      console.log('⚠️ Doctor profile needs setup - redirecting to profile page');
+      setCurrentScreen('profile');
+      setActiveTab('profile');
+    }
+  }, [doctorProfile, currentScreen, needsProfileSetup, userRole]);
 
   // Show loading state while checking auth
   if (loading) {
@@ -1205,6 +1220,43 @@ function MainApp() {
     }
   };
 
+  const handleDownloadPrescriptionPdf = async () => {
+    if (!currentConsultationId) return;
+
+    setGeneratingPdf(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/consultations/${currentConsultationId}/prescription-pdf`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate prescription PDF');
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      const patientName = currentPatientDetails?.name?.replace(/\s+/g, '_') || 'patient';
+      a.download = `prescription_${patientName}_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading prescription PDF:', error);
+      alert('Failed to generate prescription PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Header */}
@@ -1232,6 +1284,11 @@ function MainApp() {
         <TabNavigation
           activeTab={activeTab}
           onTabChange={(tab) => {
+            // Prevent navigation if profile needs setup (except to profile page itself)
+            if (needsProfileSetup && tab !== 'profile') {
+              alert('Please complete your profile by selecting a specialty before accessing other features.');
+              return;
+            }
             setActiveTab(tab);
             setCurrentScreen(tab === 'feedback' ? 'feedback-dashboard' : tab);
           }}
@@ -1367,16 +1424,24 @@ function MainApp() {
                 editable={false}
               />
 
-              {/* Download PDF button at bottom */}
+              {/* Download PDF buttons at bottom */}
               {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                <div className="mt-6 flex justify-center">
+                <div className="mt-6 flex justify-center gap-4">
                   <button
                     onClick={handleDownloadPdf}
                     disabled={generatingPdf}
                     className="px-4 py-2 bg-blue-600 text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
+                    {generatingPdf ? 'Generating...' : 'Download Report'}
+                  </button>
+                  <button
+                    onClick={handleDownloadPrescriptionPdf}
+                    disabled={generatingPdf}
+                    className="px-4 py-2 bg-aneya-teal text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                    {generatingPdf ? 'Generating...' : 'Download Prescription'}
                   </button>
                 </div>
               )}
@@ -1414,6 +1479,7 @@ function MainApp() {
               location={locationOverride}
               consultationId={currentConsultationId}
               onDownloadPdf={handleDownloadAnalysisPdf}
+              onDownloadPrescriptionPdf={handleDownloadPrescriptionPdf}
               generatingPdf={generatingPdf}
             />
           )}

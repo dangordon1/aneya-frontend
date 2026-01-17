@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import type { UpdateDoctorInput, MedicalSpecialtyType } from '../../types/database';
+import type { MedicalSpecialtyType } from '../../types/database';
 import { MEDICAL_SPECIALTIES } from '../../types/database';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
@@ -17,12 +17,15 @@ const getBrowserTimezone = (): string => {
 };
 
 export function DoctorProfileTab() {
-  const { doctorProfile, refreshDoctorProfile, getIdToken } = useAuth();
+  const { doctorProfile, refreshDoctorProfile, getIdToken, user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [detectedTimezone, setDetectedTimezone] = useState<string | null>(null);
   const hasAttemptedGeoDetection = useRef(false);
+
+  // Determine if we're in create mode (no existing doctor profile)
+  const isCreateMode = !doctorProfile;
 
   // Logo upload state
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -52,11 +55,11 @@ export function DoctorProfileTab() {
     allow_patient_messages: true,
   });
 
-  // Fetch timezone from backend geolocation API - only if doctor hasn't set one yet
+  // Fetch timezone from backend geolocation API - for new profiles or if not already set
   useEffect(() => {
     const fetchTimezoneFromIP = async () => {
-      // Only fetch if doctor profile exists and timezone is not already set
-      if (!doctorProfile || doctorProfile.timezone || hasAttemptedGeoDetection.current) {
+      // Skip if already attempted or if existing profile has timezone set
+      if (hasAttemptedGeoDetection.current || (doctorProfile && doctorProfile.timezone)) {
         return;
       }
 
@@ -91,8 +94,7 @@ export function DoctorProfileTab() {
 
   useEffect(() => {
     if (doctorProfile) {
-      // If doctor already has a timezone set, use it (no auto-detection)
-      // If not, use detected timezone or browser fallback
+      // Existing profile - populate form with saved values
       const timezone = doctorProfile.timezone || detectedTimezone || getBrowserTimezone();
       setFormData({
         name: doctorProfile.name || '',
@@ -105,18 +107,36 @@ export function DoctorProfileTab() {
         timezone,
         allow_patient_messages: doctorProfile.allow_patient_messages ?? true,
       });
+    } else if (user) {
+      // No profile yet (create mode) - pre-populate from Firebase user
+      const timezone = detectedTimezone || getBrowserTimezone();
+      setFormData(prev => ({
+        ...prev,
+        name: '', // User will fill this in
+        email: user.email || '',
+        timezone,
+      }));
     }
-  }, [doctorProfile, detectedTimezone]);
+  }, [doctorProfile, detectedTimezone, user]);
 
   const handleSave = async () => {
-    if (!doctorProfile?.id) return;
+    // Validate required fields
+    if (!formData.name.trim() || !formData.email.trim() || !formData.specialty) {
+      setError('Please fill in all required fields (Name, Email, Specialty)');
+      return;
+    }
+
+    if (!user?.id) {
+      setError('Not authenticated. Please sign in again.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const updateData: UpdateDoctorInput = {
+      const profileData = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim() || null,
@@ -128,26 +148,38 @@ export function DoctorProfileTab() {
         allow_patient_messages: formData.allow_patient_messages,
       };
 
-      const { error: updateError } = await supabase
-        .from('doctors')
-        .update(updateData)
-        .eq('id', doctorProfile.id);
+      if (isCreateMode) {
+        // Create new doctor profile
+        const { error: insertError } = await supabase
+          .from('doctors')
+          .insert({
+            user_id: user.id,
+            ...profileData,
+          });
 
-      if (updateError) throw updateError;
+        if (insertError) throw insertError;
+        setSuccess('Profile created successfully!');
+      } else {
+        // Update existing profile
+        const { error: updateError } = await supabase
+          .from('doctors')
+          .update(profileData)
+          .eq('id', doctorProfile!.id);
+
+        if (updateError) throw updateError;
+        setSuccess('Profile updated successfully');
+      }
 
       // Refresh the doctor profile in the auth context
       if (refreshDoctorProfile) {
         await refreshDoctorProfile();
       }
 
-      setSuccess('Profile updated successfully');
-      // Stay in edit mode - don't call setIsEditing(false)
-
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error updating profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      console.error('Error saving profile:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setIsSaving(false);
     }
@@ -281,12 +313,13 @@ export function DoctorProfileTab() {
     }
   };
 
-  if (!doctorProfile) {
+  // Show loading only if user is not authenticated yet
+  if (!user) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="bg-white rounded-[20px] shadow-sm p-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-aneya-teal mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading profile...</p>
+          <p className="text-gray-500">Loading...</p>
         </div>
       </div>
     );
@@ -297,9 +330,34 @@ export function DoctorProfileTab() {
       <div className="bg-white rounded-[20px] shadow-sm overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-[24px] text-aneya-navy font-semibold">My Details</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage your profile and contact preferences</p>
+          <h2 className="text-[24px] text-aneya-navy font-semibold">
+            {isCreateMode ? 'Create Your Profile' : 'My Details'}
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            {isCreateMode
+              ? 'Please complete your profile to get started'
+              : 'Manage your profile and contact preferences'}
+          </p>
         </div>
+
+        {/* Profile Incomplete/Create Warning */}
+        {(isCreateMode || !doctorProfile?.specialty) && (
+          <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-amber-800">
+                  {isCreateMode ? 'Complete your profile to get started' : 'Please complete your profile'}
+                </p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Fill in your details and select your <span className="font-semibold">specialty</span> to access all features including appointments, patients, and forms.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         {error && (
@@ -353,11 +411,15 @@ export function DoctorProfileTab() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Specialty <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={formData.specialty}
                   onChange={(e) => setFormData({ ...formData, specialty: e.target.value as MedicalSpecialtyType })}
-                  className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent"
+                  className={`w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-aneya-teal focus:border-transparent ${
+                    !doctorProfile?.specialty ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                  }`}
                 >
                   {MEDICAL_SPECIALTIES.map(({ value, label }) => (
                     <option key={value} value={value}>
@@ -365,8 +427,10 @@ export function DoctorProfileTab() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  Your specialty determines which forms patients see
+                <p className={`mt-1 text-xs ${!doctorProfile?.specialty ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
+                  {!doctorProfile?.specialty
+                    ? 'Required - Select your specialty to access all features'
+                    : 'Your specialty determines which forms patients see'}
                 </p>
               </div>
             </div>
@@ -397,7 +461,8 @@ export function DoctorProfileTab() {
                 />
               </div>
 
-              {/* Clinic Logo Upload */}
+              {/* Clinic Logo Upload - only show in edit mode (after profile exists) */}
+              {!isCreateMode && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Clinic Logo
@@ -490,6 +555,7 @@ export function DoctorProfileTab() {
                   PNG, JPEG, or SVG. Max 2MB. Logo will appear on consultation PDFs.
                 </p>
               </div>
+              )}
             </div>
           </div>
 
@@ -575,16 +641,18 @@ export function DoctorProfileTab() {
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={handleCancel}
-                disabled={isSaving}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
+              {!isCreateMode && (
+                <button
+                  onClick={handleCancel}
+                  disabled={isSaving}
+                  className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 onClick={handleSave}
-                disabled={isSaving || !formData.name.trim() || !formData.email.trim()}
+                disabled={isSaving || !formData.name.trim() || !formData.email.trim() || !formData.specialty}
                 className="px-6 py-2.5 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? (
@@ -593,10 +661,10 @@ export function DoctorProfileTab() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Saving...
+                    {isCreateMode ? 'Creating...' : 'Saving...'}
                   </>
                 ) : (
-                  'Save Changes'
+                  isCreateMode ? 'Create Profile' : 'Save Changes'
                 )}
               </button>
           </div>
