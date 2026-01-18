@@ -41,6 +41,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
   const [consultationsMap, setConsultationsMap] = useState<Record<string, Consultation>>({});
   const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentWithPatient | null>(null);
   const [pastAppointmentsSearch, setPastAppointmentsSearch] = useState('');
+  const [downloadingPrescriptionId, setDownloadingPrescriptionId] = useState<string | null>(null);
 
   // Filter past appointments based on search
   const filteredPastAppointments = useMemo(() => {
@@ -403,6 +404,35 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
 
       // Close modal
       setSelectedAppointmentDetail(null);
+    }
+  };
+
+  const handleDownloadPrescription = async (consultationId: string) => {
+    setDownloadingPrescriptionId(consultationId);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
+      const response = await fetch(`${apiUrl}/api/consultations/${consultationId}/prescription-pdf`);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(error.detail || 'Failed to generate prescription PDF');
+      }
+
+      // Get the blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `prescription_${consultationId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      console.error('Error downloading prescription:', error);
+      alert(`Failed to download prescription: ${error.message}`);
+    } finally {
+      setDownloadingPrescriptionId(null);
     }
   };
 
@@ -833,6 +863,8 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           onRerunTranscription={handleRerunTranscription}
           onResearchAnalysis={handleResearchAnalysis}
           onViewConsultationForm={onViewConsultationForm}
+          onDownloadPrescription={handleDownloadPrescription}
+          downloadingPrescription={downloadingPrescriptionId !== null}
           isAdmin={isAdmin}
           onDelete={handleDeleteAppointment}
         />

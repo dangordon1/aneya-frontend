@@ -193,3 +193,40 @@ export async function verifySupabaseConnection(): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Sign in as a test user WITHOUT a doctor profile for security testing
+ * This user should exist in Supabase Auth but NOT have a doctors table entry
+ *
+ * @returns The authenticated client or null if sign-in fails
+ */
+export async function signInAsNoProfileUser(): Promise<{ client: SupabaseClient; user: any } | null> {
+  // Test user credentials - this user must NOT have a doctors table entry
+  const NO_PROFILE_USER_EMAIL = 'test-no-profile@aneya.test'
+  const NO_PROFILE_USER_PASSWORD = 'test-password-123'
+
+  const { data, error } = await testSupabase.auth.signInWithPassword({
+    email: NO_PROFILE_USER_EMAIL,
+    password: NO_PROFILE_USER_PASSWORD
+  })
+
+  if (error || !data.session) {
+    console.warn('⚠️ Failed to sign in as no-profile user:', error?.message)
+    console.warn('   To run security tests, create this user in Supabase Auth Dashboard:')
+    console.warn(`   Email: ${NO_PROFILE_USER_EMAIL}`)
+    console.warn('   Password: test-password-123')
+    console.warn('   IMPORTANT: Do NOT create a doctors table entry for this user')
+    return null
+  }
+
+  // Create authenticated client with the session
+  const authenticatedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${data.session.access_token}`
+      }
+    }
+  })
+
+  return { client: authenticatedClient, user: data.user }
+}
