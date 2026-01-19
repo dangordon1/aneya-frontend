@@ -24,6 +24,9 @@ export function usePatients(): UsePatientsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Supabase client now uses accessToken option to automatically include
+  // Firebase ID token in requests, enabling RLS with auth.uid() = Firebase UID
+
   const fetchPatients = useCallback(async () => {
     if (!user) {
       setPatients([]);
@@ -83,7 +86,8 @@ export function usePatients(): UsePatientsReturn {
       }
 
       // Non-admin doctors: Filter to only patients they have active relationships with
-      // First get the patient IDs from patient_doctor, then fetch those patients
+      // OR patients they created (via created_by field)
+      // Note: RLS can't be used because Supabase uses anon key (Firebase handles auth)
       if (!doctorProfile?.id) {
         console.log('⚠️ No doctor profile found, cannot fetch patients');
         setPatients([]);
@@ -100,10 +104,24 @@ export function usePatients(): UsePatientsReturn {
 
       if (relError) throw relError;
 
-      const patientIds = (relationships || []).map(r => r.patient_id);
+      const patientIdsFromRelationships = (relationships || []).map(r => r.patient_id);
 
-      if (patientIds.length === 0) {
-        console.log('ℹ️ Doctor has no active patient relationships');
+      // Also get patients created by this doctor (via user_id -> created_by)
+      const { data: createdPatients, error: createdError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('created_by', user.id)
+        .eq('archived', false);
+
+      if (createdError) throw createdError;
+
+      const patientIdsFromCreated = (createdPatients || []).map(p => p.id);
+
+      // Combine both sets of patient IDs (deduplicated)
+      const allPatientIds = [...new Set([...patientIdsFromRelationships, ...patientIdsFromCreated])];
+
+      if (allPatientIds.length === 0) {
+        console.log('ℹ️ Doctor has no patients (no relationships or created patients)');
         setPatients([]);
         setLoading(false);
         return;
@@ -121,7 +139,7 @@ export function usePatients(): UsePatientsReturn {
             appointment_type
           )
         `)
-        .in('id', patientIds)
+        .in('id', allPatientIds)
         .eq('archived', false)
         .order('created_at', { ascending: false });
 

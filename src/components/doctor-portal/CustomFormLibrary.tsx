@@ -1,7 +1,49 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { Model } from 'survey-core';
+import { Survey } from 'survey-react-ui';
+import 'survey-core/survey-core.min.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Custom CSS for Aneya styling (same as DynamicConsultationForm)
+const surveyStyles = `
+  .sd-root-modern {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-title,
+  .sd-root-modern .sd-page__title,
+  .sd-root-modern .sd-question__title {
+    font-family: Georgia, 'Times New Roman', serif !important;
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-body,
+  .sd-root-modern .sd-question,
+  .sd-root-modern .sd-input,
+  .sd-root-modern .sd-text {
+    color: #0c3555 !important;
+  }
+
+  .sd-root-modern .sd-input {
+    border-color: #d1d5db !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+
+  /* Hide navigation buttons in preview mode */
+  .sd-navigation__complete-btn,
+  .sd-navigation__prev-btn,
+  .sd-navigation__next-btn {
+    display: none !important;
+  }
+
+  /* Hide progress bar */
+  .sd-progress {
+    display: none !important;
+  }
+`;
 
 interface CustomForm {
   id: string;
@@ -14,8 +56,8 @@ interface CustomForm {
   is_public: boolean;
   created_at: string;
   updated_at: string;
-  form_schema?: Record<string, any>;
-  pdf_template?: Record<string, any>;
+  form_schema?: Record<string, unknown>;
+  pdf_template?: Record<string, unknown>;
   ownership_type?: 'owned' | 'adopted';
   adopted_at?: string;
   auto_adopted?: boolean;
@@ -32,15 +74,30 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
   const [adoptedCount, setAdoptedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewingFormId, setPreviewingFormId] = useState<string | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [removingFormId, setRemovingFormId] = useState<string | null>(null);
   const [sharingFormId, setSharingFormId] = useState<string | null>(null);
   const [editingFormId, setEditingFormId] = useState<string | null>(null);
+  const [previewForm, setPreviewForm] = useState<CustomForm | null>(null);
 
   useEffect(() => {
     loadForms();
   }, [doctorProfile?.specialty]);
+
+  // Inject custom CSS for SurveyJS styling
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'aneya-preview-survey-styles';
+    styleElement.textContent = surveyStyles;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      const existingStyle = document.getElementById('aneya-preview-survey-styles');
+      if (existingStyle) {
+        document.head.removeChild(existingStyle);
+      }
+    };
+  }, []);
 
   const loadForms = async () => {
     // Don't try to load forms if doctor profile is incomplete (no specialty)
@@ -83,39 +140,119 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     }
   };
 
-  const handlePreview = async (formId: string) => {
-    setPreviewingFormId(formId);
+  // Open preview modal for a form
+  const handlePreview = (formId: string) => {
+    const form = libraryForms.find(f => f.id === formId);
+    if (form) {
+      setPreviewForm(form);
+    }
+  };
 
-    try {
-      // Get Firebase ID token (automatically refreshes if expired)
-      const token = await getIdToken();
+  // Close preview modal
+  const closePreviewModal = () => {
+    setPreviewForm(null);
+  };
 
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+  // Convert backend schema to SurveyJS format (same logic as DynamicConsultationForm)
+  const convertToSurveyJS = (backendSchema: Record<string, unknown>): object => {
+    const elements: object[] = [];
 
-      const response = await fetch(`${API_URL}/api/custom-forms/forms/${formId}/preview-pdf`, {
-        method: 'GET',
-        headers
+    // Sort sections by order field
+    const sortedSections = Object.entries(backendSchema)
+      .sort(([, a], [, b]) => {
+        const orderA = (a as { order?: number }).order || 999;
+        const orderB = (b as { order?: number }).order || 999;
+        return orderA - orderB;
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate preview');
+    for (const [sectionName, sectionDef] of sortedSections) {
+      const section = sectionDef as { fields?: unknown[]; description?: string };
+      if (Array.isArray(section.fields)) {
+        // Section with fields array - create a panel
+        const nestedElements = section.fields.map((field: unknown) => {
+          const f = field as { name?: string };
+          return convertFieldToElement(`${sectionName}.${f.name || ''}`, field);
+        });
+
+        elements.push({
+          type: 'panel',
+          name: sectionName,
+          title: section.description || sectionName.replace(/_/g, ' '),
+          elements: nestedElements,
+        });
       }
+    }
 
-      // Get PDF blob and open in new tab
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
+    return {
+      showQuestionNumbers: false,
+      showNavigationButtons: false,
+      mode: 'display',
+      pages: [{
+        name: 'preview',
+        elements: elements
+      }]
+    };
+  };
 
-      // Clean up the URL after a delay
-      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+  // Convert a field definition to SurveyJS element
+  const convertFieldToElement = (fieldPath: string, fieldDef: unknown): object => {
+    const field = fieldDef as {
+      label?: string;
+      name?: string;
+      type?: string;
+      required?: boolean;
+      options?: string[];
+      choices?: string[];
+    };
+
+    const baseElement = {
+      name: fieldPath,
+      title: field.label || field.name?.replace(/_/g, ' ') || fieldPath,
+      isRequired: field.required || false,
+    };
+
+    switch (field.type) {
+      case 'text':
+      case 'string':
+        return { ...baseElement, type: 'text' };
+      case 'number':
+        return { ...baseElement, type: 'text', inputType: 'number' };
+      case 'date':
+        return { ...baseElement, type: 'text', inputType: 'date' };
+      case 'boolean':
+        return { ...baseElement, type: 'boolean', labelTrue: 'Yes', labelFalse: 'No' };
+      case 'select':
+      case 'dropdown':
+        return {
+          ...baseElement,
+          type: 'dropdown',
+          choices: field.options || field.choices || []
+        };
+      case 'multiselect':
+        return {
+          ...baseElement,
+          type: 'checkbox',
+          choices: field.options || field.choices || []
+        };
+      case 'textarea':
+        return { ...baseElement, type: 'comment' };
+      default:
+        return { ...baseElement, type: 'text' };
+    }
+  };
+
+  // Create SurveyJS model for preview
+  const createPreviewSurvey = (form: CustomForm): Model | null => {
+    if (!form.form_schema) return null;
+
+    try {
+      const surveyJson = convertToSurveyJS(form.form_schema);
+      const model = new Model(surveyJson);
+      model.mode = 'display';
+      return model;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to preview form');
-    } finally {
-      setPreviewingFormId(null);
+      console.error('Error creating preview survey:', err);
+      return null;
     }
   };
 
@@ -128,7 +265,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
-      // Get Firebase ID token (automatically refreshes if expired)
       const token = await getIdToken();
 
       const headers: Record<string, string> = {};
@@ -146,7 +282,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
         throw new Error(errorData.detail || 'Failed to delete form');
       }
 
-      // Reload forms to reflect changes
       await loadForms();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete form');
@@ -164,7 +299,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
-      // Get Firebase ID token (automatically refreshes if expired)
       const token = await getIdToken();
 
       const headers: Record<string, string> = {};
@@ -182,7 +316,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
         throw new Error(errorData.detail || 'Failed to remove form');
       }
 
-      // Reload forms to reflect changes
       await loadForms();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove form');
@@ -200,7 +333,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
-      // Get Firebase ID token (automatically refreshes if expired)
       const token = await getIdToken();
 
       const headers: Record<string, string> = {};
@@ -218,7 +350,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
         throw new Error(errorData.detail || 'Failed to share form');
       }
 
-      // Reload forms to reflect changes
       await loadForms();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to share form');
@@ -232,7 +363,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
     setError(null);
 
     try {
-      // Get Firebase ID token (automatically refreshes if expired)
       const token = await getIdToken();
 
       const headers: Record<string, string> = {};
@@ -240,7 +370,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // Fetch full form details (including schema and pdf_template) using the GET endpoint
       const response = await fetch(`${API_URL}/api/custom-forms/forms/${form.id}`, {
         method: 'GET',
         headers
@@ -253,7 +382,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
 
       const fullForm = await response.json();
 
-      // Call the parent callback with full form data
       if (onEditForm) {
         onEditForm(fullForm);
       }
@@ -414,10 +542,9 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handlePreview(form.id)}
-                        disabled={previewingFormId === form.id}
-                        className="flex-1 px-3 py-1.5 border border-aneya-teal text-aneya-teal rounded text-xs font-medium hover:bg-aneya-teal hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-3 py-1.5 border border-aneya-teal text-aneya-teal rounded text-xs font-medium hover:bg-aneya-teal hover:text-white transition-colors"
                       >
-                        {previewingFormId === form.id ? 'Loading...' : 'Preview'}
+                        Preview
                       </button>
 
                       <button
@@ -453,10 +580,9 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handlePreview(form.id)}
-                        disabled={previewingFormId === form.id}
-                        className="flex-1 px-3 py-1.5 border border-aneya-teal text-aneya-teal rounded text-xs font-medium hover:bg-aneya-teal hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-3 py-1.5 border border-aneya-teal text-aneya-teal rounded text-xs font-medium hover:bg-aneya-teal hover:text-white transition-colors"
                       >
-                        {previewingFormId === form.id ? 'Loading...' : 'Preview'}
+                        Preview
                       </button>
 
                       <button
@@ -475,6 +601,65 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {previewForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-aneya-navy">
+                  {previewForm.form_name.replace(/_/g, ' ')}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {getSpecialtyDisplayName(previewForm.specialty)} • {previewForm.field_count} fields • {previewForm.section_count} sections
+                </p>
+              </div>
+              <button
+                onClick={closePreviewModal}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                title="Close preview"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body - Form Preview */}
+            <div className="flex-1 overflow-y-auto p-4 bg-aneya-cream">
+              {previewForm.form_schema ? (
+                (() => {
+                  const surveyModel = createPreviewSurvey(previewForm);
+                  if (surveyModel) {
+                    return <Survey model={surveyModel} />;
+                  }
+                  return (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>Unable to render form preview</p>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No form schema available for preview</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={closePreviewModal}
+                className="px-4 py-2 bg-aneya-teal text-white rounded-lg hover:bg-opacity-90 transition-colors"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
