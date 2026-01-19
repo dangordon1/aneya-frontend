@@ -313,6 +313,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           console.log('✅ User authenticated:', firebaseUser.email);
           console.log('📧 Email verified:', firebaseUser.emailVerified);
+          // Note: Supabase client now uses accessToken option to automatically
+          // include Firebase ID token in requests - no token exchange needed
         } catch (err) {
           console.error('❌ Error getting auth token:', err);
           setUser(null);
@@ -439,6 +441,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
           }
+
+          // Note: Supabase client now uses accessToken option to automatically
+          // include Firebase ID token in requests - no token exchange needed
 
           console.log('✅ Verified user authenticated successfully');
           setLoading(false);
@@ -908,6 +913,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await firebaseSignOut(auth);
       console.log('✅ Signed out successfully');
+      // Note: Supabase client will automatically stop including Firebase token
+      // in requests once auth.currentUser is null
     } catch (err) {
       console.error('❌ Sign out error:', err);
     }
