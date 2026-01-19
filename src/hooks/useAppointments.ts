@@ -26,6 +26,9 @@ export function useAppointments(initialDate?: string): UseAppointmentsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Supabase client now uses accessToken option to automatically include
+  // Firebase ID token in requests, enabling RLS with auth.uid() = Firebase UID
+
   const fetchAppointments = useCallback(
     async (date?: string) => {
       if (!user) {
