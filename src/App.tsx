@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Download } from 'lucide-react';
 import { LoginScreen } from './components/LoginScreen';
@@ -118,6 +118,9 @@ function MainApp() {
   // AND not during OTP verification (to avoid race condition during sign-up)
   const needsProfileSetup = userRole === 'doctor' && (!doctorProfile || !doctorProfile.specialty) && !pendingVerification;
 
+  // Track previous needsProfileSetup state to detect completion
+  const prevNeedsProfileSetup = useRef(needsProfileSetup);
+
   // Redirect to profile page if doctor profile needs setup
   // This runs on mount and whenever profile changes or user tries to navigate away
   useEffect(() => {
@@ -127,6 +130,16 @@ function MainApp() {
       setActiveTab('profile');
     }
   }, [doctorProfile, currentScreen, needsProfileSetup, userRole]);
+
+  // Redirect to appointments when profile setup is completed
+  useEffect(() => {
+    if (prevNeedsProfileSetup.current && !needsProfileSetup) {
+      console.log('✅ Doctor profile setup completed - redirecting to appointments');
+      setCurrentScreen('appointments');
+      setActiveTab('appointments');
+    }
+    prevNeedsProfileSetup.current = needsProfileSetup;
+  }, [needsProfileSetup]);
 
   // Show loading state while checking auth
   if (loading) {
