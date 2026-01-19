@@ -1,49 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Model } from 'survey-core';
-import { Survey } from 'survey-react-ui';
-import 'survey-core/survey-core.min.css';
+import { FormPreviewCard } from './FormPreviewCard';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-// Custom CSS for Aneya styling (same as DynamicConsultationForm)
-const surveyStyles = `
-  .sd-root-modern {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-    color: #0c3555 !important;
-  }
-
-  .sd-root-modern .sd-title,
-  .sd-root-modern .sd-page__title,
-  .sd-root-modern .sd-question__title {
-    font-family: Georgia, 'Times New Roman', serif !important;
-    color: #0c3555 !important;
-  }
-
-  .sd-root-modern .sd-body,
-  .sd-root-modern .sd-question,
-  .sd-root-modern .sd-input,
-  .sd-root-modern .sd-text {
-    color: #0c3555 !important;
-  }
-
-  .sd-root-modern .sd-input {
-    border-color: #d1d5db !important;
-    font-family: 'Inter', sans-serif !important;
-  }
-
-  /* Hide navigation buttons in preview mode */
-  .sd-navigation__complete-btn,
-  .sd-navigation__prev-btn,
-  .sd-navigation__next-btn {
-    display: none !important;
-  }
-
-  /* Hide progress bar */
-  .sd-progress {
-    display: none !important;
-  }
-`;
 
 interface CustomForm {
   id: string;
@@ -83,21 +42,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
   useEffect(() => {
     loadForms();
   }, [doctorProfile?.specialty]);
-
-  // Inject custom CSS for SurveyJS styling
-  useEffect(() => {
-    const styleElement = document.createElement('style');
-    styleElement.id = 'aneya-preview-survey-styles';
-    styleElement.textContent = surveyStyles;
-    document.head.appendChild(styleElement);
-
-    return () => {
-      const existingStyle = document.getElementById('aneya-preview-survey-styles');
-      if (existingStyle) {
-        document.head.removeChild(existingStyle);
-      }
-    };
-  }, []);
 
   const loadForms = async () => {
     // Don't try to load forms if doctor profile is incomplete (no specialty)
@@ -151,109 +95,6 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
   // Close preview modal
   const closePreviewModal = () => {
     setPreviewForm(null);
-  };
-
-  // Convert backend schema to SurveyJS format (same logic as DynamicConsultationForm)
-  const convertToSurveyJS = (backendSchema: Record<string, unknown>): object => {
-    const elements: object[] = [];
-
-    // Sort sections by order field
-    const sortedSections = Object.entries(backendSchema)
-      .sort(([, a], [, b]) => {
-        const orderA = (a as { order?: number }).order || 999;
-        const orderB = (b as { order?: number }).order || 999;
-        return orderA - orderB;
-      });
-
-    for (const [sectionName, sectionDef] of sortedSections) {
-      const section = sectionDef as { fields?: unknown[]; description?: string };
-      if (Array.isArray(section.fields)) {
-        // Section with fields array - create a panel
-        const nestedElements = section.fields.map((field: unknown) => {
-          const f = field as { name?: string };
-          return convertFieldToElement(`${sectionName}.${f.name || ''}`, field);
-        });
-
-        elements.push({
-          type: 'panel',
-          name: sectionName,
-          title: section.description || sectionName.replace(/_/g, ' '),
-          elements: nestedElements,
-        });
-      }
-    }
-
-    return {
-      showQuestionNumbers: false,
-      showNavigationButtons: false,
-      mode: 'display',
-      pages: [{
-        name: 'preview',
-        elements: elements
-      }]
-    };
-  };
-
-  // Convert a field definition to SurveyJS element
-  const convertFieldToElement = (fieldPath: string, fieldDef: unknown): object => {
-    const field = fieldDef as {
-      label?: string;
-      name?: string;
-      type?: string;
-      required?: boolean;
-      options?: string[];
-      choices?: string[];
-    };
-
-    const baseElement = {
-      name: fieldPath,
-      title: field.label || field.name?.replace(/_/g, ' ') || fieldPath,
-      isRequired: field.required || false,
-    };
-
-    switch (field.type) {
-      case 'text':
-      case 'string':
-        return { ...baseElement, type: 'text' };
-      case 'number':
-        return { ...baseElement, type: 'text', inputType: 'number' };
-      case 'date':
-        return { ...baseElement, type: 'text', inputType: 'date' };
-      case 'boolean':
-        return { ...baseElement, type: 'boolean', labelTrue: 'Yes', labelFalse: 'No' };
-      case 'select':
-      case 'dropdown':
-        return {
-          ...baseElement,
-          type: 'dropdown',
-          choices: field.options || field.choices || []
-        };
-      case 'multiselect':
-        return {
-          ...baseElement,
-          type: 'checkbox',
-          choices: field.options || field.choices || []
-        };
-      case 'textarea':
-        return { ...baseElement, type: 'comment' };
-      default:
-        return { ...baseElement, type: 'text' };
-    }
-  };
-
-  // Create SurveyJS model for preview
-  const createPreviewSurvey = (form: CustomForm): Model | null => {
-    if (!form.form_schema) return null;
-
-    try {
-      const surveyJson = convertToSurveyJS(form.form_schema);
-      const model = new Model(surveyJson);
-      model.mode = 'display';
-      return model;
-    } catch (err) {
-      console.error('Error creating preview survey:', err);
-      return null;
-    }
   };
 
   const handleDelete = async (formId: string) => {
@@ -605,15 +446,15 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
       {/* Preview Modal */}
       {previewForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
               <div>
                 <h2 className="text-lg font-semibold text-aneya-navy">
-                  {previewForm.form_name.replace(/_/g, ' ')}
+                  Form Preview
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {getSpecialtyDisplayName(previewForm.specialty)} • {previewForm.field_count} fields • {previewForm.section_count} sections
+                  {previewForm.form_name.replace(/_/g, ' ')} • {getSpecialtyDisplayName(previewForm.specialty)}
                 </p>
               </div>
               <button
@@ -627,20 +468,15 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
               </button>
             </div>
 
-            {/* Modal Body - Form Preview */}
-            <div className="flex-1 overflow-y-auto p-4 bg-aneya-cream">
+            {/* Modal Body - Form Preview with DoctorReportCard styling */}
+            <div className="flex-1 overflow-y-auto">
               {previewForm.form_schema ? (
-                (() => {
-                  const surveyModel = createPreviewSurvey(previewForm);
-                  if (surveyModel) {
-                    return <Survey model={surveyModel} />;
-                  }
-                  return (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>Unable to render form preview</p>
-                    </div>
-                  );
-                })()
+                <FormPreviewCard
+                  formName={previewForm.form_name}
+                  specialty={previewForm.specialty}
+                  formSchema={previewForm.form_schema as Record<string, { description?: string; order?: number; fields?: Array<{ name: string; label?: string; type?: string; options?: string[]; choices?: string[]; required?: boolean }> }>}
+                  clinicName={doctorProfile?.clinic_name || 'Healthcare Medical Center'}
+                />
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <p>No form schema available for preview</p>
@@ -649,7 +485,7 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
               <button
                 onClick={closePreviewModal}
                 className="px-4 py-2 bg-aneya-teal text-white rounded-lg hover:bg-opacity-90 transition-colors"
