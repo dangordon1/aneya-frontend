@@ -502,17 +502,17 @@ function MainApp() {
 
   const handleStartConsultationFromAppointment = (appointment: AppointmentWithPatient) => {
     setSelectedAppointment(appointment);
-    setSelectedPatient(appointment.patient);
+    setSelectedPatient(appointment.patient || null);
 
     // Pre-fill patient details from patient record
     setCurrentPatientDetails({
-      name: appointment.patient.name,
-      sex: appointment.patient.sex,
-      age: getPatientAge(appointment.patient),
-      height: appointment.patient.height_cm ? `${appointment.patient.height_cm} cm` : '',
-      weight: appointment.patient.weight_kg ? `${appointment.patient.weight_kg} kg` : '',
-      currentMedications: appointment.patient.current_medications || '',
-      currentConditions: appointment.patient.current_conditions || '',
+      name: appointment.patient?.name || '',
+      sex: appointment.patient?.sex || '',
+      age: appointment.patient ? getPatientAge(appointment.patient) : '',
+      height: appointment.patient?.height_cm ? `${appointment.patient.height_cm} cm` : '',
+      weight: appointment.patient?.weight_kg ? `${appointment.patient.weight_kg} kg` : '',
+      currentMedications: appointment.patient?.current_medications || '',
+      currentConditions: appointment.patient?.current_conditions || '',
     });
 
     // Navigate immediately - don't wait for status update
@@ -1220,7 +1220,7 @@ function MainApp() {
       a.href = url;
       const date = new Date(appointmentForFormView.scheduled_time);
       const dateStr = date.toISOString().split('T')[0];
-      a.download = `consultation_${appointmentForFormView.patient.name.replace(/\s+/g, '_')}_${dateStr}.pdf`;
+      a.download = `consultation_${(appointmentForFormView.patient?.name || 'patient').replace(/\s+/g, '_')}_${dateStr}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

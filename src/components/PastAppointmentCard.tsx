@@ -44,7 +44,7 @@ export function PastAppointmentCard({
 
       <h4 className="text-[16px] text-aneya-navy font-semibold mb-1">
         {viewMode === 'doctor'
-          ? appointment.patient.name
+          ? appointment.patient?.name || 'Unknown Patient'
           : appointment.doctor?.name || 'Doctor'}
       </h4>
 

@@ -48,7 +48,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     if (!pastAppointmentsSearch.trim()) return pastAppointments;
     const search = pastAppointmentsSearch.toLowerCase();
     return pastAppointments.filter(apt =>
-      apt.patient.name.toLowerCase().includes(search) ||
+      apt.patient?.name?.toLowerCase().includes(search) ||
       apt.reason?.toLowerCase().includes(search) ||
       apt.appointment_type?.toLowerCase().includes(search) ||
       new Date(apt.scheduled_time).toLocaleDateString('en-GB').includes(search)
@@ -74,7 +74,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
   };
 
   const handleCancelAppointment = async (appointment: AppointmentWithPatient) => {
-    if (window.confirm(`Cancel appointment with ${appointment.patient.name}?`)) {
+    if (window.confirm(`Cancel appointment with ${appointment.patient?.name || 'this patient'}?`)) {
       await cancelAppointment(appointment.id);
     }
   };

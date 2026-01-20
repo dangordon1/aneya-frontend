@@ -168,7 +168,7 @@ export function ReportScreenV2({
                 <Calendar className="h-5 w-5 text-aneya-teal" />
                 <div>
                   <div className="text-sm text-aneya-navy font-medium">
-                    Consultation for: {appointmentContext.patient.name}
+                    Consultation for: {appointmentContext.patient?.name || 'Patient'}
                   </div>
                   <div className="text-xs text-aneya-text-secondary">
                     Appointment at {formatTime24(new Date(appointmentContext.scheduled_time))} - {appointmentContext.duration_minutes} min
