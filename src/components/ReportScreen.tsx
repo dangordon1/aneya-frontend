@@ -79,7 +79,7 @@ export function ReportScreen({ onStartNew, onReanalyze, result, patientDetails, 
                 </svg>
                 <div>
                   <div className="text-[14px] text-aneya-navy font-medium">
-                    Consultation for: {appointmentContext.patient.name}
+                    Consultation for: {appointmentContext.patient?.name || 'Patient'}
                   </div>
                   <div className="text-[12px] text-gray-600">
                     Appointment at {formatTime24(new Date(appointmentContext.scheduled_time))} - {appointmentContext.duration_minutes} min

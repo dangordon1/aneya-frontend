@@ -62,7 +62,7 @@ export function AppointmentCard({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `consultation_${appointment.id.substring(0, 8)}_${appointment.patient.name.replace(/\s+/g, '_')}.pdf`;
+      link.download = `consultation_${appointment.id.substring(0, 8)}_${(appointment.patient?.name || 'patient').replace(/\s+/g, '_')}.pdf`;
       document.body.appendChild(link);
       link.click();
 
@@ -92,7 +92,7 @@ export function AppointmentCard({
           </div>
 
           <h3 className="text-[18px] text-aneya-navy font-medium mb-1">
-            {appointment.patient.name}
+            {appointment.patient?.name || 'Unknown Patient'}
           </h3>
 
           <p className="text-[14px] text-gray-600 mb-3">
