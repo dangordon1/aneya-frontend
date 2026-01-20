@@ -284,7 +284,7 @@ export function AppointmentDetailModal({
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-[24px] sm:text-[28px] text-aneya-navy font-semibold">
                 {viewMode === 'doctor'
-                  ? appointment.patient.name
+                  ? appointment.patient?.name || 'Unknown Patient'
                   : appointment.doctor?.name || 'Doctor'}
               </h2>
             </div>

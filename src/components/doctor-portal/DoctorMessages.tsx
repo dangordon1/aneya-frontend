@@ -35,11 +35,13 @@ export function DoctorMessages() {
 
     // Add patients from relationships
     relationshipPatients.forEach(rel => {
-      patientMap.set(rel.patient.id, {
-        id: rel.patient.id,
-        name: rel.patient.name,
-        email: rel.patient.email
-      });
+      if (rel.patient) {
+        patientMap.set(rel.patient.id, {
+          id: rel.patient.id,
+          name: rel.patient.name,
+          email: rel.patient.email
+        });
+      }
     });
 
     // Add patients from the patients table (created by this doctor)
@@ -258,8 +260,8 @@ export function DoctorMessages() {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-aneya-navy">{rel.patient.name}</h4>
-                    <p className="text-sm text-gray-500">{rel.patient.email}</p>
+                    <h4 className="font-medium text-aneya-navy">{rel.patient?.name || 'Unknown Patient'}</h4>
+                    <p className="text-sm text-gray-500">{rel.patient?.email || ''}</p>
                   </div>
                   <div className="flex gap-2">
                     <button

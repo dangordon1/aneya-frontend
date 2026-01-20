@@ -54,7 +54,7 @@ export function FullCalendarModal({
             }}
             className="text-[10px] bg-aneya-teal text-white px-1 py-0.5 rounded cursor-pointer hover:bg-opacity-80 truncate"
           >
-            {formatTime24(new Date(apt.scheduled_time))} - {apt.patient.name}
+            {formatTime24(new Date(apt.scheduled_time))} - {apt.patient?.name || 'Unknown'}
           </div>
         ))}
         {hasMore && (
