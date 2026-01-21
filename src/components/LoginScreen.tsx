@@ -12,7 +12,11 @@ const SPECIALTY_DISPLAY_NAMES: Record<string, string> = {
   'other': 'Other'
 };
 
-export function LoginScreen() {
+interface LoginScreenProps {
+  onBackToLanding?: () => void;
+}
+
+export function LoginScreen({ onBackToLanding }: LoginScreenProps) {
   const [loginMode, setLoginMode] = useState<'doctor' | 'patient'>('doctor');
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -273,6 +277,17 @@ export function LoginScreen() {
   return (
     <div className="min-h-screen bg-aneya-navy flex items-center justify-center px-4">
       <div className="max-w-md w-full">
+        {/* Back to Landing Page link */}
+        {onBackToLanding && (
+          <button
+            onClick={onBackToLanding}
+            className="text-white/70 hover:text-white mb-4 flex items-center gap-2 text-sm transition-colors"
+          >
+            <span>←</span>
+            <span>Back to Home</span>
+          </button>
+        )}
+
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/aneya-logo.png" alt="aneya" className="h-32 mx-auto mb-4" />
