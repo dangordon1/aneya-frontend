@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CheckCircle2, Shield, ChevronDown, Globe, ClipboardCheck, Smartphone, Activity, BookOpen, Pill, FileText } from 'lucide-react';
+import { ArrowRight, ChevronDown, Globe, ClipboardCheck, Smartphone, Activity, BookOpen, Pill, FileText } from 'lucide-react';
 
 interface LandingPageProps {
   onSignIn: () => void;
@@ -27,7 +27,6 @@ export function LandingPage({ onSignIn }: LandingPageProps) {
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-white/80 hover:text-white transition-colors">Features</a>
               <a href="#how-it-works" className="text-white/80 hover:text-white transition-colors">How it Works</a>
-              <a href="#security" className="text-white/80 hover:text-white transition-colors">Security</a>
               <button
                 onClick={onSignIn}
                 className="bg-[#1d9e99] hover:bg-[#1d9e99]/90 text-white px-4 py-2 rounded-md font-medium transition-colors"
@@ -80,7 +79,7 @@ export function LandingPage({ onSignIn }: LandingPageProps) {
             </form>
 
             <p className="text-sm text-[#8fa9be]">
-              HIPAA compliant • Free during beta • No credit card required
+              Free during beta • No credit card required
             </p>
           </div>
 
@@ -236,54 +235,6 @@ export function LandingPage({ onSignIn }: LandingPageProps) {
             <div>
               <div className="text-5xl font-['Georgia',serif] mb-2 text-[#1d9e99]">24/7</div>
               <div className="text-[#8fa9be]">Support Available</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Security Section */}
-      <section id="security" className="py-24 px-6 scroll-mt-36">
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-3xl p-12 border border-[#0c3555]/10">
-            <div className="max-w-3xl mx-auto text-center">
-              <Shield className="w-16 h-16 text-[#1d9e99] mx-auto mb-6" />
-              <h2 className="text-3xl md:text-4xl font-['Georgia',serif] text-[#0c3555] mb-6">
-                Security and compliance, built in
-              </h2>
-              <p className="text-xl text-[#517a9a] mb-10">
-                We take patient privacy seriously. Every conversation, every note, every piece of data is protected with enterprise-grade security.
-              </p>
-
-              <div className="grid md:grid-cols-2 gap-6 text-left">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-[#1d9e99] flex-shrink-0 mt-1" />
-                  <div>
-                    <div className="font-semibold text-[#0c3555] mb-1">HIPAA Compliant</div>
-                    <div className="text-sm text-[#517a9a]">Full compliance with healthcare data regulations</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-[#1d9e99] flex-shrink-0 mt-1" />
-                  <div>
-                    <div className="font-semibold text-[#0c3555] mb-1">SOC 2 Type II</div>
-                    <div className="text-sm text-[#517a9a]">Independently audited security controls</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-[#1d9e99] flex-shrink-0 mt-1" />
-                  <div>
-                    <div className="font-semibold text-[#0c3555] mb-1">End-to-End Encryption</div>
-                    <div className="text-sm text-[#517a9a]">AES-256 encryption at rest and in transit</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-[#1d9e99] flex-shrink-0 mt-1" />
-                  <div>
-                    <div className="font-semibold text-[#0c3555] mb-1">Regular Audits</div>
-                    <div className="text-sm text-[#517a9a]">Quarterly security assessments and penetration testing</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
