@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { pdf } from '@react-pdf/renderer';
 import { useAuth } from '../../contexts/AuthContext';
+import { FormPdfDocument } from './FormPdfPreview';
 
 interface SchemaReviewEditorProps {
   formName: string;
@@ -289,34 +291,26 @@ export function SchemaReviewEditor({
         <button
           onClick={async () => {
             try {
-              const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-              const response = await fetch(`${API_URL}/api/custom-forms/preview-pdf`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  form_name: formName,
-                  form_schema: schema,
-                  pdf_template: pdfTemplate,
-                  clinic_logo_url: doctorProfile?.clinic_logo_url || null,
-                  clinic_name: doctorProfile?.clinic_name || null,
-                  primary_color: doctorProfile?.primary_color || null,
-                  accent_color: doctorProfile?.accent_color || null,
-                  text_color: doctorProfile?.text_color || null,
-                  light_gray_color: doctorProfile?.light_gray_color || null
-                })
-              });
+              // Generate PDF locally using @react-pdf/renderer
+              const clinicBranding = {
+                clinic_name: doctorProfile?.clinic_name || null,
+                clinic_logo_url: doctorProfile?.clinic_logo_url || null,
+                primary_color: doctorProfile?.primary_color || null,
+                accent_color: doctorProfile?.accent_color || null,
+                text_color: doctorProfile?.text_color || null,
+                light_gray_color: doctorProfile?.light_gray_color || null,
+              };
 
-              if (response.ok) {
-                // Get PDF blob and open in new tab
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
-              } else {
-                const error = await response.json();
-                alert(`Failed to generate PDF preview: ${error.detail || 'Unknown error'}`);
-              }
+              const blob = await pdf(
+                <FormPdfDocument
+                  schema={schema}
+                  formName={formName}
+                  clinicBranding={clinicBranding}
+                />
+              ).toBlob();
+
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
             } catch (err) {
               console.error('PDF preview error:', err);
               alert('Failed to generate PDF preview. Please try again.');

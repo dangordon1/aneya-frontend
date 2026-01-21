@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
+    "@react-pdf/renderer": "^4.3.2",
     "@supabase/supabase-js": "^2.86.2",
     "@types/react-calendar": "^3.9.0",
     "firebase": "^12.6.0",
