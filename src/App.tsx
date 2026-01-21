@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Download } from 'lucide-react';
+import { LandingPage } from './components/LandingPage';
 import { LoginScreen } from './components/LoginScreen';
 import OTPVerificationScreen from './components/OTPVerificationScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -76,6 +77,7 @@ interface StreamEvent {
 function MainApp() {
   const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
+  const [showLoginScreen, setShowLoginScreen] = useState(false); // For landing page -> login flow
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [currentPatientDetails, setCurrentPatientDetails] = useState<PatientDetails | null>(null);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
@@ -192,9 +194,12 @@ function MainApp() {
     );
   }
 
-  // Show login screen if not authenticated
+  // Show landing page or login screen if not authenticated
   if (!user) {
-    return <LoginScreen />;
+    if (showLoginScreen) {
+      return <LoginScreen onBackToLanding={() => setShowLoginScreen(false)} />;
+    }
+    return <LandingPage onSignIn={() => setShowLoginScreen(true)} />;
   }
 
   // Show patient portal for patient role
