@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { SchemaReviewEditor } from './SchemaReviewEditor';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Time estimation constants
+const BASE_UPLOAD_TIME = 2; // Network overhead in seconds
+const SECONDS_PER_FILE = 40; // Claude Vision API processing per file
 
 type UploadState = 'input' | 'uploading' | 'reviewing' | 'complete';
 
@@ -62,6 +66,45 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
   const [isPublic, setIsPublic] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Progress bar state
+  const [estimatedSeconds, setEstimatedSeconds] = useState<number>(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [progress, setProgress] = useState<number>(0);
+  const startTimeRef = useRef<number>(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Progress timer effect
+  useEffect(() => {
+    if (uploadState === 'uploading' && estimatedSeconds > 0) {
+      // Start the timer
+      startTimeRef.current = Date.now();
+
+      intervalRef.current = setInterval(() => {
+        const elapsed = (Date.now() - startTimeRef.current) / 1000;
+        setElapsedSeconds(Math.floor(elapsed));
+
+        // Calculate progress with easing curve, cap at 99%
+        const rawProgress = Math.min((elapsed / estimatedSeconds) * 100, 100);
+        const easedProgress = Math.min(99, 99 * Math.pow(rawProgress / 100, 0.7));
+        setProgress(easedProgress);
+      }, 100);
+    } else if (uploadState !== 'uploading' && intervalRef.current) {
+      // Upload complete - jump to 100%
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      if (estimatedSeconds > 0) {
+        setProgress(100);
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [uploadState, estimatedSeconds]);
 
   // Handle editing existing form
   useEffect(() => {
@@ -134,6 +177,13 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
       setError('Form name must be in snake_case (lowercase letters, numbers, underscores only)');
       return;
     }
+
+    // Calculate estimated time based on file count
+    const fileCount = files.length;
+    const estimated = BASE_UPLOAD_TIME + (fileCount * SECONDS_PER_FILE);
+    setEstimatedSeconds(estimated);
+    setElapsedSeconds(0);
+    setProgress(0);
 
     setUploadState('uploading');
     setError(null);
@@ -377,24 +427,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
             </div>
           )}
 
-          {/* Uploading Progress Message */}
-          {uploadState === 'uploading' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-blue-600 mt-0.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <h4 className="font-medium text-blue-900">AI Analysis in Progress</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Extracting form schema and PDF layout from your images. This typically takes 30-90 seconds.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-      {/* Form Name */}
+          {/* Form Name */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Form Name <span className="text-red-500">*</span>
@@ -520,30 +553,61 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
         </div>
       </div>
 
-      {/* Upload Button */}
-      <div className="flex gap-3 justify-end pt-4">
-        <button
-          onClick={handleUpload}
-          disabled={!formName || !specialty || files.length < 2 || uploadState === 'uploading'}
-          className="px-6 py-3 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {uploadState === 'uploading' ? (
-            <>
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Analyzing...
-            </>
-          ) : (
-            <>
+      {/* Upload Button or Progress Bar */}
+      <div className="pt-4">
+        {uploadState === 'uploading' ? (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-gray-900">
+                  {progress >= 99 && elapsedSeconds >= estimatedSeconds
+                    ? 'Taking longer than expected... almost done!'
+                    : 'AI Analysis in Progress'}
+                </h4>
+                <span className="text-sm text-gray-600">
+                  {elapsedSeconds}s / ~{estimatedSeconds}s
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-100 ${
+                    elapsedSeconds >= estimatedSeconds ? 'bg-yellow-500' : 'bg-aneya-teal'
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+
+              {/* Progress Percentage */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  {Math.round(progress)}% complete
+                </span>
+                <span className="text-gray-500 flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Extracting form schema
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={handleUpload}
+              disabled={!formName || !specialty || files.length < 2}
+              className="px-6 py-3 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
               Upload & Extract Form
-            </>
-          )}
-        </button>
+            </button>
+          </div>
+        )}
       </div>
         </>
       )}
