@@ -121,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pendingVerification, setPendingVerification] = useState<PendingVerification | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false); // Flag to prevent race condition during signup
   const isCheckingVerificationRef = useRef(false); // Flag to prevent race condition during sign-in verification
+  const isGoogleSigningInRef = useRef(false); // Flag to prevent race condition during Google SSO
 
   // Debug: Log when doctorProfile changes
   useEffect(() => {
@@ -208,6 +209,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Skip processing if we're checking verification status in signIn (prevents race condition/main page flash)
       if (isCheckingVerificationRef.current) {
         console.log('⏭️ Skipping auth state change - verification check in progress');
+        return;
+      }
+
+      // Skip processing if we're in the middle of Google sign-in (prevents race condition)
+      if (isGoogleSigningInRef.current) {
+        console.log('⏭️ Skipping auth state change - Google sign-in in progress');
         return;
       }
 
@@ -526,7 +533,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .insert({
                   user_id: result.user.uid,
                   email: result.user.email,
-                  name: result.user.displayName || result.user.email?.split('@')[0] || 'Doctor'
+                  name: ''  // Don't auto-generate - user must fill out
                 });
 
               if (doctorError) {
@@ -586,7 +593,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .insert({
                 user_id: result.user.uid,
                 email: email,
-                name: doctorData?.name || email.split('@')[0],
+                name: doctorData?.name || '',  // Don't auto-generate - user must fill out
                 specialty: doctorData?.specialty || null,
                 clinic_name: doctorData?.clinic_name || null
               });
@@ -655,7 +662,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .insert({
                   user_id: result.user.uid,
                   email: email,
-                  name: patientData?.name || email.split('@')[0],
+                  name: patientData?.name || '',  // Don't auto-generate - user must fill out
                   sex: 'Other', // Default, can be updated
                   date_of_birth: '2000-01-01', // Default, must be updated
                   consultation_language: 'en-IN',
@@ -714,6 +721,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async (role?: 'doctor' | 'patient', profileData?: DoctorSignupData | PatientSignupData) => {
     try {
+      // Set flag BEFORE signInWithPopup to prevent onAuthStateChanged race condition
+      isGoogleSigningInRef.current = true;
+
       const result = await signInWithPopup(auth, googleProvider);
       console.log('✅ Google sign-in successful:', result.user.email);
 
@@ -733,6 +743,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Patient trying to log in via doctor portal
             console.log('❌ Patient account cannot log in via doctor portal');
             await firebaseSignOut(auth);
+            isGoogleSigningInRef.current = false;
             return {
               error: {
                 message: 'This account is registered as a patient. Please use the Patient Portal to sign in.',
@@ -745,6 +756,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Doctor/admin trying to log in via patient portal
             console.log('❌ Doctor/admin account cannot log in via patient portal');
             await firebaseSignOut(auth);
+            isGoogleSigningInRef.current = false;
             return {
               error: {
                 message: 'This account is registered as a doctor. Please use the Doctor Portal to sign in.',
@@ -806,7 +818,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .insert({
                 user_id: result.user.uid,
                 email: result.user.email,
-                name: doctorData?.name || result.user.displayName || result.user.email?.split('@')[0] || 'Doctor',
+                name: doctorData?.name || '',  // Don't auto-generate - user must fill out
                 specialty: doctorData?.specialty || null,
                 clinic_name: doctorData?.clinic_name || null
               });
@@ -878,7 +890,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .insert({
                 user_id: result.user.uid,
                 email: result.user.email,
-                name: patientData?.name || result.user.displayName || result.user.email?.split('@')[0] || 'Patient',
+                name: patientData?.name || '',  // Don't auto-generate - user must fill out
                 sex: 'Other',
                 date_of_birth: '2000-01-01',
                 consultation_language: 'en-IN',
@@ -894,9 +906,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Manually set state to avoid race condition with onAuthStateChanged
+      // Since we blocked onAuthStateChanged, we need to set everything ourselves
+      const token = await result.user.getIdToken();
+      const mappedUser = mapFirebaseUser(result.user);
+      setUser(mappedUser);
+      setSession({ access_token: token, user: mappedUser });
+
+      // Determine the effective role - use passed role or look up from database
+      let effectiveRole: 'doctor' | 'patient' | null = role || null;
+      if (!effectiveRole) {
+        // Look up existing role from database for returning users
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', result.user.uid)
+          .single();
+
+        if (roleData) {
+          effectiveRole = roleData.role as 'doctor' | 'patient';
+          console.log('📋 Found existing role from database:', effectiveRole);
+        }
+      }
+
+      if (effectiveRole === 'doctor') {
+        setUserRole('doctor');
+        setIsDoctor(true);
+        setIsPatient(false);
+        setIsAdmin(false);
+        const doctor = await loadDoctorProfile(result.user.uid);
+        console.log('📝 Setting doctorProfile after Google sign-in:', doctor ? { id: doctor.id, name: doctor.name } : null);
+        setDoctorProfile(doctor);
+        setPatientProfile(null);
+      } else if (effectiveRole === 'patient') {
+        setUserRole('patient');
+        setIsDoctor(false);
+        setIsPatient(true);
+        setIsAdmin(false);
+        const patient = await loadPatientProfile(result.user.uid);
+        setPatientProfile(patient);
+        setDoctorProfile(null);
+      } else {
+        // No role found - this shouldn't happen for existing users
+        // but handle gracefully by defaulting to 'user'
+        console.warn('⚠️ No role found for Google SSO user, defaulting to user');
+        setUserRole('user');
+        setIsDoctor(false);
+        setIsPatient(false);
+        setIsAdmin(false);
+      }
+
+      setLoading(false);
+      isGoogleSigningInRef.current = false;
+      console.log('✅ Google sign-in state manually set, effectiveRole:', effectiveRole);
+
       return { error: null };
     } catch (err) {
       const firebaseError = err as FirebaseAuthError;
+
+      // Clear flag on error
+      isGoogleSigningInRef.current = false;
 
       // Don't show error if user just closed the popup
       if (firebaseError.code === 'auth/popup-closed-by-user') {

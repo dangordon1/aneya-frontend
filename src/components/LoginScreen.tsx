@@ -90,8 +90,9 @@ export function LoginScreen({ onBackToLanding }: LoginScreenProps) {
     setGoogleLoading(true);
 
     try {
-      // Pass the role and profile data for new signups (Google will check if user exists)
-      const roleToUse = isSignUp ? loginMode : undefined;
+      // Always pass the role for Google sign-in so AuthContext knows which portal is being used
+      // This ensures proper role validation and state setting for both new and returning users
+      const roleToUse = loginMode;
 
       // Build profile data if this is a signup
       let profileData: { name: string; specialty?: string; clinic_name?: string } | { name: string } | undefined = undefined;
