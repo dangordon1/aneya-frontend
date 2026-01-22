@@ -16,7 +16,11 @@ const getBrowserTimezone = (): string => {
   }
 };
 
-export function DoctorProfileTab() {
+interface DoctorProfileTabProps {
+  isSetupMode?: boolean;
+}
+
+export function DoctorProfileTab({ isSetupMode = false }: DoctorProfileTabProps) {
   const { doctorProfile, refreshDoctorProfile, getIdToken, user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +127,12 @@ export function DoctorProfileTab() {
     // Validate required fields
     if (!formData.name.trim() || !formData.email.trim() || !formData.specialty) {
       setError('Please fill in all required fields (Name, Email, Specialty)');
+      return;
+    }
+
+    // Validate name format - must have first and last name (contains space)
+    if (isSetupMode && !formData.name.trim().includes(' ')) {
+      setError('Please enter your full name (first and last name)');
       return;
     }
 
@@ -331,17 +341,31 @@ export function DoctorProfileTab() {
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-[24px] text-aneya-navy font-semibold">
-            {isCreateMode ? 'Create Your Profile' : 'My Details'}
+            {isSetupMode ? 'Complete Your Profile' : (isCreateMode ? 'Create Your Profile' : 'My Details')}
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            {isCreateMode
-              ? 'Please complete your profile to get started'
-              : 'Manage your profile and contact preferences'}
+            {isSetupMode
+              ? 'Please fill in your details to access the platform'
+              : (isCreateMode
+                ? 'Please complete your profile to get started'
+                : 'Manage your profile and contact preferences')}
           </p>
         </div>
 
-        {/* Profile Incomplete/Create Warning */}
-        {(isCreateMode || !doctorProfile?.specialty) && (
+        {/* Setup mode info banner */}
+        {isSetupMode && (
+          <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-blue-800 font-medium">
+              Complete your profile to unlock all features
+            </p>
+            <p className="text-blue-600 text-sm mt-1">
+              Fill in your name (first and last) and select your specialty to continue.
+            </p>
+          </div>
+        )}
+
+        {/* Profile Incomplete/Create Warning - only show when not in setup mode */}
+        {!isSetupMode && (isCreateMode || !doctorProfile?.specialty) && (
           <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex items-start gap-3">
               <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -641,7 +665,8 @@ export function DoctorProfileTab() {
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-gray-200 flex gap-3 justify-end">
-              {!isCreateMode && (
+              {/* Hide Cancel button in setup mode and create mode */}
+              {!isCreateMode && !isSetupMode && (
                 <button
                   onClick={handleCancel}
                   disabled={isSaving}
@@ -661,10 +686,10 @@ export function DoctorProfileTab() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    {isCreateMode ? 'Creating...' : 'Saving...'}
+                    {isSetupMode ? 'Saving...' : (isCreateMode ? 'Creating...' : 'Saving...')}
                   </>
                 ) : (
-                  isCreateMode ? 'Create Profile' : 'Save Changes'
+                  isSetupMode ? 'Save & Continue' : (isCreateMode ? 'Create Profile' : 'Save Changes')
                 )}
               </button>
           </div>
