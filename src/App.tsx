@@ -116,9 +116,30 @@ function MainApp() {
   const pendingRequestsCount = myPatients.filter(rel => rel.status === 'pending' && rel.initiated_by === 'patient').length;
 
   // Check if doctor profile needs to be created or is incomplete
-  // This applies when: user is a doctor AND (no profile exists OR profile is missing specialty)
+  // This applies when: user is a doctor AND (no profile exists OR profile is missing required fields)
+  // Required fields:
+  // - name: must be properly filled out (not empty, and must contain a space indicating full name)
+  //   Auto-generated names from email prefix (e.g., "danielgordon54") don't have spaces
+  // - specialty: must be explicitly selected (not null)
   // AND not during OTP verification (to avoid race condition during sign-up)
-  const needsProfileSetup = userRole === 'doctor' && (!doctorProfile || !doctorProfile.specialty) && !pendingVerification;
+  const hasProperName = doctorProfile?.name &&
+    doctorProfile.name.trim() !== '' &&
+    doctorProfile.name.trim().includes(' ');
+  // Fix: Use truthy check for specialty - handles null, undefined, empty string
+  const hasSpecialty = !!doctorProfile?.specialty;
+  const isProfileIncomplete = !doctorProfile || !hasProperName || !hasSpecialty;
+  const needsProfileSetup = userRole === 'doctor' && isProfileIncomplete && !pendingVerification;
+
+  // Debug logging to understand needsProfileSetup state
+  console.log('🔍 needsProfileSetup check:', {
+    userRole,
+    doctorProfile: doctorProfile ? { name: doctorProfile.name, specialty: doctorProfile.specialty } : null,
+    hasProperName,
+    hasSpecialty,
+    isProfileIncomplete,
+    pendingVerification: !!pendingVerification,
+    needsProfileSetup
+  });
 
   // Track previous needsProfileSetup state to detect completion
   const prevNeedsProfileSetup = useRef(needsProfileSetup);
@@ -150,6 +171,21 @@ function MainApp() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
           <p className="text-aneya-navy">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Wait for userRole to be determined before proceeding
+  // This fixes the race condition where user is authenticated but role hasn't loaded yet
+  // (especially common with Google SSO where state updates may not have propagated)
+  if (user && userRole === null) {
+    console.log('⏳ User authenticated but userRole not yet determined, showing loading...');
+    return (
+      <div className="min-h-screen bg-aneya-cream flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+          <p className="text-aneya-navy">Setting up your account...</p>
         </div>
       </div>
     );
@@ -227,7 +263,7 @@ function MainApp() {
               </div>
             </div>
           }>
-            <DoctorProfileTab />
+            <DoctorProfileTab isSetupMode={true} />
           </Suspense>
         </main>
         <footer className="bg-aneya-navy py-3 px-4 border-t border-aneya-teal">
