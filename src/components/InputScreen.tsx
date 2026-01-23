@@ -10,7 +10,7 @@ import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
 import { requiresOBGynForms } from '../utils/specialtyHelpers';
-import { EditableDoctorReportCard } from './doctor-portal/EditableDoctorReportCard';
+import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -2778,11 +2778,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {/* Inline Embedded Forms - Display below buttons */}
                 {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
                   <div className="mt-6">
-                    <EditableDoctorReportCard
+                    <DynamicConsultationForm
                       appointmentId={appointmentContext.id}
                       patientId={preFilledPatient.id}
                       formType={selectedFormType}
-                      onFormComplete={() => {
+                      onComplete={() => {
                         setSelectedFormType(null);
                       }}
                       editable={true}
