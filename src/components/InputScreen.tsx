@@ -344,7 +344,21 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     is_active: boolean;
   }>>([]);
 
-  // Fetch available forms for the specialty
+  // Map doctor specialty to form schema specialty format
+  const mapSpecialtyToSchemaFormat = (specialty: string | undefined): string | null => {
+    if (!specialty) return null;
+    const mapping: Record<string, string> = {
+      'obgyn': 'obstetrics_gynecology',
+      'cardiology': 'cardiology',
+      'neurology': 'neurology',
+      'dermatology': 'dermatology',
+      'general': 'general',
+      'other': 'other',
+    };
+    return mapping[specialty] || specialty;
+  };
+
+  // Fetch available forms for the doctor's specialty
   useEffect(() => {
     const fetchForms = async () => {
       try {
@@ -352,18 +366,24 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         if (!response.ok) return;
 
         const data = await response.json();
-        // Filter for OB/GYN forms only
-        const obgynForms = data.schemas.filter(
-          (schema: any) => schema.specialty === 'obstetrics_gynecology' && schema.is_active
+        const schemaSpecialty = mapSpecialtyToSchemaFormat(doctorProfile?.specialty);
+
+        // Filter for forms matching the doctor's specialty
+        const specialtyForms = data.schemas.filter(
+          (schema: any) => schema.specialty === schemaSpecialty && schema.is_active
         );
-        console.log(`📋 Loaded ${obgynForms.length} OB/GYN forms:`, obgynForms.map((f: any) => f.form_type));
-        setAvailableForms(obgynForms);
+        console.log(`📋 Loaded ${specialtyForms.length} forms for specialty "${schemaSpecialty}":`, specialtyForms.map((f: any) => f.form_type));
+        setAvailableForms(specialtyForms);
       } catch (error) {
         console.error('❌ Failed to fetch form schemas:', error);
       }
     };
-    fetchForms();
-  }, []);
+
+    // Only fetch if we have a doctor profile with specialty
+    if (doctorProfile?.specialty) {
+      fetchForms();
+    }
+  }, [doctorProfile?.specialty]);
 
   // Auto-select form when consultation type is determined
   useEffect(() => {
@@ -2711,8 +2731,8 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           )}
         </div>
 
-        {/* OB/GYN During-consultation Form Button - Prominent location after Patient Details */}
-        {appointmentContext && preFilledPatient && (appointmentContext as any).doctor && requiresOBGynForms((appointmentContext as any).doctor.specialty) && (
+        {/* During-consultation Form Section - Show for any specialty with available forms */}
+        {appointmentContext && preFilledPatient && availableForms.length > 0 && (
           <div className="mb-6 bg-white border-2 border-purple-300 rounded-[10px] p-4 sm:p-6">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
