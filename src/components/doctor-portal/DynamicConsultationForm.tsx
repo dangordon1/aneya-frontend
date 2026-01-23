@@ -75,6 +75,7 @@ interface DynamicConsultationFormProps {
   filledBy?: 'patient' | 'doctor';
   doctorUserId?: string;
   displayMode?: 'wizard' | 'flat';
+  editable?: boolean; // Default true, set to false for read-only mode
 }
 
 export function DynamicConsultationForm({
@@ -85,10 +86,10 @@ export function DynamicConsultationForm({
   onBack,
   filledBy = 'doctor',
   doctorUserId,
+  editable = true,
 }: DynamicConsultationFormProps) {
   const [survey, setSurvey] = useState<Model | null>(null);
   const [formId, setFormId] = useState<string | null>(null);
-  const [formTitle, setFormTitle] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
@@ -347,15 +348,6 @@ export function DynamicConsultationForm({
 
         console.log(`📊 Fetched ${formType} schema from database:`, data);
 
-        // Extract title from schema metadata or generate from form_type
-        const title = data.title ||
-                     data.description ||
-                     formType.split('_').map((word: string) =>
-                       word.charAt(0).toUpperCase() + word.slice(1)
-                     ).join(' ') + ' Consultation';
-
-        setFormTitle(title);
-
         const surveyJSON = convertToSurveyJS(data.schema);
         const surveyModel = new Model(surveyJSON);
 
@@ -368,15 +360,22 @@ export function DynamicConsultationForm({
         surveyModel.completedHtml = '';  // Remove any completion HTML
         surveyModel.completeText = 'Save Form';  // Change button text from "Complete" to "Save Form"
 
-        // Handle form submission
-        surveyModel.onComplete.add((sender: Model) => {
-          handleSubmit(sender.data);
-        });
+        // Apply read-only mode if editable is false
+        if (!editable) {
+          surveyModel.mode = 'display';
+        }
 
-        // Auto-save on value changes
-        surveyModel.onValueChanged.add((sender: Model) => {
-          handleAutoSave(sender.data);
-        });
+        // Handle form submission (only if editable)
+        if (editable) {
+          surveyModel.onComplete.add((sender: Model) => {
+            handleSubmit(sender.data);
+          });
+
+          // Auto-save on value changes
+          surveyModel.onValueChanged.add((sender: Model) => {
+            handleAutoSave(sender.data);
+          });
+        }
 
         setSurvey(surveyModel);
       } catch (error) {
@@ -388,7 +387,7 @@ export function DynamicConsultationForm({
     };
 
     fetchSchema();
-  }, [formType]);
+  }, [formType, editable]);
 
   // Fetch existing form data and populate tables with external data sources
   useEffect(() => {
@@ -675,13 +674,6 @@ export function DynamicConsultationForm({
   return (
     <div className="min-h-screen bg-aneya-cream p-8">
       <div className="max-w-4xl mx-auto">
-        {/* Form Title - Dynamic from schema */}
-        <div className="mb-6 pb-4 border-b border-gray-200">
-          <h2 className="text-[24px] font-bold text-aneya-navy">
-            {formTitle}
-          </h2>
-        </div>
-
         {/* SurveyJS Form */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <Survey model={survey} />
