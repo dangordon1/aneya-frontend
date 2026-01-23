@@ -75,6 +75,7 @@ interface DynamicConsultationFormProps {
   filledBy?: 'patient' | 'doctor';
   doctorUserId?: string;
   displayMode?: 'wizard' | 'flat';
+  editable?: boolean; // Default true, set to false for read-only mode
 }
 
 export function DynamicConsultationForm({
@@ -85,6 +86,7 @@ export function DynamicConsultationForm({
   onBack,
   filledBy = 'doctor',
   doctorUserId,
+  editable = true,
 }: DynamicConsultationFormProps) {
   const [survey, setSurvey] = useState<Model | null>(null);
   const [formId, setFormId] = useState<string | null>(null);
@@ -368,15 +370,22 @@ export function DynamicConsultationForm({
         surveyModel.completedHtml = '';  // Remove any completion HTML
         surveyModel.completeText = 'Save Form';  // Change button text from "Complete" to "Save Form"
 
-        // Handle form submission
-        surveyModel.onComplete.add((sender: Model) => {
-          handleSubmit(sender.data);
-        });
+        // Apply read-only mode if editable is false
+        if (!editable) {
+          surveyModel.mode = 'display';
+        }
 
-        // Auto-save on value changes
-        surveyModel.onValueChanged.add((sender: Model) => {
-          handleAutoSave(sender.data);
-        });
+        // Handle form submission (only if editable)
+        if (editable) {
+          surveyModel.onComplete.add((sender: Model) => {
+            handleSubmit(sender.data);
+          });
+
+          // Auto-save on value changes
+          surveyModel.onValueChanged.add((sender: Model) => {
+            handleAutoSave(sender.data);
+          });
+        }
 
         setSurvey(surveyModel);
       } catch (error) {
@@ -388,7 +397,7 @@ export function DynamicConsultationForm({
     };
 
     fetchSchema();
-  }, [formType]);
+  }, [formType, editable]);
 
   // Fetch existing form data and populate tables with external data sources
   useEffect(() => {
