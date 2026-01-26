@@ -1512,7 +1512,7 @@ function MainApp() {
               <DynamicConsultationForm
                 appointmentId={appointmentForFormView.id}
                 patientId={appointmentForFormView.patient_id}
-                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'antenatal_2'}
+                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || appointmentForFormView.specialty || 'general'}
                 editable={false}
               />
 
