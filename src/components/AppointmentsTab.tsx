@@ -620,7 +620,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Create New Appointment
+              Create Appointment
             </button>
             <button
               onClick={() => setIsAvailabilityModalOpen(true)}
