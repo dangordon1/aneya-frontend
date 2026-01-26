@@ -27,6 +27,7 @@ export function DoctorProfileTab({ isSetupMode = false }: DoctorProfileTabProps)
   const [success, setSuccess] = useState<string | null>(null);
   const [detectedTimezone, setDetectedTimezone] = useState<string | null>(null);
   const hasAttemptedGeoDetection = useRef(false);
+  const formInitializedRef = useRef(false);
 
   // Determine if we're in create mode (no existing doctor profile)
   const isCreateMode = !doctorProfile;
@@ -96,9 +97,14 @@ export function DoctorProfileTab({ isSetupMode = false }: DoctorProfileTabProps)
     fetchTimezoneFromIP();
   }, [doctorProfile]);
 
+  // Only initialize form data once when doctorProfile first becomes available
   useEffect(() => {
+    // Skip if already initialized
+    if (formInitializedRef.current) return;
+
     if (doctorProfile) {
       // Existing profile - populate form with saved values
+      formInitializedRef.current = true;
       const timezone = doctorProfile.timezone || detectedTimezone || getBrowserTimezone();
       setFormData({
         name: doctorProfile.name || '',
@@ -113,6 +119,7 @@ export function DoctorProfileTab({ isSetupMode = false }: DoctorProfileTabProps)
       });
     } else if (user) {
       // No profile yet (create mode) - pre-populate from Firebase user
+      formInitializedRef.current = true;
       const timezone = detectedTimezone || getBrowserTimezone();
       setFormData(prev => ({
         ...prev,
