@@ -684,17 +684,11 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
               />
             </svg>
             <h3 className="text-[20px] text-aneya-navy mb-2">No appointments scheduled</h3>
-            <p className="text-[14px] text-gray-600 mb-6">
+            <p className="text-[14px] text-gray-600">
               {selectedDate.toDateString() === new Date().toDateString()
                 ? 'No appointments for today'
                 : 'No appointments for this date'}
             </p>
-            <button
-              onClick={() => setIsFormModalOpen(true)}
-              className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors"
-            >
-              Create New Appointment
-            </button>
           </div>
         ) : (
               <div className="space-y-4">
