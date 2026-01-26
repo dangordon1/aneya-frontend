@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { CONSULTATION_LANGUAGES, type ConsultationLanguage } from '../../types/database';
@@ -12,6 +12,7 @@ export function PatientProfileForm({ onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const formInitializedRef = useRef(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -26,8 +27,10 @@ export function PatientProfileForm({ onBack }: Props) {
     consultation_language: 'en-IN' as ConsultationLanguage
   });
 
+  // Only initialize form data once when patientProfile first becomes available
   useEffect(() => {
-    if (patientProfile) {
+    if (patientProfile && !formInitializedRef.current) {
+      formInitializedRef.current = true;
       setFormData({
         name: patientProfile.name || '',
         sex: patientProfile.sex || 'Other',
