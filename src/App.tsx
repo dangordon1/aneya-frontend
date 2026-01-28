@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { Download } from 'lucide-react';
+import { Download, Activity } from 'lucide-react';
 import { LandingPage } from './components/LandingPage';
 import { LoginScreen } from './components/LoginScreen';
 import OTPVerificationScreen from './components/OTPVerificationScreen';
@@ -38,12 +38,12 @@ const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => 
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 // ✨ FIX: Import statically to avoid mixed import patterns (these are also used by other components)
 // Lazy loading these causes "Importing a module script failed" errors in production
-import { EditableDoctorReportCard } from './components/doctor-portal/EditableDoctorReportCard';
+import { DynamicConsultationForm } from './components/doctor-portal/DynamicConsultationForm';
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'infertility-form' | 'view-consultation-form' | 'feedback-dashboard';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'view-consultation-form' | 'feedback-dashboard';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -75,7 +75,7 @@ interface StreamEvent {
 }
 
 function MainApp() {
-  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification } = useAuth();
+  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification, getIdToken } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [showLoginScreen, setShowLoginScreen] = useState(false); // For landing page -> login flow
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -106,6 +106,7 @@ function MainApp() {
   const [appointmentForFormView, setAppointmentForFormView] = useState<AppointmentWithPatient | null>(null); // For viewing consultation forms
   const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
   const [generatingPdf, setGeneratingPdf] = useState(false); // PDF generation state for view consultation form screen
+  const [loadingFormView, setLoadingFormView] = useState(false); // Loading state for form auto-fill
   const { saveConsultation } = useConsultations();
   const { createAppointment } = useAppointments();
 
@@ -1225,10 +1226,58 @@ function MainApp() {
     setCurrentScreen('patients');
   };
 
-  const handleViewConsultationForm = (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+  const handleViewConsultationForm = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+    setLoadingFormView(true);
+
+    // If we have a consultation, try to auto-fill the form data first
+    if (consultation) {
+      try {
+        // Check if form data already exists
+        const checkResponse = await fetch(
+          `${API_URL}/api/consultation-form?appointment_id=${appointment.id}&form_type=${consultation.detected_consultation_type || appointment.specialty_subtype || 'general'}`
+        );
+        const checkData = await checkResponse.json();
+
+        // If no form data exists, trigger auto-fill
+        if (!checkData.form || !checkData.form.form_data || Object.keys(checkData.form.form_data).length === 0) {
+          console.log('📋 No form data found, triggering auto-fill...');
+          const idToken = await getIdToken();
+
+          const requestBody = {
+            consultation_id: consultation.id,
+            appointment_id: appointment.id,
+            patient_id: appointment.patient_id,
+            original_transcript: consultation.original_transcript || '',
+            consultation_text: consultation.consultation_text || '',
+            patient_snapshot: consultation.patient_snapshot || {}
+          };
+
+          const fillResponse = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify(requestBody)
+          });
+
+          if (fillResponse.ok) {
+            const fillData = await fillResponse.json();
+            console.log('✅ Form auto-filled:', fillData);
+          } else {
+            console.warn('⚠️ Auto-fill failed:', await fillResponse.text());
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error checking/filling form:', error);
+        // Don't block view - still show the form even if auto-fill fails
+      }
+    }
+
     setAppointmentForFormView(appointment);
     setConsultationForFormView(consultation);
     setCurrentScreen('view-consultation-form');
+    setLoadingFormView(false);
   };
 
   const handleBackFromConsultationForm = () => {
@@ -1350,6 +1399,17 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
+      {/* Loading overlay for form auto-fill */}
+      {loadingFormView && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 text-center shadow-xl">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+            <p className="text-aneya-navy font-medium">Preparing consultation form...</p>
+            <p className="text-gray-500 text-sm mt-1">Auto-filling from transcript</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1478,17 +1538,10 @@ function MainApp() {
             />
           )}
 
-          {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
-            <EditableDoctorReportCard
-              formType="infertility"
-              patientId={selectedPatient.id}
-              appointmentId={selectedAppointment.id}
-              editable={true}            />
-          )}
-
           {currentScreen === 'view-consultation-form' && appointmentForFormView && (
-            <div className="max-w-7xl mx-auto px-4 py-6">
-              <div className="mb-4 flex gap-2 flex-wrap">
+            <div className="bg-aneya-cream min-h-screen">
+              {/* Back button and download buttons */}
+              <div className="max-w-4xl mx-auto px-8 pt-6 pb-4 flex gap-2 flex-wrap">
                 <button
                   onClick={handleBackFromConsultationForm}
                   className="px-4 py-2 bg-aneya-navy text-white rounded-[12px] hover:bg-opacity-90 transition-colors"
@@ -1496,46 +1549,55 @@ function MainApp() {
                   ← Back to Appointments
                 </button>
                 {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                  <button
-                    onClick={handleDownloadPdf}
-                    disabled={generatingPdf}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
-                  </button>
+                  <>
+                    <button
+                      onClick={handleDownloadPdf}
+                      disabled={generatingPdf}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                      {generatingPdf ? 'Generating...' : 'Download Report'}
+                    </button>
+                    <button
+                      onClick={handleDownloadPrescriptionPdf}
+                      disabled={generatingPdf}
+                      className="px-3 py-2 bg-aneya-teal text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                      {generatingPdf ? 'Generating...' : 'Download Prescription'}
+                    </button>
+                  </>
                 )}
               </div>
 
-              {/* Patient Medical Report - Read-only view */}
-              <EditableDoctorReportCard
+              {/* Professional letterhead */}
+              <div className="max-w-4xl mx-auto px-8">
+                <div className="bg-[var(--medical-navy)] text-white p-6 rounded-t-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-[var(--medical-teal)] rounded-full flex items-center justify-center">
+                        <Activity className="w-8 h-8 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl text-white">{doctorProfile?.clinic_name || 'Healthcare Medical Center'}</h1>
+                        <p className="text-[var(--medical-cream)] mt-1 text-sm">Excellence in Patient Care</p>
+                      </div>
+                    </div>
+                    <div className="text-right text-sm text-[var(--medical-cream)]">
+                      <p>Consultation Form</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form - uses its own styling but without top padding */}
+              <DynamicConsultationForm
                 appointmentId={appointmentForFormView.id}
                 patientId={appointmentForFormView.patient_id}
-                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'antenatal_2'}
-                editable={false}
+                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'general'}
+                displayMode="flat"
+                embedded={true}
               />
-
-              {/* Download PDF buttons at bottom */}
-              {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                <div className="mt-6 flex justify-center gap-4">
-                  <button
-                    onClick={handleDownloadPdf}
-                    disabled={generatingPdf}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Report'}
-                  </button>
-                  <button
-                    onClick={handleDownloadPrescriptionPdf}
-                    disabled={generatingPdf}
-                    className="px-4 py-2 bg-aneya-teal text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Prescription'}
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

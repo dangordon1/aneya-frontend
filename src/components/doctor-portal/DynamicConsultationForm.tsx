@@ -75,6 +75,8 @@ interface DynamicConsultationFormProps {
   filledBy?: 'patient' | 'doctor';
   doctorUserId?: string;
   displayMode?: 'wizard' | 'flat';
+  readOnly?: boolean; // When true, displays form in read-only mode
+  embedded?: boolean; // When true, renders without outer wrapper (for embedding in parent container)
 }
 
 export function DynamicConsultationForm({
@@ -85,6 +87,8 @@ export function DynamicConsultationForm({
   onBack,
   filledBy = 'doctor',
   doctorUserId,
+  readOnly = false,
+  embedded = false,
 }: DynamicConsultationFormProps) {
   const [survey, setSurvey] = useState<Model | null>(null);
   const [formId, setFormId] = useState<string | null>(null);
@@ -347,9 +351,10 @@ export function DynamicConsultationForm({
 
         console.log(`📊 Fetched ${formType} schema from database:`, data);
 
-        // Extract title from schema metadata or generate from form_type
-        const title = data.title ||
-                     data.description ||
+        // Extract form name from schema metadata or generate from form_type
+        // Priority: name > title > generated from formType (avoid description as it's too long)
+        const title = data.name ||
+                     data.title ||
                      formType.split('_').map((word: string) =>
                        word.charAt(0).toUpperCase() + word.slice(1)
                      ).join(' ') + ' Consultation';
@@ -361,6 +366,11 @@ export function DynamicConsultationForm({
 
         // Apply Aneya theme
         surveyModel.applyTheme(aneyaTheme);
+
+        // Set read-only mode if specified
+        if (readOnly) {
+          surveyModel.mode = 'display';
+        }
 
         // Disable the SurveyJS completion page entirely
         // This is a doctor's form for adjustments, not a patient survey
@@ -388,7 +398,7 @@ export function DynamicConsultationForm({
     };
 
     fetchSchema();
-  }, [formType]);
+  }, [formType, readOnly]);
 
   // Fetch existing form data and populate tables with external data sources
   useEffect(() => {
@@ -668,6 +678,49 @@ export function DynamicConsultationForm({
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-navy mx-auto mb-4"></div>
           <p className="text-aneya-navy">Loading form schema...</p>
         </div>
+      </div>
+    );
+  }
+
+  // When embedded, render without outer wrapper (parent provides background/container)
+  if (embedded) {
+    return (
+      <div className="max-w-4xl mx-auto px-8 pb-8">
+        {/* Form Title - Dynamic from schema */}
+        <div className="bg-white rounded-b-lg shadow-2xl">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-[24px] font-bold text-aneya-navy">
+              {formTitle}
+            </h2>
+          </div>
+
+          {/* SurveyJS Form */}
+          <div className="p-6">
+            <Survey model={survey} />
+
+            {/* Back button */}
+            {onBack && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                >
+                  Back
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Auto-fill indicator */}
+        {autoFilledFields.size > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-blue-800">
+              ✨ {autoFilledFields.size} field(s) auto-filled from consultation
+            </p>
+          </div>
+        )}
       </div>
     );
   }
