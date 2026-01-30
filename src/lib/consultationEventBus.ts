@@ -18,7 +18,7 @@ export type ConsultationEventType =
 export interface DiarizationChunkEvent {
   segments: DiarizedSegment[];
   chunk_index: number;
-  form_type: 'obgyn' | 'infertility' | 'antenatal' | null;
+  form_type: string | null; // Dynamic form type from custom_forms table
   patient_id?: string;
   speaker_role_mapping?: Record<string, string>;  // Maps speaker IDs to roles
   speaker_confidence_scores?: Record<string, number>;  // Confidence scores (0.0-1.0)

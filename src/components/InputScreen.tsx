@@ -9,8 +9,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
-import { requiresOBGynForms } from '../utils/specialtyHelpers';
-import { EditableDoctorReportCard } from './doctor-portal/EditableDoctorReportCard';
+import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -171,20 +170,19 @@ const DEFAULT_PATIENT_DETAILS: PatientDetails = {
 };
 
 /**
- * Determine form type based on doctor's specialty and appointment type
- * Returns 'obgyn', 'infertility', 'antenatal', or null if no specialty-specific form
+ * Determine form type based on appointment type
+ * Returns a form_type string or null if no form type can be determined
+ * Note: This is a legacy fallback - form type should come from backend auto-fill or user selection
  */
-function determineFormType(doctorSpecialty: string | undefined, appointmentType?: string): 'obgyn' | 'infertility' | 'antenatal' | null {
-  // First, try to determine from appointment type (most reliable)
+function determineFormType(appointmentType?: string): string | null {
+  // Try to extract form type from appointment type (e.g., 'obgyn_infertility' -> 'infertility')
   if (appointmentType) {
-    if (appointmentType === 'obgyn_infertility') return 'infertility';
-    if (appointmentType === 'obgyn_antenatal') return 'antenatal';
-    if (appointmentType === 'obgyn_general_obgyn' || appointmentType.startsWith('obgyn_')) return 'obgyn';
-  }
-
-  // Fallback to doctor specialty if appointment type not available
-  if (doctorSpecialty && requiresOBGynForms(doctorSpecialty as any)) {
-    return 'obgyn';
+    // If appointment type includes an underscore, use the part after the underscore
+    const parts = appointmentType.split('_');
+    if (parts.length > 1) {
+      return parts.slice(1).join('_'); // e.g., 'obgyn_infertility' -> 'infertility'
+    }
+    return appointmentType;
   }
 
   return null;
@@ -622,7 +620,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       // Emit event for form auto-fill with backend-provided form data
       // Use form_type from backend if available, otherwise fall back to specialty-based determination
-      const formType = data.form_type || determinedConsultationType || determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
+      const formType = data.form_type || determinedConsultationType || determineFormType(appointmentContext?.appointment_type);
       console.log(`🔍 Using form type: ${formType} (from_backend=${!!data.form_type}, determined=${determinedConsultationType !== null})`);
       console.log(`🔍 Form auto-fill check:`, {
         formType,
@@ -1111,6 +1109,28 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           }
         }
 
+        // Save the summary_data to the consultation in the database
+        if (consultationId && data.consultation_data?.summary_data) {
+          try {
+            const { supabase } = await import('../lib/supabase');
+            const { error: updateError } = await supabase
+              .from('consultations')
+              .update({
+                summary_data: data.consultation_data.summary_data,
+                consultation_text: data.consultation_data.consultation_text || consultation
+              })
+              .eq('id', consultationId);
+
+            if (updateError) {
+              console.error('❌ Failed to save summary_data:', updateError);
+            } else {
+              console.log('✅ Summary data saved to consultation');
+            }
+          } catch (saveErr) {
+            console.error('❌ Error saving summary_data:', saveErr);
+          }
+        }
+
         // NEW: Call auto-fill endpoint if we have a saved consultation
         if (consultationId) {
           console.log(`📋 Triggering form auto-fill for consultation ${consultationId}...`);
@@ -1130,7 +1150,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         });
 
         if (segments && segments.length > 0 && preFilledPatient?.id) {
-          const formType = determinedConsultationType || determineFormType(doctorProfile?.specialty, appointmentContext?.appointment_type);
+          const formType = determinedConsultationType || determineFormType(appointmentContext?.appointment_type);
           console.log(`🔍 Computed formType: ${formType}`);
 
           if (formType) {
@@ -2778,14 +2798,13 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {/* Inline Embedded Forms - Display below buttons */}
                 {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
                   <div className="mt-6">
-                    <EditableDoctorReportCard
-                      appointmentId={appointmentContext.id}
-                      patientId={preFilledPatient.id}
+                    <DynamicConsultationForm
                       formType={selectedFormType}
-                      onFormComplete={() => {
-                        setSelectedFormType(null);
-                      }}
-                      editable={true}
+                      patientId={preFilledPatient.id}
+                      appointmentId={appointmentContext.id}
+                      doctorUserId={user?.id}
+                      displayMode="flat"
+                      onComplete={() => setSelectedFormType(null)}
                     />
                   </div>
                 )}

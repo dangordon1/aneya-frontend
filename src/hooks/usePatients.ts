@@ -313,14 +313,22 @@ export function usePatients(): UsePatientsReturn {
           }
         }
 
-        const { error: deleteError } = await supabase
+        // Soft delete by setting archived = true (RLS policy restricts hard deletes to superadmins)
+        const { data: updatedPatient, error: archiveError } = await supabase
           .from('patients')
-          .delete()
-          .eq('id', id);
+          .update({ archived: true })
+          .eq('id', id)
+          .select('id, archived')
+          .single();
 
-        if (deleteError) throw deleteError;
+        if (archiveError) throw archiveError;
 
-        // Remove from local state
+        // Verify the update actually took effect (catches silent RLS failures)
+        if (!updatedPatient || updatedPatient.archived !== true) {
+          throw new Error('Failed to archive patient - update may have been blocked by permissions');
+        }
+
+        // Remove from local state (archived patients are filtered out)
         setPatients((prev) => prev.filter((p) => p.id !== id));
 
         return true;
