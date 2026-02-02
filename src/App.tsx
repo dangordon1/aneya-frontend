@@ -1,6 +1,5 @@
 import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { Download } from 'lucide-react';
 import { LandingPage } from './components/LandingPage';
 import { LoginScreen } from './components/LoginScreen';
 import OTPVerificationScreen from './components/OTPVerificationScreen';
@@ -38,7 +37,7 @@ const AllDoctorsTab = lazy(() => import('./components/AllDoctorsTab').then(m => 
 const DesignTestPage = lazy(() => import('./pages/DesignTestPage').then(m => ({ default: m.DesignTestPage })));
 // ✨ FIX: Import statically to avoid mixed import patterns (these are also used by other components)
 // Lazy loading these causes "Importing a module script failed" errors in production
-import { EditableDoctorReportCard } from './components/doctor-portal/EditableDoctorReportCard';
+import { MedicalForm } from './components/doctor-portal/MedicalForm';
 
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
@@ -106,6 +105,7 @@ function MainApp() {
   const [appointmentForFormView, setAppointmentForFormView] = useState<AppointmentWithPatient | null>(null); // For viewing consultation forms
   const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
   const [generatingPdf, setGeneratingPdf] = useState(false); // PDF generation state for view consultation form screen
+  const [autoFillingForm, setAutoFillingForm] = useState(false); // Auto-fill loading state for view consultation form
   const { saveConsultation } = useConsultations();
   const { createAppointment } = useAppointments();
 
@@ -1225,9 +1225,47 @@ function MainApp() {
     setCurrentScreen('patients');
   };
 
-  const handleViewConsultationForm = (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
+  const handleViewConsultationForm = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
     setAppointmentForFormView(appointment);
     setConsultationForFormView(consultation);
+
+    // Auto-fill the consultation form if no form data exists yet
+    if (consultation && appointment.status === 'completed') {
+      try {
+        setAutoFillingForm(true);
+        const checkResponse = await fetch(
+          `${API_URL}/api/consultation-form?appointment_id=${appointment.id}&form_type=${consultation.detected_consultation_type || appointment.specialty_subtype || 'general'}`
+        );
+        if (checkResponse.ok) {
+          const checkData = await checkResponse.json();
+          if (!checkData.form) {
+            // No form data exists - trigger auto-fill
+            console.log('No existing form data, triggering auto-fill...');
+            const autoFillResponse = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                consultation_id: consultation.id,
+                appointment_id: appointment.id,
+                patient_id: consultation.patient_id || appointment.patient_id,
+                original_transcript: consultation.original_transcript || consultation.consultation_text || '',
+                consultation_text: consultation.consultation_text || '',
+                patient_snapshot: consultation.patient_snapshot || {},
+              }),
+            });
+            if (!autoFillResponse.ok) {
+              console.error('Auto-fill failed:', await autoFillResponse.text());
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Auto-fill check/trigger failed:', error);
+        // Non-blocking - continue to show the form
+      } finally {
+        setAutoFillingForm(false);
+      }
+    }
+
     setCurrentScreen('view-consultation-form');
   };
 
@@ -1235,43 +1273,6 @@ function MainApp() {
     setAppointmentForFormView(null);
     setConsultationForFormView(null);
     setCurrentScreen('appointments');
-  };
-
-  const handleDownloadPdf = async () => {
-    if (!appointmentForFormView?.consultation_id) return;
-
-    setGeneratingPdf(true);
-    try {
-      const response = await fetch(
-        `${API_URL}/api/appointments/${appointmentForFormView.id}/consultation-pdf`,
-        { method: 'GET' }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to generate PDF');
-      }
-
-      // Create blob from response
-      const blob = await response.blob();
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const date = new Date(appointmentForFormView.scheduled_time);
-      const dateStr = date.toISOString().split('T')[0];
-      a.download = `consultation_${(appointmentForFormView.patient?.name || 'patient').replace(/\s+/g, '_')}_${dateStr}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setGeneratingPdf(false);
-    }
   };
 
   const handleDownloadAnalysisPdf = async () => {
@@ -1479,63 +1480,39 @@ function MainApp() {
           )}
 
           {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
-            <EditableDoctorReportCard
+            <MedicalForm
               formType="infertility"
+              formName="Infertility Consultation"
+              specialty={selectedAppointment.specialty || 'obstetrics_gynecology'}
+              mode="editable"
               patientId={selectedPatient.id}
               appointmentId={selectedAppointment.id}
-              editable={true}            />
+              enableAutoSave
+              enablePdfDownload
+              onBack={handleBackFromConsultationForm}
+            />
           )}
 
           {currentScreen === 'view-consultation-form' && appointmentForFormView && (
             <div className="max-w-7xl mx-auto px-4 py-6">
-              <div className="mb-4 flex gap-2 flex-wrap">
-                <button
-                  onClick={handleBackFromConsultationForm}
-                  className="px-4 py-2 bg-aneya-navy text-white rounded-[12px] hover:bg-opacity-90 transition-colors"
-                >
-                  ← Back to Appointments
-                </button>
-                {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                  <button
-                    onClick={handleDownloadPdf}
-                    disabled={generatingPdf}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download PDF Report'}
-                  </button>
-                )}
-              </div>
-
-              {/* Patient Medical Report - Read-only view */}
-              <EditableDoctorReportCard
-                appointmentId={appointmentForFormView.id}
-                patientId={appointmentForFormView.patient_id}
-                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'antenatal_2'}
-                editable={false}
-              />
-
-              {/* Download PDF buttons at bottom */}
-              {appointmentForFormView.consultation_id && appointmentForFormView.status === 'completed' && (
-                <div className="mt-6 flex justify-center gap-4">
-                  <button
-                    onClick={handleDownloadPdf}
-                    disabled={generatingPdf}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Report'}
-                  </button>
-                  <button
-                    onClick={handleDownloadPrescriptionPdf}
-                    disabled={generatingPdf}
-                    className="px-4 py-2 bg-aneya-teal text-white rounded-[8px] text-[14px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Download className={`w-4 h-4 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                    {generatingPdf ? 'Generating...' : 'Download Prescription'}
-                  </button>
+              {autoFillingForm && (
+                <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                  <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent"></div>
+                  Auto-filling form from consultation data...
                 </div>
               )}
+
+              <MedicalForm
+                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'general'}
+                formName={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'Consultation Form'}
+                specialty={appointmentForFormView.specialty || 'general'}
+                mode="editable"
+                patientId={appointmentForFormView.patient_id}
+                appointmentId={appointmentForFormView.id}
+                enableAutoSave
+                enablePdfDownload
+                onBack={handleBackFromConsultationForm}
+              />
             </div>
           )}
 

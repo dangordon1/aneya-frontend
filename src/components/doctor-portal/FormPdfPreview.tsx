@@ -1,6 +1,6 @@
 /**
  * Frontend PDF Preview Component using @react-pdf/renderer
- * Renders form schema with sample data as a PDF document
+ * Renders form data as a professional printed report matching the MedicalForm letterhead style.
  */
 
 import React from 'react';
@@ -14,9 +14,6 @@ import {
 } from '@react-pdf/renderer';
 import { generateSampleFormData, formatFieldLabel } from '../../utils/formSampleData';
 
-// Register fonts (using built-in Helvetica as fallback)
-// For production, you could register custom fonts like Inter here
-
 interface ClinicBranding {
   clinic_name?: string | null;
   clinic_logo_url?: string | null;
@@ -29,7 +26,7 @@ interface ClinicBranding {
 interface FieldDefinition {
   name: string;
   label?: string;
-  type: string;
+  type?: string;
   input_type?: string;
   row_fields?: FieldDefinition[];
   required?: boolean;
@@ -47,20 +44,20 @@ interface FormPdfDocumentProps {
   schema: FormSchema;
   formName: string;
   clinicBranding?: ClinicBranding;
+  formData?: Record<string, Record<string, any>>;
 }
 
 // Default colors matching Aneya design system
 const DEFAULT_COLORS = {
   primary: '#0c3555',    // aneya-navy
   accent: '#1d9e99',     // aneya-teal
-  text: '#4a4a4a',
+  text: '#333333',
   textLight: '#6b6b6b',
-  lightGray: '#e5e5e5',
+  lightGray: '#d1d5db',
   white: '#ffffff',
-  background: '#f6f5ee', // aneya-cream
+  cream: '#f6f5ee',      // aneya-cream
 };
 
-// Create styles with dynamic colors
 const createStyles = (colors: typeof DEFAULT_COLORS) =>
   StyleSheet.create({
     page: {
@@ -68,101 +65,156 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
       backgroundColor: colors.white,
       paddingTop: 40,
       paddingBottom: 60,
-      paddingHorizontal: 50,
+      paddingHorizontal: 0,
       fontFamily: 'Helvetica',
     },
-    header: {
-      marginBottom: 20,
-    },
-    headerRow: {
+    // --- Letterhead header (navy background) ---
+    letterhead: {
+      backgroundColor: colors.primary,
+      paddingVertical: 18,
+      paddingHorizontal: 40,
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 10,
+      alignItems: 'center',
     },
-    logo: {
-      maxWidth: 100,
-      maxHeight: 50,
-      objectFit: 'contain',
+    letterheadLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    logoCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    logoText: {
+      fontSize: 16,
+      fontFamily: 'Helvetica-Bold',
+      color: colors.white,
+    },
+    logoImage: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      objectFit: 'cover',
     },
     clinicName: {
+      fontSize: 15,
+      fontFamily: 'Helvetica-Bold',
+      color: colors.white,
+    },
+    clinicSubtitle: {
+      fontSize: 8,
+      color: colors.cream,
+      marginTop: 2,
+    },
+    letterheadRight: {
+      alignItems: 'flex-end',
+    },
+    letterheadFormName: {
+      fontSize: 8,
+      color: colors.cream,
+    },
+    // --- Form content area ---
+    content: {
+      paddingHorizontal: 40,
+      paddingTop: 18,
+    },
+    // --- Form title bar ---
+    titleBar: {
+      borderBottomWidth: 2,
+      borderBottomColor: colors.accent,
+      paddingBottom: 8,
+      marginBottom: 16,
+    },
+    formTitle: {
       fontSize: 16,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
-      marginBottom: 4,
     },
-    title: {
-      fontSize: 20,
-      fontFamily: 'Helvetica-Bold',
-      color: colors.primary,
-      textAlign: 'center',
-      marginBottom: 8,
-    },
-    subtitle: {
-      fontSize: 10,
-      color: colors.textLight,
-      textAlign: 'center',
-      marginBottom: 15,
-    },
-    divider: {
-      borderBottomWidth: 2,
-      borderBottomColor: colors.accent,
-      marginBottom: 15,
-    },
+    // --- Section ---
     section: {
-      marginBottom: 15,
+      marginBottom: 14,
     },
     sectionHeader: {
       fontSize: 12,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
-      marginBottom: 4,
+      marginBottom: 3,
     },
     sectionUnderline: {
       borderBottomWidth: 1,
       borderBottomColor: colors.accent,
       marginBottom: 8,
-      width: '100%',
     },
-    sectionDescription: {
-      fontSize: 9,
-      color: colors.textLight,
-      fontStyle: 'italic',
-      marginBottom: 8,
-    },
-    fieldRow: {
+    // --- 2-column field grid ---
+    fieldGrid: {
       flexDirection: 'row',
-      marginBottom: 4,
-      alignItems: 'flex-start',
-    },
-    fieldLabel: {
-      fontSize: 10,
-      fontFamily: 'Helvetica-Bold',
-      color: colors.primary,
-      width: '30%',
-      minWidth: 100,
-    },
-    fieldValue: {
-      fontSize: 10,
-      color: colors.text,
-      flex: 1,
       flexWrap: 'wrap',
     },
-    // Table styles
+    fieldHalf: {
+      width: '50%',
+      paddingRight: 10,
+      paddingBottom: 6,
+    },
+    fieldFull: {
+      width: '100%',
+      paddingBottom: 6,
+    },
+    // --- Field: label + underlined value (professional printed look) ---
+    fieldRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      borderBottomWidth: 0.5,
+      borderBottomColor: colors.lightGray,
+      paddingBottom: 3,
+      minHeight: 18,
+    },
+    fieldRowTextarea: {
+      borderBottomWidth: 0.5,
+      borderBottomColor: colors.lightGray,
+      paddingBottom: 4,
+      minHeight: 28,
+    },
+    fieldLabel: {
+      fontSize: 8,
+      fontFamily: 'Helvetica-Bold',
+      color: colors.primary,
+      marginRight: 4,
+    },
+    fieldValue: {
+      fontSize: 9,
+      color: colors.text,
+      flex: 1,
+    },
+    fieldValueBlock: {
+      fontSize: 9,
+      color: colors.text,
+      marginTop: 2,
+      lineHeight: 1.4,
+    },
+    fieldLabelBlock: {
+      fontSize: 8,
+      fontFamily: 'Helvetica-Bold',
+      color: colors.primary,
+      marginBottom: 2,
+    },
+    // --- Table ---
     table: {
       marginTop: 4,
-      marginBottom: 8,
-      borderWidth: 1,
-      borderColor: colors.lightGray,
+      marginBottom: 6,
     },
     tableHeader: {
       flexDirection: 'row',
       backgroundColor: colors.primary,
       paddingVertical: 4,
-      paddingHorizontal: 4,
+      paddingHorizontal: 6,
     },
     tableHeaderCell: {
-      fontSize: 8,
+      fontSize: 7,
       fontFamily: 'Helvetica-Bold',
       color: colors.white,
       flex: 1,
@@ -171,13 +223,13 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
     },
     tableRow: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
+      borderBottomWidth: 0.5,
       borderBottomColor: colors.lightGray,
       paddingVertical: 3,
-      paddingHorizontal: 4,
+      paddingHorizontal: 6,
     },
     tableRowAlt: {
-      backgroundColor: '#f9f9f9',
+      backgroundColor: '#f7f7f7',
     },
     tableCell: {
       fontSize: 8,
@@ -186,89 +238,132 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
       textAlign: 'center',
       paddingHorizontal: 2,
     },
-    footer: {
-      position: 'absolute',
-      bottom: 30,
-      left: 50,
-      right: 50,
-      textAlign: 'center',
+    // --- Signature footer ---
+    signatureFooter: {
+      marginTop: 20,
+      paddingTop: 14,
+      borderTopWidth: 2,
+      borderTopColor: colors.accent,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
     },
-    footerText: {
-      fontSize: 8,
-      color: colors.textLight,
-    },
-    footerBrand: {
+    signatureLeftText: {
       fontSize: 7,
       color: colors.textLight,
-      marginTop: 4,
+    },
+    signatureRight: {
+      alignItems: 'flex-end',
+    },
+    signatureLabel: {
+      fontSize: 9,
+      fontFamily: 'Helvetica-Bold',
+      color: colors.primary,
+    },
+    signatureLine: {
+      width: 150,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.text,
+      marginTop: 6,
+      marginBottom: 3,
+    },
+    signatureDate: {
+      fontSize: 7,
+      color: colors.textLight,
+    },
+    // --- Page footer ---
+    pageFooter: {
+      position: 'absolute',
+      bottom: 25,
+      left: 40,
+      right: 40,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    pageFooterText: {
+      fontSize: 6,
+      color: colors.textLight,
     },
     pageNumber: {
-      position: 'absolute',
-      bottom: 30,
-      right: 50,
-      fontSize: 8,
+      fontSize: 6,
       color: colors.textLight,
     },
   });
 
-// Component to render a single field
-const FieldDisplay: React.FC<{
+// --- Format a field value for display ---
+const formatValue = (value: any): string => {
+  if (value === undefined || value === null || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (value === true || value === 'true' || value === 'Yes') return 'Yes';
+  if (value === false || value === 'false' || value === 'No') return 'No';
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—';
+  return String(value);
+};
+
+// --- Inline field: "Label: value" on one line with subtle underline ---
+const InlineFieldDisplay: React.FC<{
   label: string;
-  value: string;
+  value: any;
   styles: ReturnType<typeof createStyles>;
 }> = ({ label, value, styles }) => (
   <View style={styles.fieldRow}>
     <Text style={styles.fieldLabel}>{label}:</Text>
-    <Text style={styles.fieldValue}>{value}</Text>
+    <Text style={styles.fieldValue}>{formatValue(value)}</Text>
   </View>
 );
 
-// Component to render a table
-const TableDisplay: React.FC<{
+// --- Block field: label on top, value below (for textarea / long text) ---
+const BlockFieldDisplay: React.FC<{
   label: string;
-  data: Array<Record<string, string>>;
-  rowFields: FieldDefinition[];
+  value: any;
   styles: ReturnType<typeof createStyles>;
-}> = ({ label, data, rowFields, styles }) => {
+}> = ({ label, value, styles }) => (
+  <View style={styles.fieldRowTextarea}>
+    <Text style={styles.fieldLabelBlock}>{label}:</Text>
+    <Text style={styles.fieldValueBlock}>{formatValue(value)}</Text>
+  </View>
+);
+
+// --- Table renderer ---
+const TableDisplay: React.FC<{
+  field: FieldDefinition;
+  data: Array<Record<string, any>>;
+  styles: ReturnType<typeof createStyles>;
+}> = ({ field, data, styles }) => {
+  const rowFields = field.row_fields || [];
+  const fieldLabel = field.label || formatFieldLabel(field.name);
+
   if (!data || data.length === 0) {
     return (
-      <View style={styles.fieldRow}>
-        <Text style={styles.fieldLabel}>{label}:</Text>
-        <Text style={styles.fieldValue}>No data</Text>
+      <View style={{ marginBottom: 6 }}>
+        <InlineFieldDisplay label={fieldLabel} value={null} styles={styles} />
       </View>
     );
   }
 
-  // Get column headers from row_fields
   const columns = rowFields.map(rf => ({
     name: rf.name,
     label: rf.label || formatFieldLabel(rf.name),
   }));
 
   return (
-    <View style={{ marginBottom: 10 }}>
-      <Text style={[styles.fieldLabel, { marginBottom: 4 }]}>{label}:</Text>
+    <View style={{ marginBottom: 6 }}>
+      <Text style={[styles.fieldLabelBlock, { marginBottom: 3 }]}>{fieldLabel}</Text>
       <View style={styles.table}>
-        {/* Header row */}
         <View style={styles.tableHeader}>
           {columns.map((col, idx) => (
-            <Text key={idx} style={styles.tableHeaderCell}>
-              {col.label}
-            </Text>
+            <Text key={idx} style={styles.tableHeaderCell}>{col.label}</Text>
           ))}
         </View>
-        {/* Data rows */}
         {data.map((row, rowIdx) => (
           <View
             key={rowIdx}
-            style={[
-              styles.tableRow,
-              rowIdx % 2 === 1 ? styles.tableRowAlt : {},
-            ]}
+            style={[styles.tableRow, rowIdx % 2 === 1 ? styles.tableRowAlt : {}]}
           >
             {columns.map((col, colIdx) => (
               <Text key={colIdx} style={styles.tableCell}>
-                {row[col.name] || '-'}
+                {row[col.name] || '—'}
               </Text>
             ))}
           </View>
@@ -278,11 +373,11 @@ const TableDisplay: React.FC<{
   );
 };
 
-// Component to render a section
+// --- Section renderer ---
 const SectionDisplay: React.FC<{
   sectionName: string;
   sectionConfig: SectionDefinition;
-  sectionData: Record<string, string | Array<Record<string, string>>>;
+  sectionData: Record<string, any>;
   styles: ReturnType<typeof createStyles>;
 }> = ({ sectionName, sectionConfig, sectionData, styles }) => {
   const fields = sectionConfig.fields || [];
@@ -291,53 +386,51 @@ const SectionDisplay: React.FC<{
     <View style={styles.section} wrap={false}>
       <Text style={styles.sectionHeader}>{formatFieldLabel(sectionName)}</Text>
       <View style={styles.sectionUnderline} />
-      {sectionConfig.description && (
-        <Text style={styles.sectionDescription}>{sectionConfig.description}</Text>
-      )}
-      {fields.map((field, idx) => {
-        const fieldValue = sectionData[field.name];
-        const fieldLabel = field.label || formatFieldLabel(field.name);
 
-        // Check if this is a table field
-        if (
-          field.type === 'array' &&
-          field.input_type?.includes('table') &&
-          Array.isArray(fieldValue)
-        ) {
+      <View style={styles.fieldGrid}>
+        {fields.map((field, idx) => {
+          const fieldValue = sectionData[field.name];
+          const fieldLabel = field.label || formatFieldLabel(field.name);
+          const fieldType = field.input_type || field.type || 'text';
+          const isTable = fieldType === 'table' || fieldType === 'table_transposed' || (field.type === 'array' && field.row_fields);
+          const isTextarea = fieldType === 'textarea';
+
+          if (isTable && Array.isArray(fieldValue)) {
+            return (
+              <View key={idx} style={styles.fieldFull}>
+                <TableDisplay field={field} data={fieldValue} styles={styles} />
+              </View>
+            );
+          }
+
+          if (isTextarea) {
+            return (
+              <View key={idx} style={styles.fieldFull}>
+                <BlockFieldDisplay label={fieldLabel} value={fieldValue} styles={styles} />
+              </View>
+            );
+          }
+
           return (
-            <TableDisplay
-              key={idx}
-              label={fieldLabel}
-              data={fieldValue as Array<Record<string, string>>}
-              rowFields={field.row_fields || []}
-              styles={styles}
-            />
+            <View key={idx} style={styles.fieldHalf}>
+              <InlineFieldDisplay label={fieldLabel} value={fieldValue} styles={styles} />
+            </View>
           );
-        }
-
-        // Regular field
-        return (
-          <FieldDisplay
-            key={idx}
-            label={fieldLabel}
-            value={String(fieldValue || '-')}
-            styles={styles}
-          />
-        );
-      })}
+        })}
+      </View>
     </View>
   );
 };
 
 /**
- * Main PDF Document component
+ * Main PDF Document component — professional printed report matching MedicalForm letterhead
  */
 export const FormPdfDocument: React.FC<FormPdfDocumentProps> = ({
   schema,
   formName,
   clinicBranding,
+  formData,
 }) => {
-  // Merge custom colors with defaults
   const colors = {
     ...DEFAULT_COLORS,
     ...(clinicBranding?.primary_color && { primary: clinicBranding.primary_color }),
@@ -348,72 +441,79 @@ export const FormPdfDocument: React.FC<FormPdfDocumentProps> = ({
 
   const styles = createStyles(colors);
 
-  // Generate sample data from schema
-  const sampleData = generateSampleFormData(schema);
+  const data = formData && Object.keys(formData).length > 0 ? formData : generateSampleFormData(schema);
 
-  // Sort sections by order if available
   const sortedSections = Object.entries(schema)
     .filter(([name]) => !['title', 'description', 'version', 'type'].includes(name))
     .sort(([, a], [, b]) => (a.order || 0) - (b.order || 0));
 
-  const generationDate = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const displayName = formatFieldLabel(formName);
+  const clinicDisplayName = clinicBranding?.clinic_name || 'Healthcare Medical Center';
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View>
-              {clinicBranding?.clinic_name && (
-                <Text style={styles.clinicName}>{clinicBranding.clinic_name}</Text>
-              )}
-            </View>
-            {clinicBranding?.clinic_logo_url && (
-              <Image
-                style={styles.logo}
-                src={clinicBranding.clinic_logo_url}
-              />
+        {/* Navy letterhead header (page 1 only) */}
+        <View style={styles.letterhead}>
+          <View style={styles.letterheadLeft}>
+            {clinicBranding?.clinic_logo_url ? (
+              <Image src={clinicBranding.clinic_logo_url} style={styles.logoImage} />
+            ) : (
+              <View style={styles.logoCircle}>
+                <Text style={styles.logoText}>+</Text>
+              </View>
             )}
+            <View>
+              <Text style={styles.clinicName}>{clinicDisplayName}</Text>
+              <Text style={styles.clinicSubtitle}>Excellence in Patient Care</Text>
+            </View>
           </View>
-          <Text style={styles.title}>{formatFieldLabel(formName)}</Text>
-          <Text style={styles.subtitle}>Generated: {generationDate}</Text>
-          <View style={styles.divider} />
+          <View style={styles.letterheadRight}>
+            <Text style={styles.letterheadFormName}>{displayName}</Text>
+          </View>
         </View>
 
-        {/* Sections */}
+        {/* Form title with teal underline */}
+        <View style={[styles.titleBar, { marginHorizontal: 40 }]}>
+          <Text style={styles.formTitle}>{displayName}</Text>
+        </View>
+
+        {/* Sections — direct children of Page for proper page break handling */}
         {sortedSections.map(([sectionName, sectionConfig]) => (
-          <SectionDisplay
-            key={sectionName}
-            sectionName={sectionName}
-            sectionConfig={sectionConfig}
-            sectionData={sampleData[sectionName] || {}}
-            styles={styles}
-          />
+          <View key={sectionName} style={{ paddingHorizontal: 40 }}>
+            <SectionDisplay
+              sectionName={sectionName}
+              sectionConfig={sectionConfig}
+              sectionData={data[sectionName] || {}}
+              styles={styles}
+            />
+          </View>
         ))}
 
-        {/* Footer */}
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>
-            This document is confidential and for medical professionals only
-          </Text>
-          <Text style={styles.footerBrand}>
-            Powered by Aneya Healthcare Platform
-          </Text>
+        {/* Signature footer */}
+        <View style={[styles.signatureFooter, { marginHorizontal: 40 }]}>
+          <View>
+            <Text style={styles.signatureLeftText}>
+              All data is for medical professional use only.
+            </Text>
+          </View>
+          <View style={styles.signatureRight}>
+            <Text style={styles.signatureLabel}>Physician Signature</Text>
+            <View style={styles.signatureLine} />
+            <Text style={styles.signatureDate}>Date: ____________</Text>
+          </View>
         </View>
 
-        {/* Page number */}
-        <Text
-          style={styles.pageNumber}
-          render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
-          fixed
-        />
+        {/* Page footer */}
+        <View style={styles.pageFooter} fixed>
+          <Text style={styles.pageFooterText}>
+            Confidential — Powered by Aneya Healthcare Platform
+          </Text>
+          <Text
+            style={styles.pageNumber}
+            render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+          />
+        </View>
       </Page>
     </Document>
   );

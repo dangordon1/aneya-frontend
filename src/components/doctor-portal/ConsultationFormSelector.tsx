@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DynamicConsultationForm } from './DynamicConsultationForm';
+import { MedicalForm } from './MedicalForm';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -158,13 +158,18 @@ export function ConsultationFormSelector({
 
       {/* Dynamic Form - only one form ever displayed */}
       {formToDisplay && (
-        <DynamicConsultationForm
+        <MedicalForm
           key={formToDisplay.form_type}
           formType={formToDisplay.form_type}
+          formName={getFormDisplayName(formToDisplay)}
+          specialty={specialty}
+          mode="editable"
           patientId={patientId}
           appointmentId={appointmentId}
           doctorUserId={doctorUserId}
-          displayMode="flat"
+          enableAutoSave
+          enableAutoFill
+          enablePdfDownload
           onBack={onBack}
         />
       )}

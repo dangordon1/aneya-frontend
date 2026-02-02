@@ -18,7 +18,7 @@ interface SchemaReviewEditorProps {
     facility_name?: string;
     logo_url?: string;
   };
-  onSave: (schema: any, pdfTemplate: any, metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean }) => Promise<void>;
+  onSave: (schema: any, pdfTemplate: any, metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean; logoRejected?: boolean }) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -44,6 +44,7 @@ export function SchemaReviewEditor({
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [logoRejected, setLogoRejected] = useState(false);
 
   // Convert schema object to sections array for easier editing
   const sections = Object.entries(schema).map(([name, data]) => ({
@@ -60,7 +61,8 @@ export function SchemaReviewEditor({
         specialty,
         description,
         patientCriteria,
-        isPublic
+        isPublic,
+        logoRejected,
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to save form');
@@ -111,57 +113,79 @@ export function SchemaReviewEditor({
 
       {/* Extracted Logo Information */}
       {logoInfo && logoInfo.has_logo && (
-        <div className="bg-aneya-navy border border-aneya-navy rounded-lg p-4">
-          <h4 className="font-medium text-white text-sm mb-3 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Extracted Logo Information
-          </h4>
+        <div className={`border rounded-lg p-4 ${logoRejected ? 'bg-gray-100 border-gray-300' : 'bg-aneya-navy border-aneya-navy'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className={`font-medium text-sm flex items-center gap-2 ${logoRejected ? 'text-gray-500' : 'text-white'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Extracted Logo {logoRejected && <span className="text-xs font-normal">(Rejected)</span>}
+            </h4>
+            <button
+              onClick={() => setLogoRejected(!logoRejected)}
+              className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+                logoRejected
+                  ? 'bg-aneya-teal text-white hover:bg-opacity-90'
+                  : 'bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-400/30'
+              }`}
+            >
+              {logoRejected ? 'Restore Logo' : 'Reject Logo'}
+            </button>
+          </div>
 
-          {/* Display extracted or clinic logo if available */}
-          {(logoInfo.logo_url || doctorProfile?.clinic_logo_url) && (
-            <div className="mb-4 flex justify-center">
-              <div className="bg-white rounded-lg p-3 inline-block">
-                <img
-                  src={logoInfo.logo_url || doctorProfile?.clinic_logo_url || ''}
-                  alt="Clinic Logo"
-                  className="max-h-20 max-w-full object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+          {!logoRejected && (
+            <>
+              {/* Display extracted or clinic logo if available */}
+              {(logoInfo.logo_url || doctorProfile?.clinic_logo_url) && (
+                <div className="mb-4 flex justify-center">
+                  <div className="bg-white rounded-lg p-3 inline-block">
+                    <img
+                      src={logoInfo.logo_url || doctorProfile?.clinic_logo_url || ''}
+                      alt="Clinic Logo"
+                      className="max-h-20 max-w-full object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 text-sm">
+                {logoInfo.facility_name && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-300 font-medium min-w-24">Facility:</span>
+                    <span className="text-white">{logoInfo.facility_name}</span>
+                  </div>
+                )}
+                {logoInfo.logo_description && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-300 font-medium min-w-24">Description:</span>
+                    <span className="text-white">{logoInfo.logo_description}</span>
+                  </div>
+                )}
+                {logoInfo.logo_position && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-300 font-medium min-w-24">Position:</span>
+                    <span className="text-white capitalize">{logoInfo.logo_position.replace('-', ' ')}</span>
+                  </div>
+                )}
               </div>
-            </div>
+              <p className="text-xs text-gray-300 mt-2 italic">
+                {logoInfo.logo_url
+                  ? "Logo extracted from form and will be saved to your profile for use on PDFs"
+                  : doctorProfile?.clinic_logo_url
+                  ? "Your clinic logo will appear on generated PDFs"
+                  : "Logo detected - it will be extracted and saved when you save this form"}
+              </p>
+            </>
           )}
 
-          <div className="space-y-2 text-sm">
-            {logoInfo.facility_name && (
-              <div className="flex items-start gap-2">
-                <span className="text-gray-300 font-medium min-w-24">Facility:</span>
-                <span className="text-white">{logoInfo.facility_name}</span>
-              </div>
-            )}
-            {logoInfo.logo_description && (
-              <div className="flex items-start gap-2">
-                <span className="text-gray-300 font-medium min-w-24">Description:</span>
-                <span className="text-white">{logoInfo.logo_description}</span>
-              </div>
-            )}
-            {logoInfo.logo_position && (
-              <div className="flex items-start gap-2">
-                <span className="text-gray-300 font-medium min-w-24">Position:</span>
-                <span className="text-white capitalize">{logoInfo.logo_position.replace('-', ' ')}</span>
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-gray-300 mt-2 italic">
-            {logoInfo.logo_url
-              ? "Logo extracted from form and will be saved to your profile for use on PDFs"
-              : doctorProfile?.clinic_logo_url
-              ? "Your clinic logo will appear on generated PDFs"
-              : "Logo detected - it will be extracted and saved when you save this form"}
-          </p>
+          {logoRejected && (
+            <p className="text-xs text-gray-500 italic">
+              This logo will not be saved. Your existing clinic logo (if any) will be used instead.
+            </p>
+          )}
         </div>
       )}
 

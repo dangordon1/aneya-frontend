@@ -14,7 +14,6 @@ interface AppointmentDetailModalProps {
   onAnalyze?: (appointment: AppointmentWithPatient, consultation: Consultation) => void;
   onResummarize?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => Promise<void>;
   onRerunTranscription?: (appointment: AppointmentWithPatient, consultation: Consultation, newTranscript: string) => Promise<void>;
-  onFillForm?: (appointment: AppointmentWithPatient, consultation: Consultation) => Promise<void>;
   onViewConsultationForm?: (appointment: AppointmentWithPatient, consultation: Consultation | null) => void;
   onResearchAnalysis?: (consultation: Consultation) => Promise<void>;
   onDownloadPrescription?: (consultationId: string) => void;
@@ -32,7 +31,6 @@ export function AppointmentDetailModal({
   onAnalyze,
   onResummarize,
   onRerunTranscription,
-  onFillForm,
   onViewConsultationForm,
   onResearchAnalysis,
   onDownloadPrescription,
@@ -42,7 +40,6 @@ export function AppointmentDetailModal({
   onDelete,
 }: AppointmentDetailModalProps) {
   const [isResummarizing, setIsResummarizing] = useState(false);
-  const [isFillingForm, setIsFillingForm] = useState(false);
   const [isOriginalTranscriptExpanded, setIsOriginalTranscriptExpanded] = useState(false);
   const [isEnglishTranscriptExpanded, setIsEnglishTranscriptExpanded] = useState(false);
   const [showAnalysisModeModal, setShowAnalysisModeModal] = useState(false);
@@ -266,7 +263,6 @@ export function AppointmentDetailModal({
   const hasAiAnalysis = consultation?.diagnoses && consultation.diagnoses.length > 0;
   const canAnalyze = !hasAiAnalysis && onAnalyze && consultation;
   const canResummarize = onResummarize && consultation;
-  const canFillForm = onFillForm && consultation;
   const canRerunTranscription = onRerunTranscription && consultation?.audio_url;
 
   // Show consultation form button for all completed appointments with consultations
@@ -339,7 +335,7 @@ export function AppointmentDetailModal({
         {consultation ? (
           <div className="space-y-4">
             {/* Action buttons */}
-            {viewMode === 'doctor' && (canResummarize || canFillForm || canAnalyze || canRerunTranscription || canViewConsultationForm) && (
+            {viewMode === 'doctor' && (canResummarize || canAnalyze || canRerunTranscription || canViewConsultationForm) && (
               <div className="flex gap-2 flex-wrap">
                 {canViewConsultationForm && (
                   <button
@@ -365,23 +361,6 @@ export function AppointmentDetailModal({
                   >
                     <RefreshCw className={`w-4 h-4 ${isResummarizing ? 'animate-spin' : ''}`} />
                     {isResummarizing ? 'Re-summarizing...' : 'Re-summarize'}
-                  </button>
-                )}
-                {canFillForm && (
-                  <button
-                    onClick={async () => {
-                      setIsFillingForm(true);
-                      try {
-                        await onFillForm(appointment, consultation);
-                      } finally {
-                        setIsFillingForm(false);
-                      }
-                    }}
-                    disabled={isFillingForm}
-                    className="px-3 py-2 bg-orange-500 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <FileText className={`w-4 h-4 ${isFillingForm ? 'animate-pulse' : ''}`} />
-                    {isFillingForm ? 'Filling Form...' : 'Fill Form'}
                   </button>
                 )}
                 {canRerunTranscription && (

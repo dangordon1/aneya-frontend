@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { Appointment, Doctor, Consultation, AppointmentWithPatient } from '../../types/database';
 import { requiresOBGynForms } from '../../utils/specialtyHelpers';
-import { DynamicConsultationForm } from '../doctor-portal/DynamicConsultationForm';
+import { MedicalForm } from '../doctor-portal/MedicalForm';
 import { PastAppointmentCard } from '../PastAppointmentCard';
 
 interface AppointmentWithDetails extends Appointment {
@@ -236,15 +236,17 @@ export function PatientAppointments({ onBack }: Props) {
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-6">
-                <DynamicConsultationForm
+                <MedicalForm
                   formType={selectedOBGynForm.formType}
+                  formName={selectedOBGynForm.formType}
+                  specialty="obstetrics_gynecology"
+                  mode="editable"
                   patientId={selectedOBGynForm.patientId}
                   appointmentId={selectedOBGynForm.appointmentId}
                   filledBy="patient"
-                  displayMode="flat"
+                  enableAutoSave
                   onComplete={() => {
                     setSelectedOBGynForm(null);
-                    // Refresh appointments to show updated form status
                     fetchAppointments();
                   }}
                 />

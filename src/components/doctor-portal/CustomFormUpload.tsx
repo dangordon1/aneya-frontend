@@ -265,7 +265,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
   const handleSave = async (
     schema: any,
     pdfTemplate: any,
-    metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean }
+    metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean; logoRejected?: boolean }
   ) => {
     // ✅ VALIDATE SCHEMA BEFORE SAVING
     if (!schema || typeof schema !== 'object') {
@@ -293,6 +293,14 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
 
     console.log(`💾 Saving form with ${fieldCount} fields`);
 
+    // Strip logo from metadata if user rejected it
+    let saveMetadata = extractedData?.metadata;
+    if (metadata.logoRejected && saveMetadata) {
+      saveMetadata = { ...saveMetadata };
+      delete saveMetadata.logo_info;
+      console.log('🚫 Logo rejected by user — stripped from metadata');
+    }
+
     const makeRequest = async (token: string) => {
       const isEditing = !!extractedData?.form_id;
       const url = isEditing
@@ -314,7 +322,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
           description: metadata.description,
           patient_criteria: metadata.patientCriteria,
           is_public: metadata.isPublic,
-          metadata: extractedData?.metadata  // Include metadata with logo_info and logo_url
+          metadata: saveMetadata
         })
       });
     };

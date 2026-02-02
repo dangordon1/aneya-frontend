@@ -9,7 +9,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { LocationSelector } from './LocationSelector';
 import { FeedbackButton } from './FeedbackButton';
 import { useAuth } from '../contexts/AuthContext';
-import { DynamicConsultationForm } from './doctor-portal/DynamicConsultationForm';
+import { MedicalForm } from './doctor-portal/MedicalForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
 import { consultationEventBus } from '../lib/consultationEventBus';
@@ -2798,12 +2798,17 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                 {/* Inline Embedded Forms - Display below buttons */}
                 {selectedFormType && appointmentContext && preFilledPatient && appointmentContext.id && (
                   <div className="mt-6">
-                    <DynamicConsultationForm
+                    <MedicalForm
                       formType={selectedFormType}
+                      formName={selectedFormType}
+                      specialty={appointmentContext?.specialty || 'general'}
+                      mode="editable"
                       patientId={preFilledPatient.id}
                       appointmentId={appointmentContext.id}
                       doctorUserId={user?.id}
-                      displayMode="flat"
+                      enableAutoSave
+                      enableAutoFill
+                      enablePdfDownload
                       onComplete={() => setSelectedFormType(null)}
                     />
                   </div>
