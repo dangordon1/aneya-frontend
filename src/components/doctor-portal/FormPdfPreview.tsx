@@ -63,8 +63,8 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
     page: {
       flexDirection: 'column',
       backgroundColor: colors.white,
-      paddingTop: 40,
-      paddingBottom: 60,
+      paddingTop: 0,
+      paddingBottom: 36,
       paddingHorizontal: 0,
       fontFamily: 'Helvetica',
     },
@@ -91,7 +91,7 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
       alignItems: 'center',
     },
     logoText: {
-      fontSize: 16,
+      fontSize: 14,
       fontFamily: 'Helvetica-Bold',
       color: colors.white,
     },
@@ -115,40 +115,41 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
       alignItems: 'flex-end',
     },
     letterheadFormName: {
-      fontSize: 8,
+      fontSize: 10,
       color: colors.cream,
     },
     // --- Form content area ---
     content: {
-      paddingHorizontal: 40,
-      paddingTop: 18,
+      paddingHorizontal: 30,
+      paddingTop: 10,
     },
     // --- Form title bar ---
     titleBar: {
       borderBottomWidth: 2,
       borderBottomColor: colors.accent,
-      paddingBottom: 8,
-      marginBottom: 16,
+      paddingBottom: 4,
+      marginBottom: 14,
     },
     formTitle: {
-      fontSize: 16,
+      fontSize: 20,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
     },
     // --- Section ---
     section: {
-      marginBottom: 14,
+      marginBottom: 6,
+      marginTop: 8,
     },
     sectionHeader: {
-      fontSize: 12,
+      fontSize: 10,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
-      marginBottom: 3,
+      marginBottom: 2,
     },
     sectionUnderline: {
       borderBottomWidth: 1,
       borderBottomColor: colors.accent,
-      marginBottom: 8,
+      marginBottom: 4,
     },
     // --- 2-column field grid ---
     fieldGrid: {
@@ -157,12 +158,12 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
     },
     fieldHalf: {
       width: '50%',
-      paddingRight: 10,
-      paddingBottom: 6,
+      paddingRight: 8,
+      paddingBottom: 3,
     },
     fieldFull: {
       width: '100%',
-      paddingBottom: 6,
+      paddingBottom: 3,
     },
     // --- Field: label + underlined value (professional printed look) ---
     fieldRow: {
@@ -170,78 +171,78 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
       alignItems: 'flex-end',
       borderBottomWidth: 0.5,
       borderBottomColor: colors.lightGray,
-      paddingBottom: 3,
-      minHeight: 18,
+      paddingBottom: 1,
+      minHeight: 14,
     },
     fieldRowTextarea: {
       borderBottomWidth: 0.5,
       borderBottomColor: colors.lightGray,
-      paddingBottom: 4,
-      minHeight: 28,
+      paddingBottom: 2,
+      minHeight: 20,
     },
     fieldLabel: {
-      fontSize: 8,
+      fontSize: 7,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
-      marginRight: 4,
+      marginRight: 3,
     },
     fieldValue: {
-      fontSize: 9,
+      fontSize: 8,
       color: colors.text,
       flex: 1,
     },
     fieldValueBlock: {
-      fontSize: 9,
+      fontSize: 8,
       color: colors.text,
-      marginTop: 2,
-      lineHeight: 1.4,
+      marginTop: 1,
+      lineHeight: 1.3,
     },
     fieldLabelBlock: {
-      fontSize: 8,
+      fontSize: 7,
       fontFamily: 'Helvetica-Bold',
       color: colors.primary,
-      marginBottom: 2,
+      marginBottom: 1,
     },
     // --- Table ---
     table: {
-      marginTop: 4,
-      marginBottom: 6,
+      marginTop: 2,
+      marginBottom: 3,
     },
     tableHeader: {
       flexDirection: 'row',
       backgroundColor: colors.primary,
-      paddingVertical: 4,
-      paddingHorizontal: 6,
+      paddingVertical: 2,
+      paddingHorizontal: 4,
     },
     tableHeaderCell: {
-      fontSize: 7,
+      fontSize: 6,
       fontFamily: 'Helvetica-Bold',
       color: colors.white,
       flex: 1,
       textAlign: 'center',
-      paddingHorizontal: 2,
+      paddingHorizontal: 1,
     },
     tableRow: {
       flexDirection: 'row',
       borderBottomWidth: 0.5,
       borderBottomColor: colors.lightGray,
-      paddingVertical: 3,
-      paddingHorizontal: 6,
+      paddingVertical: 2,
+      paddingHorizontal: 4,
     },
     tableRowAlt: {
       backgroundColor: '#f7f7f7',
     },
     tableCell: {
-      fontSize: 8,
+      fontSize: 7,
       color: colors.text,
       flex: 1,
       textAlign: 'center',
-      paddingHorizontal: 2,
+      paddingHorizontal: 1,
     },
     // --- Signature footer ---
     signatureFooter: {
-      marginTop: 20,
-      paddingTop: 14,
+      marginTop: 10,
+      paddingTop: 8,
       borderTopWidth: 2,
       borderTopColor: colors.accent,
       flexDirection: 'row',
@@ -274,9 +275,9 @@ const createStyles = (colors: typeof DEFAULT_COLORS) =>
     // --- Page footer ---
     pageFooter: {
       position: 'absolute',
-      bottom: 25,
-      left: 40,
-      right: 40,
+      bottom: 16,
+      left: 30,
+      right: 30,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
@@ -474,13 +475,13 @@ export const FormPdfDocument: React.FC<FormPdfDocumentProps> = ({
         </View>
 
         {/* Form title with teal underline */}
-        <View style={[styles.titleBar, { marginHorizontal: 40 }]}>
+        <View style={[styles.titleBar, { marginHorizontal: 30, marginTop: 20 }]}>
           <Text style={styles.formTitle}>{displayName}</Text>
         </View>
 
         {/* Sections — direct children of Page for proper page break handling */}
         {sortedSections.map(([sectionName, sectionConfig]) => (
-          <View key={sectionName} style={{ paddingHorizontal: 40 }}>
+          <View key={sectionName} style={{ paddingHorizontal: 30 }}>
             <SectionDisplay
               sectionName={sectionName}
               sectionConfig={sectionConfig}
@@ -491,7 +492,7 @@ export const FormPdfDocument: React.FC<FormPdfDocumentProps> = ({
         ))}
 
         {/* Signature footer */}
-        <View style={[styles.signatureFooter, { marginHorizontal: 40 }]}>
+        <View style={[styles.signatureFooter, { marginHorizontal: 30 }]}>
           <View>
             <Text style={styles.signatureLeftText}>
               All data is for medical professional use only.

@@ -1158,6 +1158,8 @@ function MainApp() {
     patient_snapshot: any;
     consultation_duration_seconds: number;
     transcription_status: 'pending' | 'processing' | 'completed' | 'failed';
+    summary_data?: any;
+    summarisation_status?: 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
   }) => {
     try {
       // Build full consultation object for saveConsultation
@@ -1170,7 +1172,8 @@ function MainApp() {
         // Default metadata
         location_detected: null,
         backend_api_version: '1.0.0',
-        summary_data: null,
+        summary_data: consultationData.summary_data || null,
+        summarisation_status: consultationData.summarisation_status || 'not_started',
       };
 
       const savedConsultation = await saveConsultation(fullConsultationData);
@@ -1352,7 +1355,7 @@ function MainApp() {
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
       {/* Loading overlay for form auto-fill */}
-      {loadingFormView && (
+      {autoFillingForm && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 text-center shadow-xl">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>

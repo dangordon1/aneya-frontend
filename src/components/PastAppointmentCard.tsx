@@ -35,6 +35,17 @@ export function PastAppointmentCard({
         <span className="px-2 py-1 rounded-full bg-aneya-teal/10 text-aneya-teal text-[12px] font-medium">
           {appointment.status === 'completed' ? 'Completed' : appointment.status}
         </span>
+        {consultation?.summarisation_status && (consultation.summarisation_status === 'pending' || consultation.summarisation_status === 'processing') && (
+          <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-[12px] font-medium flex items-center gap-1">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-600 border-r-transparent" />
+            Summarising...
+          </span>
+        )}
+        {consultation?.summarisation_status === 'failed' && (
+          <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[12px] font-medium">
+            Summary failed
+          </span>
+        )}
         {consultation?.detected_consultation_type && (
           <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-[12px] font-medium capitalize">
             {consultation.detected_consultation_type.replace('_', ' ')}

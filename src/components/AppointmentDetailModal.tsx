@@ -421,6 +421,20 @@ export function AppointmentDetailModal({
             {/* Content Display */}
             {consultation.summary_data || consultation.original_transcript || transcript || summary ? (
               <div className="space-y-4">
+                {/* Summarisation Status Banner */}
+                {(consultation.summarisation_status === 'pending' || consultation.summarisation_status === 'processing') && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-[12px] text-amber-800 text-[13px]">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-amber-600 border-r-transparent flex-shrink-0" />
+                    Consultation is being summarised...
+                  </div>
+                )}
+                {consultation.summarisation_status === 'failed' && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-[12px] text-red-700 text-[13px]">
+                    <span className="flex-shrink-0">&#9888;</span>
+                    <span>Summarisation failed{consultation.summarisation_error ? `: ${consultation.summarisation_error}` : ''}</span>
+                  </div>
+                )}
+
                 {/* Structured Summary (SOAP Notes) */}
                 {consultation.summary_data && (
                   <StructuredSummaryDisplay

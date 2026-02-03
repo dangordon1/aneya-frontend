@@ -7,7 +7,6 @@ interface SchemaReviewEditorProps {
   formName: string;
   specialty: string;
   initialSchema: Record<string, any>;
-  initialPdfTemplate: Record<string, any>;
   description?: string;
   patientCriteria?: string;
   isPublic: boolean;
@@ -18,7 +17,7 @@ interface SchemaReviewEditorProps {
     facility_name?: string;
     logo_url?: string;
   };
-  onSave: (schema: any, pdfTemplate: any, metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean; logoRejected?: boolean }) => Promise<void>;
+  onSave: (schema: any, metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean; logoRejected?: boolean }) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -26,7 +25,6 @@ export function SchemaReviewEditor({
   formName: initialFormName,
   specialty: initialSpecialty,
   initialSchema,
-  initialPdfTemplate,
   description: initialDescription,
   patientCriteria: initialPatientCriteria,
   isPublic: initialIsPublic,
@@ -36,7 +34,6 @@ export function SchemaReviewEditor({
 }: SchemaReviewEditorProps) {
   const { doctorProfile } = useAuth();
   const [schema, setSchema] = useState(initialSchema);
-  const [pdfTemplate] = useState(initialPdfTemplate);
   const [formName, setFormName] = useState(initialFormName);
   const [specialty, setSpecialty] = useState(initialSpecialty);
   const [description, setDescription] = useState(initialDescription || '');
@@ -56,7 +53,7 @@ export function SchemaReviewEditor({
     setSaving(true);
     setSaveError(null);
     try {
-      await onSave(schema, pdfTemplate, {
+      await onSave(schema, {
         formName,
         specialty,
         description,
@@ -316,9 +313,10 @@ export function SchemaReviewEditor({
           onClick={async () => {
             try {
               // Generate PDF locally using @react-pdf/renderer
+              const extractedLogoUrl = (!logoRejected && logoInfo?.logo_url) ? logoInfo.logo_url : null;
               const clinicBranding = {
-                clinic_name: doctorProfile?.clinic_name || null,
-                clinic_logo_url: doctorProfile?.clinic_logo_url || null,
+                clinic_name: doctorProfile?.clinic_name || logoInfo?.facility_name || null,
+                clinic_logo_url: doctorProfile?.clinic_logo_url || extractedLogoUrl,
                 primary_color: doctorProfile?.primary_color || null,
                 accent_color: doctorProfile?.accent_color || null,
                 text_color: doctorProfile?.text_color || null,

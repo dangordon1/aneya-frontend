@@ -686,7 +686,10 @@ export function MedicalForm({
   function renderField(field: FormField, sectionName: string) {
     const fieldValue = formData[sectionName]?.[field.name] ?? '';
     const readOnly = mode === 'readonly';
-    const fieldType = field.input_type || field.type || 'text';
+    const rawFieldType = field.input_type || field.type || 'text';
+    // Normalize: checkbox with no options + boolean type = boolean (Yes/No radios)
+    const fieldType = (rawFieldType === 'checkbox' && field.type === 'boolean' &&
+      !(field.options?.length || field.choices?.length)) ? 'boolean' : rawFieldType;
 
     return (
       <div>

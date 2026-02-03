@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { MedicalForm } from './doctor-portal/MedicalForm';
 import { extractAudioChunk, shouldProcessNextChunk, extractFinalChunk, resetWebMInitSegment } from '../utils/chunkExtraction';
 import { matchSpeakersAcrossChunks } from '../utils/speakerMatching';
+import { supabase } from '../lib/supabase';
 import { consultationEventBus } from '../lib/consultationEventBus';
 import { useConsultationRealtime } from '../hooks/useConsultationRealtime';
 import { usePreviousAppointment } from '../hooks/usePreviousAppointment';
@@ -64,6 +65,8 @@ interface InputScreenProps {
     patient_snapshot: any;
     consultation_duration_seconds: number;
     transcription_status: 'pending' | 'processing' | 'completed' | 'failed';
+    summary_data?: any;
+    summarisation_status?: 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
   }) => Promise<{ id: string } | undefined>;
   onUpdateConsultation?: (summaryResponse: any) => Promise<void>;
   onCloseConsultation?: () => void;
@@ -1112,7 +1115,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         // Save the summary_data to the consultation in the database
         if (consultationId && data.consultation_data?.summary_data) {
           try {
-            const { supabase } = await import('../lib/supabase');
             const { error: updateError } = await supabase
               .from('consultations')
               .update({
@@ -1232,50 +1234,12 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Background save function for fire-and-forget operation
   const performBackgroundSave = async (): Promise<void> => {
     setIsSavingInBackground(true);
-    abortControllerRef.current = new AbortController();
 
     try {
-      // Step 1: Summarize if not already done
-      let summaryData = consultationSummary;
-      if (!summaryData) {
-        // Prepare request body with full parameters to match PatientDetailView implementation
-        const requestBody = {
-          text: consultation,
-          original_text: originalTranscript.trim() && originalTranscript.trim() !== consultation.trim()
-            ? originalTranscript
-            : undefined,
-          patient_info: {
-            patient_id: preFilledPatient?.id,
-            patient_age: patientDetails?.age,
-            patient_name: patientDetails?.name,
-            sex: patientDetails?.sex,
-            height: patientDetails?.height,
-            weight: patientDetails?.weight,
-            current_medications: patientDetails?.currentMedications,
-            current_conditions: patientDetails?.currentConditions
-          },
-          is_from_transcription: true,
-          transcription_language: consultationLanguage || 'en'
-        };
+      const alreadySummarised = !!consultationSummary;
 
-        const response = await fetch(`${API_URL}/api/summarize`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          signal: abortControllerRef.current.signal
-        });
-
-        if (!response.ok) throw new Error('Summarization failed');
-
-        const data = await response.json();
-        if (data.success) {
-          summaryData = data;
-          setConsultationSummary(data);
-          console.log('✅ Background summarization completed');
-        }
-      }
-
-      // Step 2: Save consultation to database if not already saved
+      // Step 1: Save consultation to database FIRST (data safety)
+      // If already summarised, include summary_data; otherwise mark as 'pending'
       if (!pendingConsultationId && onSaveConsultation && preFilledPatient) {
         console.log('💾 Saving consultation to database...');
 
@@ -1297,12 +1261,20 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
           audio_url: null,
           patient_snapshot: patientSnapshot,
           consultation_duration_seconds: recordingTime,
-          transcription_status: 'completed'
+          transcription_status: 'completed',
+          summary_data: alreadySummarised ? (consultationSummary as any)?.consultation_data?.summary_data || null : null,
+          summarisation_status: alreadySummarised ? 'completed' : 'pending',
         });
 
         if (saved) {
           setPendingConsultationId(saved.id);
           console.log(`✅ Consultation saved (id: ${saved.id})`);
+
+          // Step 2: If not already summarised, run background summarisation
+          // Use direct Supabase calls so it survives component unmount
+          if (!alreadySummarised) {
+            runBackgroundSummarisation(saved.id);
+          }
         } else {
           console.error('❌ Failed to save consultation');
         }
@@ -1310,14 +1282,125 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         console.log(`ℹ️ Consultation already saved (id: ${pendingConsultationId})`);
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.log('Background save aborted');
-        return;
-      }
       console.error('Background save failed:', error);
     } finally {
       setIsSavingInBackground(false);
     }
+  };
+
+  // Run summarisation in the background using direct Supabase calls
+  // This survives component unmount since it doesn't depend on React state
+  const runBackgroundSummarisation = (consultationId: string) => {
+    // Capture values from current scope before component unmounts
+    const capturedConsultation = consultation;
+    const capturedOriginalTranscript = originalTranscript;
+    const capturedPatientDetails = patientDetails;
+    const capturedPatientId = preFilledPatient?.id;
+    const capturedLanguage = consultationLanguage;
+    const capturedAppointmentId = appointmentContext?.id || null;
+    const capturedPatientSnapshot = preFilledPatient ? {
+      name: preFilledPatient.name,
+      age: getPatientAge(preFilledPatient),
+      sex: preFilledPatient.sex,
+      allergies: preFilledPatient.allergies,
+      current_medications: preFilledPatient.current_medications,
+      current_conditions: preFilledPatient.current_conditions
+    } : null;
+
+    // Fire-and-forget - don't await
+    (async () => {
+      try {
+        // Mark as processing
+        await supabase
+          .from('consultations')
+          .update({ summarisation_status: 'processing' })
+          .eq('id', consultationId);
+
+        // Call /api/summarize
+        const requestBody = {
+          text: capturedConsultation,
+          original_text: capturedOriginalTranscript.trim() && capturedOriginalTranscript.trim() !== capturedConsultation.trim()
+            ? capturedOriginalTranscript
+            : undefined,
+          patient_info: {
+            patient_id: capturedPatientId,
+            patient_age: capturedPatientDetails?.age,
+            patient_name: capturedPatientDetails?.name,
+            sex: capturedPatientDetails?.sex,
+            height: capturedPatientDetails?.height,
+            weight: capturedPatientDetails?.weight,
+            current_medications: capturedPatientDetails?.currentMedications,
+            current_conditions: capturedPatientDetails?.currentConditions
+          },
+          is_from_transcription: true,
+          transcription_language: capturedLanguage || 'en'
+        };
+
+        const response = await fetch(`${API_URL}/api/summarize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) throw new Error('Summarization failed');
+
+        const data = await response.json();
+        if (data.success && data.consultation_data?.summary_data) {
+          // Update consultation with summary data via direct Supabase
+          await supabase
+            .from('consultations')
+            .update({
+              summary_data: data.consultation_data.summary_data,
+              summarisation_status: 'completed',
+              summarisation_error: null,
+            })
+            .eq('id', consultationId);
+          console.log(`✅ Background summarisation completed for consultation ${consultationId}`);
+
+          // Also auto-fill the consultation form
+          try {
+            const { auth } = await import('../lib/firebase');
+            const token = await auth.currentUser?.getIdToken();
+            if (token && capturedAppointmentId) {
+              const autoFillResponse = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  consultation_id: consultationId,
+                  appointment_id: capturedAppointmentId,
+                  patient_id: capturedPatientId,
+                  original_transcript: capturedOriginalTranscript || capturedConsultation,
+                  consultation_text: capturedConsultation,
+                  patient_snapshot: capturedPatientSnapshot,
+                }),
+              });
+              if (autoFillResponse.ok) {
+                console.log(`✅ Consultation form auto-filled for consultation ${consultationId}`);
+              } else {
+                console.warn('⚠️ Form auto-fill failed:', await autoFillResponse.text());
+              }
+            }
+          } catch (autoFillErr) {
+            console.warn('⚠️ Form auto-fill error (non-blocking):', autoFillErr);
+          }
+        } else {
+          throw new Error('Summarization response missing summary_data');
+        }
+      } catch (error: any) {
+        console.error(`❌ Background summarisation failed for consultation ${consultationId}:`, error);
+        // Mark as failed via direct Supabase
+        await supabase
+          .from('consultations')
+          .update({
+            summarisation_status: 'failed',
+            summarisation_error: error.message || 'Unknown error',
+          })
+          .eq('id', consultationId);
+      }
+    })();
   };
 
   // Handle save and close with fire-and-forget pattern

@@ -164,6 +164,8 @@ export interface Consultation {
   transcription_started_at: string | null; // When async processing started
   transcription_completed_at: string | null; // When async processing finished
   detected_consultation_type?: string | null; // AI-detected consultation type from form auto-fill (dynamic based on custom_forms)
+  summarisation_status: 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
+  summarisation_error: string | null;
 }
 
 // Summary data returned from /api/summarize endpoint
@@ -350,6 +352,8 @@ export interface CreateConsultationInput {
   summary_data?: SummaryData | null; // Full summarization data from /api/summarize
   transcription_status?: 'pending' | 'processing' | 'completed' | 'failed'; // Status of async diarisation
   transcription_error?: string | null; // Error message if failed
+  summarisation_status?: 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
+  summarisation_error?: string | null;
 }
 
 // ============================================

@@ -532,6 +532,49 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     fetchTodayConsultations();
   }, [appointments]); // Re-run when appointments change
 
+  // Poll for in-progress summarisations
+  useEffect(() => {
+    // Find consultation IDs with pending/processing summarisation
+    const inProgressEntries = Object.entries(consultationsMap).filter(
+      ([, c]) => c.summarisation_status === 'pending' || c.summarisation_status === 'processing'
+    );
+
+    if (inProgressEntries.length === 0) return;
+
+    const consultationIds = inProgressEntries.map(([, c]) => c.id);
+
+    const interval = setInterval(async () => {
+      try {
+        const { data: updated, error } = await supabase
+          .from('consultations')
+          .select('*')
+          .in('id', consultationIds);
+
+        if (error || !updated) return;
+
+        let changed = false;
+        const updates: Record<string, Consultation> = {};
+
+        for (const consultation of updated) {
+          if (!consultation.appointment_id) continue;
+          const existing = consultationsMap[consultation.appointment_id];
+          if (existing && existing.summarisation_status !== consultation.summarisation_status) {
+            changed = true;
+            updates[consultation.appointment_id] = consultation;
+          }
+        }
+
+        if (changed) {
+          setConsultationsMap(prev => ({ ...prev, ...updates }));
+        }
+      } catch (err) {
+        console.error('Error polling summarisation status:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [consultationsMap]);
+
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
     const tomorrow = new Date(today);

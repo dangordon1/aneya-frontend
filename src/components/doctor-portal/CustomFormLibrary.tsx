@@ -16,7 +16,6 @@ interface CustomForm {
   created_at: string;
   updated_at: string;
   form_schema?: Record<string, unknown>;
-  pdf_template?: Record<string, unknown>;
   ownership_type?: 'owned' | 'adopted';
   adopted_at?: string;
   auto_adopted?: boolean;
