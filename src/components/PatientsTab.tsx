@@ -103,7 +103,7 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Create New Patient
+            Create Patient
           </button>
         </div>
 
@@ -158,7 +158,7 @@ export function PatientsTab({ onSelectPatient }: PatientsTabProps) {
                 onClick={() => setIsModalOpen(true)}
                 className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[14px] hover:bg-opacity-90 transition-colors"
               >
-                Create New Patient
+                Create Patient
               </button>
             )}
           </div>

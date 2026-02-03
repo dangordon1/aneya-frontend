@@ -155,38 +155,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     }
   };
 
-  // Standalone form filling function (separate from re-summarize)
-  const handleFillForm = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
-    if (!consultation || !appointment) return;
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
-      console.log('📋 Starting standalone form filling...');
-      await extractAndFillForm(appointment, consultation, apiUrl);
-
-      // Refetch fresh consultation data
-      const { data: freshConsultation, error: refetchError } = await supabase
-        .from('consultations')
-        .select('*')
-        .eq('id', consultation.id)
-        .single();
-
-      if (!refetchError && freshConsultation) {
-        const mapKey = freshConsultation.appointment_id || appointment.id;
-        setConsultationsMap((prev) => ({
-          ...prev,
-          [mapKey]: freshConsultation
-        }));
-      }
-
-      console.log('✅ Form filled successfully');
-      alert('Form filled successfully! View the consultation form to see extracted data.');
-    } catch (error) {
-      console.error('Error filling form:', error);
-      alert('Failed to fill form. Please try again.');
-    }
-  };
-
   const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
     if (!consultation) {
       console.error('No consultation to re-summarize');
@@ -564,6 +532,49 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
     fetchTodayConsultations();
   }, [appointments]); // Re-run when appointments change
 
+  // Poll for in-progress summarisations
+  useEffect(() => {
+    // Find consultation IDs with pending/processing summarisation
+    const inProgressEntries = Object.entries(consultationsMap).filter(
+      ([, c]) => c.summarisation_status === 'pending' || c.summarisation_status === 'processing'
+    );
+
+    if (inProgressEntries.length === 0) return;
+
+    const consultationIds = inProgressEntries.map(([, c]) => c.id);
+
+    const interval = setInterval(async () => {
+      try {
+        const { data: updated, error } = await supabase
+          .from('consultations')
+          .select('*')
+          .in('id', consultationIds);
+
+        if (error || !updated) return;
+
+        let changed = false;
+        const updates: Record<string, Consultation> = {};
+
+        for (const consultation of updated) {
+          if (!consultation.appointment_id) continue;
+          const existing = consultationsMap[consultation.appointment_id];
+          if (existing && existing.summarisation_status !== consultation.summarisation_status) {
+            changed = true;
+            updates[consultation.appointment_id] = consultation;
+          }
+        }
+
+        if (changed) {
+          setConsultationsMap(prev => ({ ...prev, ...updates }));
+        }
+      } catch (err) {
+        console.error('Error polling summarisation status:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [consultationsMap]);
+
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
     const tomorrow = new Date(today);
@@ -853,7 +864,6 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           consultation={consultationsMap[selectedAppointmentDetail.id] || null}
           onAnalyze={onAnalyzeConsultation}
           onResummarize={handleResummarize}
-          onFillForm={handleFillForm}
           onRerunTranscription={handleRerunTranscription}
           onResearchAnalysis={handleResearchAnalysis}
           onViewConsultationForm={onViewConsultationForm}

@@ -180,26 +180,6 @@ export function PatientDetailView({
     }
   };
 
-  // Standalone form filling function (separate from re-summarize)
-  const handleFillForm = async (appointment: AppointmentWithPatient, consultation: Consultation) => {
-    if (!consultation || !appointment) return;
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://aneya-backend-xao3xivzia-el.a.run.app';
-      console.log('📋 Starting standalone form filling...');
-      await extractAndFillForm(appointment, consultation, apiUrl);
-
-      // Refresh the appointments list to show updated form data
-      await fetchPastAppointments();
-
-      console.log('✅ Form filled successfully');
-      alert('Form filled successfully! View the consultation form to see extracted data.');
-    } catch (error) {
-      console.error('Error filling form:', error);
-      alert('Failed to fill form. Please try again.');
-    }
-  };
-
   const handleResummarize = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
     if (!consultation || !appointment) return;
 
@@ -639,7 +619,6 @@ export function PatientDetailView({
             consultation={consultationsMap[selectedAppointmentDetail.id] || null}
             onAnalyze={onAnalyzeConsultation}
             onResummarize={handleResummarize}
-            onFillForm={handleFillForm}
             onRerunTranscription={handleRerunTranscription}
             onResearchAnalysis={handleResearchAnalysis}
             isAdmin={isAdmin}

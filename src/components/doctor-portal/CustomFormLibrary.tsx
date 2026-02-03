@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { FormPreviewCard } from './FormPreviewCard';
+import { MedicalForm } from './MedicalForm';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -16,7 +16,6 @@ interface CustomForm {
   created_at: string;
   updated_at: string;
   form_schema?: Record<string, unknown>;
-  pdf_template?: Record<string, unknown>;
   ownership_type?: 'owned' | 'adopted';
   adopted_at?: string;
   auto_adopted?: boolean;
@@ -471,11 +470,13 @@ export function CustomFormLibrary({ onEditForm }: CustomFormLibraryProps = {}) {
             {/* Modal Body - Form Preview with DoctorReportCard styling */}
             <div className="flex-1 overflow-y-auto">
               {previewForm.form_schema ? (
-                <FormPreviewCard
+                <MedicalForm
+                  formSchema={previewForm.form_schema as Record<string, { description?: string; order?: number; fields?: Array<{ name: string; label?: string; type?: string; options?: string[]; choices?: string[]; required?: boolean }> }>}
                   formName={previewForm.form_name}
                   specialty={previewForm.specialty}
-                  formSchema={previewForm.form_schema as Record<string, { description?: string; order?: number; fields?: Array<{ name: string; label?: string; type?: string; options?: string[]; choices?: string[]; required?: boolean }> }>}
                   clinicName={doctorProfile?.clinic_name || 'Healthcare Medical Center'}
+                  mode="preview"
+                  enablePdfDownload
                 />
               ) : (
                 <div className="text-center py-8 text-gray-500">

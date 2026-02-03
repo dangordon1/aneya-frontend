@@ -15,7 +15,6 @@ interface CustomForm {
   created_at: string;
   updated_at: string;
   form_schema?: Record<string, any>;
-  pdf_template?: Record<string, any>;
 }
 
 export function CustomFormsSection() {

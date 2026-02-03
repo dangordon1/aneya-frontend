@@ -15,7 +15,6 @@ interface ExtractionResult {
   form_name: string;
   specialty: string;
   form_schema: Record<string, any>;
-  pdf_template: Record<string, any>;
   metadata: Record<string, any>;
   patient_criteria?: string;
   error?: string;
@@ -26,7 +25,6 @@ interface ExtractedData {
   form_name: string;
   specialty: string;
   form_schema: Record<string, any>;
-  pdf_template: Record<string, any>;
   description?: string;
   patient_criteria?: string;
   is_public: boolean;
@@ -48,7 +46,6 @@ interface CustomForm {
   patient_criteria?: string;
   is_public: boolean;
   form_schema?: Record<string, any>;
-  pdf_template?: Record<string, any>;
 }
 
 interface CustomFormUploadProps {
@@ -115,7 +112,6 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
         form_name: editingForm.form_name,
         specialty: editingForm.specialty,
         form_schema: editingForm.form_schema || {},
-        pdf_template: editingForm.pdf_template || {},
         description: editingForm.description,
         patient_criteria: editingForm.patient_criteria,
         is_public: editingForm.is_public
@@ -129,12 +125,12 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
       const fileList = Array.from(e.target.files);
 
       // Validate file count
-      if (fileList.length < 2) {
-        setError('Please select at least 2 images');
+      if (fileList.length < 1) {
+        setError('Please select at least 1 file');
         return;
       }
       if (fileList.length > 10) {
-        setError('Maximum 10 images allowed');
+        setError('Maximum 10 files allowed');
         return;
       }
 
@@ -167,8 +163,8 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
       return;
     }
 
-    if (files.length < 2) {
-      setError('Please select at least 2 images');
+    if (files.length < 1) {
+      setError('Please select at least 1 file');
       return;
     }
 
@@ -213,7 +209,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
       if (result.success) {
         // ✅ VALIDATE SCHEMA IS NOT EMPTY
         if (!result.form_schema || typeof result.form_schema !== 'object') {
-          setError('Backend returned invalid schema - not an object. Please try again with different images.');
+          setError('Backend returned invalid schema - not an object. Please try again with different files.');
           setUploadState('input');
           return;
         }
@@ -221,12 +217,12 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
         const schemaKeys = Object.keys(result.form_schema);
         if (schemaKeys.length === 0) {
           setError(
-            'Form extraction failed: No fields detected in the uploaded images.\n\n' +
+            'Form extraction failed: No fields detected in the uploaded files.\n\n' +
             'Troubleshooting:\n' +
             '• Ensure images are clear and high resolution\n' +
-            '• Check that form fields are visible in the images\n' +
-            '• Verify images are not corrupted\n' +
-            '• Try uploading images in a different format (JPG/PNG)'
+            '• Check that form fields are visible\n' +
+            '• Verify files are not corrupted\n' +
+            '• Try uploading in a different format (JPG/PNG/PDF)'
           );
           setUploadState('input');
           return;
@@ -244,7 +240,6 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
           form_name: formName,
           specialty: specialty,
           form_schema: result.form_schema,
-          pdf_template: result.pdf_template,
           description: description,
           patient_criteria: result.patient_criteria,
           is_public: isPublic,
@@ -264,8 +259,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
 
   const handleSave = async (
     schema: any,
-    pdfTemplate: any,
-    metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean }
+    metadata: { formName: string; specialty: string; description?: string; patientCriteria?: string; isPublic: boolean; logoRejected?: boolean }
   ) => {
     // ✅ VALIDATE SCHEMA BEFORE SAVING
     if (!schema || typeof schema !== 'object') {
@@ -293,6 +287,14 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
 
     console.log(`💾 Saving form with ${fieldCount} fields`);
 
+    // Strip logo from metadata if user rejected it
+    let saveMetadata = extractedData?.metadata;
+    if (metadata.logoRejected && saveMetadata) {
+      saveMetadata = { ...saveMetadata };
+      delete saveMetadata.logo_info;
+      console.log('🚫 Logo rejected by user — stripped from metadata');
+    }
+
     const makeRequest = async (token: string) => {
       const isEditing = !!extractedData?.form_id;
       const url = isEditing
@@ -310,11 +312,10 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
           form_name: metadata.formName,
           specialty: metadata.specialty,
           form_schema: schema,
-          pdf_template: pdfTemplate,
           description: metadata.description,
           patient_criteria: metadata.patientCriteria,
           is_public: metadata.isPublic,
-          metadata: extractedData?.metadata  // Include metadata with logo_info and logo_url
+          metadata: saveMetadata
         })
       });
     };
@@ -379,7 +380,6 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
           formName={extractedData.form_name}
           specialty={extractedData.specialty}
           initialSchema={extractedData.form_schema}
-          initialPdfTemplate={extractedData.pdf_template}
           description={extractedData.description}
           patientCriteria={extractedData.patient_criteria}
           isPublic={extractedData.is_public}
@@ -489,14 +489,14 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
       {/* File Upload */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Form Images <span className="text-red-500">*</span>
+          Form Images or PDF <span className="text-red-500">*</span>
         </label>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-aneya-teal transition-colors">
           <input
             id="form-images"
             type="file"
             multiple
-            accept=".heic,.jpg,.jpeg,.png,.HEIC,.JPG,.JPEG,.PNG"
+            accept=".heic,.jpg,.jpeg,.png,.pdf,.HEIC,.JPG,.JPEG,.PNG,.PDF"
             onChange={handleFileChange}
             className="hidden"
             disabled={uploadState === 'uploading'}
@@ -508,8 +508,8 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
             <svg className="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <p className="text-sm text-gray-600 font-medium">Click to upload form images</p>
-            <p className="text-xs text-gray-500 mt-1">HEIC, JPEG, or PNG (2-10 images, max 10MB each)</p>
+            <p className="text-sm text-gray-600 font-medium">Click to upload form images or PDF</p>
+            <p className="text-xs text-gray-500 mt-1">HEIC, JPEG, PNG, or PDF (1-10 files, max 10MB each)</p>
           </label>
         </div>
 
@@ -598,7 +598,7 @@ export function CustomFormUpload({ onFormSaved, editingForm }: CustomFormUploadP
           <div className="flex gap-3 justify-end">
             <button
               onClick={handleUpload}
-              disabled={!formName || !specialty || files.length < 2}
+              disabled={!formName || !specialty || files.length < 1}
               className="px-6 py-3 bg-aneya-navy text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
