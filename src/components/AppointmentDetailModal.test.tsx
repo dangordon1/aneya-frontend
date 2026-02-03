@@ -74,14 +74,12 @@ describe('AppointmentDetailModal', () => {
 
   const mockOnClose = vi.fn()
   const mockOnResummarize = vi.fn()
-  const mockOnFillForm = vi.fn()
   const mockOnViewConsultationForm = vi.fn()
   const mockOnDelete = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
     mockOnResummarize.mockResolvedValue(undefined)
-    mockOnFillForm.mockResolvedValue(undefined)
     mockOnDelete.mockResolvedValue(undefined)
   })
 
@@ -259,20 +257,6 @@ describe('AppointmentDetailModal', () => {
         />
       )
       expect(screen.getByRole('button', { name: /Re-summarize/i })).toBeInTheDocument()
-    })
-
-    it('shows Fill Form button when onFillForm provided', () => {
-      render(
-        <AppointmentDetailModal
-          isOpen={true}
-          onClose={mockOnClose}
-          appointment={mockAppointment}
-          consultation={mockConsultation}
-          viewMode="doctor"
-          onFillForm={mockOnFillForm}
-        />
-      )
-      expect(screen.getByRole('button', { name: /Fill Form/i })).toBeInTheDocument()
     })
 
     it('shows Delete button when isAdmin and onDelete provided', () => {
