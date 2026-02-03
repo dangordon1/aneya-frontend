@@ -74,7 +74,7 @@ interface StreamEvent {
 }
 
 function MainApp() {
-  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification, getIdToken } = useAuth();
+  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [showLoginScreen, setShowLoginScreen] = useState(false); // For landing page -> login flow
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -1490,20 +1490,6 @@ function MainApp() {
               appointmentContext={selectedAppointment || undefined}
               locationOverride={locationOverride}
               onLocationChange={setLocationOverride}
-            />
-          )}
-
-          {currentScreen === 'infertility-form' && selectedPatient && selectedAppointment && (
-            <MedicalForm
-              formType="infertility"
-              formName="Infertility Consultation"
-              specialty={selectedAppointment.specialty || 'obstetrics_gynecology'}
-              mode="editable"
-              patientId={selectedPatient.id}
-              appointmentId={selectedAppointment.id}
-              enableAutoSave
-              enablePdfDownload
-              onBack={handleBackFromConsultationForm}
             />
           )}
 
