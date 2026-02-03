@@ -42,7 +42,7 @@ import { MedicalForm } from './components/doctor-portal/MedicalForm';
 // Import PatientDetails type
 import type { PatientDetails } from './components/InputScreen';
 
-type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'infertility-form' | 'view-consultation-form' | 'feedback-dashboard';
+type Screen = 'appointments' | 'patients' | 'patient-detail' | 'input' | 'progress' | 'complete' | 'report' | 'invalid' | 'messages' | 'profile' | 'forms' | 'alldoctors' | 'view-consultation-form' | 'feedback-dashboard';
 
 // Get API URL from environment variable or use default for local dev
 const API_URL = (() => {
@@ -74,7 +74,7 @@ interface StreamEvent {
 }
 
 function MainApp() {
-  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification } = useAuth();
+  const { user, loading, signIn, signOut, isPatient, userRole, doctorProfile, isAdmin, pendingVerification, clearPendingVerification, getIdToken } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('appointments');
   const [showLoginScreen, setShowLoginScreen] = useState(false); // For landing page -> login flow
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -1351,6 +1351,17 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
+      {/* Loading overlay for form auto-fill */}
+      {loadingFormView && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 text-center shadow-xl">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
+            <p className="text-aneya-navy font-medium">Preparing consultation form...</p>
+            <p className="text-gray-500 text-sm mt-1">Auto-filling from transcript</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

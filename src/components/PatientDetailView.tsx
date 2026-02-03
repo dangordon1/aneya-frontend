@@ -379,7 +379,7 @@ export function PatientDetailView({
             onClick={() => onStartConsultation(patient)}
             className="px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[16px] hover:bg-opacity-90 transition-colors"
           >
-            Start New Consultation
+            Start Consultation
           </button>
         </div>
 
@@ -600,7 +600,7 @@ export function PatientDetailView({
             onClick={() => onStartConsultation(patient)}
             className="flex-1 px-6 py-3 bg-aneya-navy text-white rounded-[10px] font-medium text-[16px] hover:bg-opacity-90 transition-colors"
           >
-            Start New Consultation
+            Start Consultation
           </button>
           <button
             onClick={() => onEditPatient(patient)}

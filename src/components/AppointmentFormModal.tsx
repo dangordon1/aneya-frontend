@@ -172,7 +172,7 @@ export function AppointmentFormModal({
       <div className="bg-white rounded-[20px] p-4 sm:p-8 max-w-2xl w-full mx-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-[24px] sm:text-[28px] text-aneya-navy">
-            {appointment ? 'Edit Appointment' : 'Create New Appointment'}
+            {appointment ? 'Edit Appointment' : 'Create Appointment'}
           </h2>
           <button
             onClick={onClose}
