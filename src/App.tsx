@@ -1230,14 +1230,33 @@ function MainApp() {
 
   const handleViewConsultationForm = async (appointment: AppointmentWithPatient, consultation: Consultation | null) => {
     setAppointmentForFormView(appointment);
-    setConsultationForFormView(consultation);
+
+    // Re-fetch consultation to get latest detected_consultation_type
+    // (background auto-fill updates this after the initial load)
+    let freshConsultation = consultation;
+    if (consultation?.id) {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('consultations')
+          .select('*')
+          .eq('id', consultation.id)
+          .single();
+        if (data) {
+          freshConsultation = data as Consultation;
+        }
+      } catch (e) {
+        console.warn('Failed to refresh consultation, using cached version');
+      }
+    }
+    setConsultationForFormView(freshConsultation);
 
     // Auto-fill the consultation form if no form data exists yet
-    if (consultation && appointment.status === 'completed') {
+    if (freshConsultation && appointment.status === 'completed') {
       try {
         setAutoFillingForm(true);
         const checkResponse = await fetch(
-          `${API_URL}/api/consultation-form?appointment_id=${appointment.id}&form_type=${consultation.detected_consultation_type || appointment.specialty_subtype || 'general'}`
+          `${API_URL}/api/consultation-form?appointment_id=${appointment.id}&form_type=${freshConsultation.detected_consultation_type || appointment.specialty_subtype || 'general'}`
         );
         if (checkResponse.ok) {
           const checkData = await checkResponse.json();
@@ -1248,12 +1267,12 @@ function MainApp() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                consultation_id: consultation.id,
+                consultation_id: freshConsultation.id,
                 appointment_id: appointment.id,
-                patient_id: consultation.patient_id || appointment.patient_id,
-                original_transcript: consultation.original_transcript || consultation.consultation_text || '',
-                consultation_text: consultation.consultation_text || '',
-                patient_snapshot: consultation.patient_snapshot || {},
+                patient_id: freshConsultation.patient_id || appointment.patient_id,
+                original_transcript: freshConsultation.original_transcript || freshConsultation.consultation_text || '',
+                consultation_text: freshConsultation.consultation_text || '',
+                patient_snapshot: freshConsultation.patient_snapshot || {},
               }),
             });
             if (!autoFillResponse.ok) {

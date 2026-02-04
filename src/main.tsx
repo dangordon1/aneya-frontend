@@ -14,7 +14,7 @@ if (import.meta.env.VITE_POSTHOG_KEY) {
     autocapture: true,
     capture_exceptions: true,
     session_recording: {
-      recordCrossOriginIframes: true,
+      recordCrossOriginIframes: false,
     },
     loaded: (posthogInstance) => {
       // Expose PostHog globally for debugging
