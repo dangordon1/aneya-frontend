@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAppointments } from '../hooks/useAppointments';
 import { usePatients } from '../hooks/usePatients';
-import { AppointmentWithPatient, Consultation, CreatePatientInput } from '../types/database';
+import { AppointmentWithPatient, Consultation, CreatePatientInput, Prescription } from '../types/database';
 import { AppointmentCard } from './AppointmentCard';
 import { AppointmentFormModal } from './AppointmentFormModal';
 import { PatientFormModal } from './PatientFormModal';
@@ -212,6 +212,9 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           diagnoses: data.consultation_data.diagnoses,
           guidelines_found: data.consultation_data.guidelines_found,
           patient_snapshot: data.consultation_data.patient_snapshot,
+          ...(data.consultation_data.prescriptions?.length > 0
+            ? { prescriptions: data.consultation_data.prescriptions }
+            : {}),
         })
         .eq('id', consultation.id);
 
@@ -373,6 +376,14 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
       // Close modal
       setSelectedAppointmentDetail(null);
     }
+  };
+
+  const handlePrescriptionsUpdated = (consultationId: string, prescriptions: Prescription[]) => {
+    setConsultationsMap(prev => {
+      const existing = Object.entries(prev).find(([, c]) => c.id === consultationId);
+      if (!existing) return prev;
+      return { ...prev, [existing[0]]: { ...existing[1], prescriptions } };
+    });
   };
 
   const handleDownloadPrescription = async (consultationId: string) => {
@@ -869,6 +880,7 @@ export function AppointmentsTab({ onStartConsultation, onAnalyzeConsultation, on
           onViewConsultationForm={onViewConsultationForm}
           onDownloadPrescription={handleDownloadPrescription}
           downloadingPrescription={downloadingPrescriptionId !== null}
+          onPrescriptionsUpdated={handlePrescriptionsUpdated}
           isAdmin={isAdmin}
           onDelete={handleDeleteAppointment}
         />

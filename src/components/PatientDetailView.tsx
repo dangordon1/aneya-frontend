@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Patient, Consultation, AppointmentWithPatient } from '../types/database';
+import { Patient, Consultation, AppointmentWithPatient, Prescription } from '../types/database';
 import { usePatients } from '../hooks/usePatients';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppointments } from '../hooks/useAppointments';
@@ -231,6 +231,9 @@ export function PatientDetailView({
           diagnoses: data.consultation_data.diagnoses,
           guidelines_found: data.consultation_data.guidelines_found,
           patient_snapshot: data.consultation_data.patient_snapshot,
+          ...(data.consultation_data.prescriptions?.length > 0
+            ? { prescriptions: data.consultation_data.prescriptions }
+            : {}),
         })
         .eq('id', consultation.id);
 
@@ -328,6 +331,14 @@ export function PatientDetailView({
       alert('Failed to update transcript in database. Please try again.');
       throw error;
     }
+  };
+
+  const handlePrescriptionsUpdated = (consultationId: string, prescriptions: Prescription[]) => {
+    setConsultationsMap(prev => {
+      const existing = Object.entries(prev).find(([, c]) => c.id === consultationId);
+      if (!existing) return prev;
+      return { ...prev, [existing[0]]: { ...existing[1], prescriptions } };
+    });
   };
 
   const handleDeleteAppointment = async (appointmentId: string) => {
@@ -621,6 +632,7 @@ export function PatientDetailView({
             onResummarize={handleResummarize}
             onRerunTranscription={handleRerunTranscription}
             onResearchAnalysis={handleResearchAnalysis}
+            onPrescriptionsUpdated={handlePrescriptionsUpdated}
             isAdmin={isAdmin}
             onDelete={handleDeleteAppointment}
           />

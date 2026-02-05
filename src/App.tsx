@@ -681,7 +681,8 @@ function MainApp() {
                 .from('consultations')
                 .update({
                   summary_data: summaryResult.consultation_data.summary_data,
-                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze
+                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze,
+                  prescriptions: summaryResult.consultation_data.prescriptions || [],
                 })
                 .eq('id', consultation.id);
               console.log('Consultation updated with summary data');
@@ -922,7 +923,8 @@ function MainApp() {
                 .from('consultations')
                 .update({
                   summary_data: summaryResult.consultation_data.summary_data,
-                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze
+                  consultation_text: summaryResult.consultation_data.consultation_text || textToAnalyze,
+                  prescriptions: summaryResult.consultation_data.prescriptions || [],
                 })
                 .eq('id', consultation.id);
               console.log('Consultation updated with summary data');
@@ -1109,6 +1111,8 @@ function MainApp() {
         analysis_result: analysisResult,
         diagnoses: analysisResult.diagnoses || [],
         guidelines_found: analysisResult.guidelines_found || [],
+        prescriptions: summaryObj?.consultation_data?.prescriptions
+            || summaryObj?.prescriptions || [],
         // Metadata
         consultation_duration_seconds: null, // Could be calculated from recording time
         location_detected: null,
