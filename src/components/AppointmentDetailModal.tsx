@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { AppointmentWithPatient, Consultation } from '../types/database';
-import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2, FlaskConical, Download } from 'lucide-react';
+import { AppointmentWithPatient, Consultation, Prescription } from '../types/database';
+import { X, RefreshCw, Brain, Headphones, FileText, Activity, ChevronDown, ChevronUp, Trash2, FlaskConical, Pill } from 'lucide-react';
 import { formatDateUK, formatTime24 } from '../utils/dateHelpers';
 import { StructuredSummaryDisplay } from './StructuredSummaryDisplay';
 import { AudioPlayer } from './AudioPlayer';
 import { AnalysisModeModal, AnalysisMode } from './AnalysisModeModal';
+import { PrescriptionModal } from './PrescriptionEditor';
 
 interface AppointmentDetailModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface AppointmentDetailModalProps {
   onResearchAnalysis?: (consultation: Consultation) => Promise<void>;
   onDownloadPrescription?: (consultationId: string) => void;
   downloadingPrescription?: boolean;
+  onPrescriptionsUpdated?: (consultationId: string, prescriptions: Prescription[]) => void;
   viewMode?: 'doctor' | 'patient';
   isAdmin?: boolean;
   onDelete?: (appointmentId: string) => Promise<void>;
@@ -35,6 +37,7 @@ export function AppointmentDetailModal({
   onResearchAnalysis,
   onDownloadPrescription,
   downloadingPrescription = false,
+  onPrescriptionsUpdated,
   viewMode = 'doctor',
   isAdmin,
   onDelete,
@@ -43,6 +46,7 @@ export function AppointmentDetailModal({
   const [isOriginalTranscriptExpanded, setIsOriginalTranscriptExpanded] = useState(false);
   const [isEnglishTranscriptExpanded, setIsEnglishTranscriptExpanded] = useState(false);
   const [showAnalysisModeModal, setShowAnalysisModeModal] = useState(false);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
   const handleAnalysisModeSelect = async (mode: AnalysisMode) => {
     console.log('🎯 handleAnalysisModeSelect called with mode:', mode);
@@ -392,14 +396,13 @@ export function AppointmentDetailModal({
                     {isDeleting ? 'Deleting...' : 'Delete Appointment'}
                   </button>
                 )}
-                {appointment.status === 'completed' && consultation?.id && onDownloadPrescription && (
+                {appointment.status === 'completed' && consultation?.id && (
                   <button
-                    onClick={() => onDownloadPrescription(consultation.id)}
-                    disabled={downloadingPrescription}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={() => setShowPrescriptionModal(true)}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-[8px] text-[13px] font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2"
                   >
-                    <Download className={`w-4 h-4 ${downloadingPrescription ? 'animate-bounce' : ''}`} />
-                    {downloadingPrescription ? 'Generating...' : 'Download Prescription'}
+                    <Pill className="w-4 h-4" />
+                    Prescriptions
                   </button>
                 )}
               </div>
@@ -649,6 +652,20 @@ export function AppointmentDetailModal({
         onSelectMode={handleAnalysisModeSelect}
         consultation={consultation || undefined}
       />
+
+      {/* Prescription Modal */}
+      {consultation?.id && (
+        <PrescriptionModal
+          isOpen={showPrescriptionModal}
+          onClose={() => setShowPrescriptionModal(false)}
+          consultationId={consultation.id}
+          initialPrescriptions={consultation.prescriptions || []}
+          readOnly={viewMode !== 'doctor'}
+          onSaved={(updated) => onPrescriptionsUpdated?.(consultation.id, updated)}
+          onDownloadPrescription={onDownloadPrescription}
+          downloadingPrescription={downloadingPrescription}
+        />
+      )}
     </div>
   );
 }
