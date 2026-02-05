@@ -126,7 +126,8 @@ export function PatientDetailView({
   const extractAndFillForm = async (
     appointment: AppointmentWithPatient,
     consultation: Consultation,
-    apiUrl: string
+    apiUrl: string,
+    options?: { force_consultation_type?: string; consultation_text_override?: string }
   ) => {
     try {
       console.log(`📋 Auto-filling form for consultation ${consultation.id}...`);
@@ -138,14 +139,20 @@ export function PatientDetailView({
       }
 
       // Prepare request body
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         consultation_id: consultation.id,
         appointment_id: appointment.id,
         patient_id: appointment.patient_id,
         original_transcript: consultation.original_transcript || '',
-        consultation_text: consultation.consultation_text || '',
+        consultation_text: options?.consultation_text_override || consultation.consultation_text || '',
         patient_snapshot: consultation.patient_snapshot || {}
       };
+
+      // Preserve consultation type during re-summarise
+      if (options?.force_consultation_type) {
+        requestBody.force_consultation_type = options.force_consultation_type;
+        console.log(`📋 Forcing consultation type: ${options.force_consultation_type}`);
+      }
 
       // Call backend endpoint with Authorization header
       const response = await fetch(`${apiUrl}/api/auto-fill-consultation-form`, {
@@ -218,25 +225,38 @@ export function PatientDetailView({
         throw new Error('Invalid response from summarize endpoint');
       }
 
-      // Extract form fields from consultation text
-      console.log('📋 Extracting form fields from consultation...');
-      await extractAndFillForm(appointment, consultation, apiUrl);
-
       // Update the consultation in the database
+      // Only update summary fields - preserve existing diagnoses and guidelines_found
+      const updatePayload: Record<string, unknown> = {
+        consultation_text: data.consultation_data.consultation_text,
+        summary_data: data.consultation_data.summary_data,
+        patient_snapshot: data.consultation_data.patient_snapshot,
+      };
+
+      // Only overwrite diagnoses/guidelines if the new data is non-empty
+      // The summarize endpoint returns empty arrays by default (not from analysis)
+      if (data.consultation_data.diagnoses && data.consultation_data.diagnoses.length > 0) {
+        updatePayload.diagnoses = data.consultation_data.diagnoses;
+      }
+      if (data.consultation_data.guidelines_found && data.consultation_data.guidelines_found.length > 0) {
+        updatePayload.guidelines_found = data.consultation_data.guidelines_found;
+      }
+
       const { error: updateError } = await supabase
         .from('consultations')
-        .update({
-          consultation_text: data.consultation_data.consultation_text,
-          summary_data: data.consultation_data.summary_data,
-          diagnoses: data.consultation_data.diagnoses,
-          guidelines_found: data.consultation_data.guidelines_found,
-          patient_snapshot: data.consultation_data.patient_snapshot,
-        })
+        .update(updatePayload)
         .eq('id', consultation.id);
 
       if (updateError) {
         throw updateError;
       }
+
+      // Extract form fields using the NEW summary text and preserve consultation type
+      console.log('📋 Extracting form fields from consultation...');
+      await extractAndFillForm(appointment, consultation, apiUrl, {
+        force_consultation_type: consultation.detected_consultation_type || undefined,
+        consultation_text_override: data.consultation_data.consultation_text,
+      });
 
       // Refresh the appointments list to show updated data
       await fetchPastAppointments();
