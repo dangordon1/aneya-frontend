@@ -18,6 +18,7 @@ import { useConsultationRealtime } from '../hooks/useConsultationRealtime';
 import { usePreviousAppointment } from '../hooks/usePreviousAppointment';
 import { PreviousAppointmentSidebar } from './PreviousAppointmentSidebar';
 import { AppointmentDetailModal } from './AppointmentDetailModal';
+import { DiarizedTranscriptEditor, parseTranscriptText, segmentsToTranscriptText } from './DiarizedTranscriptEditor';
 
 interface ChunkStatus {
   index: number;
@@ -261,6 +262,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
   // Async transcription processing state
   const [pendingConsultationId, setPendingConsultationId] = useState<string | null>(null);
   const [showProcessingOverlay, setShowProcessingOverlay] = useState(false);
+  const savedConsultationIdRef = useRef<string | null>(null);
 
   // PDF generation state
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -293,6 +295,18 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
     },
     enabled: !!pendingConsultationId
   });
+
+  // Timeout safety net: clear the processing overlay if diarization takes too long
+  useEffect(() => {
+    if (!showProcessingOverlay) return;
+    const timeout = setTimeout(() => {
+      console.warn('⏱️ Diarisation timed out after 120s — clearing overlay');
+      setShowProcessingOverlay(false);
+      setPendingConsultationId(null);
+      alert('Speaker diarisation timed out. Your consultation has been saved with the real-time transcript.');
+    }, 120_000);
+    return () => clearTimeout(timeout);
+  }, [showProcessingOverlay]);
 
   // Previous appointment data for returning patients
   const { previousAppointment, consultation: previousConsultation, loading: previousAppointmentLoading } =
@@ -1240,7 +1254,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       // Step 1: Save consultation to database FIRST (data safety)
       // If already summarised, include summary_data; otherwise mark as 'pending'
-      if (!pendingConsultationId && onSaveConsultation && preFilledPatient) {
+      if (!savedConsultationIdRef.current && onSaveConsultation && preFilledPatient) {
         console.log('💾 Saving consultation to database...');
 
         const patientSnapshot = {
@@ -1267,7 +1281,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         });
 
         if (saved) {
-          setPendingConsultationId(saved.id);
+          savedConsultationIdRef.current = saved.id;
           console.log(`✅ Consultation saved (id: ${saved.id})`);
 
           // Step 2: If not already summarised, run background summarisation
@@ -1278,8 +1292,28 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
         } else {
           console.error('❌ Failed to save consultation');
         }
-      } else if (pendingConsultationId) {
-        console.log(`ℹ️ Consultation already saved (id: ${pendingConsultationId})`);
+      } else if (savedConsultationIdRef.current) {
+        // Update existing consultation with edited text
+        const consultationId = savedConsultationIdRef.current;
+        console.log(`💾 Updating consultation (id: ${consultationId}) with edited text...`);
+        try {
+          const { error: updateError } = await supabase
+            .from('consultations')
+            .update({ consultation_text: consultation })
+            .eq('id', consultationId);
+          if (updateError) {
+            console.error('❌ Failed to update consultation text:', updateError);
+          } else {
+            console.log('✅ Consultation text updated');
+          }
+        } catch (updateErr) {
+          console.error('❌ Error updating consultation:', updateErr);
+        }
+
+        // Still run background summarisation if not already done
+        if (!alreadySummarised) {
+          runBackgroundSummarisation(consultationId);
+        }
       }
     } catch (error: any) {
       console.error('Background save failed:', error);
@@ -1372,7 +1406,7 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                   consultation_id: consultationId,
                   appointment_id: capturedAppointmentId,
                   patient_id: capturedPatientId,
-                  original_transcript: capturedOriginalTranscript || capturedConsultation,
+                  original_transcript: capturedConsultation,
                   consultation_text: capturedConsultation,
                   patient_snapshot: capturedPatientSnapshot,
                 }),
@@ -2005,6 +2039,11 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
       recordingTime
     );
 
+    // Show processing overlay immediately if we have a final chunk to diarise
+    if (finalChunkInfo) {
+      setShowProcessingOverlay(true);
+    }
+
     // Upload audio to GCS first (to get audio_url before saving)
     let audioGcsUrl: string | null = null;
     if (audioChunksRef.current.length > 0) {
@@ -2098,6 +2137,10 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
 
       console.log(`✅ Consultation saved (id: ${saved.id}, status: ${status})`);
 
+      // Track the saved consultation so performBackgroundSave can update (not duplicate) it
+      savedConsultationIdRef.current = saved.id;
+      setPendingConsultationId(saved.id);
+
       // If pending, trigger async processing
       if (finalChunkInfo && status === 'pending') {
         console.log('🚀 Triggering async final chunk processing...');
@@ -2120,7 +2163,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
             const result = await res.json();
             console.log('✅ Async processing queued:', result);
             setPendingConsultationId(saved.id);
-            setShowProcessingOverlay(true);
           } else {
             console.error('❌ Failed to queue async processing:', await res.text());
           }
@@ -2648,42 +2690,6 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                     )}
                   </div>
 
-                  {/* Processing overlay - shown when async transcription is running */}
-                  {showProcessingOverlay && (
-                    <div className="absolute inset-0 bg-aneya-cream/90 backdrop-blur-sm flex items-center justify-center z-10 rounded-[10px]">
-                      <div className="text-center px-4">
-                        <svg className="h-12 w-12 animate-spin text-aneya-teal mx-auto mb-4" viewBox="0 0 24 24">
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            fill="none"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-
-                        <h3 className="text-[18px] font-semibold text-aneya-navy mb-2">
-                          Processing speaker labels...
-                        </h3>
-                        <p className="text-[14px] text-gray-600 mb-4">
-                          {consultationLanguage.startsWith('en')
-                            ? 'This will take 5-10 seconds'
-                            : 'This may take up to 2 minutes'}
-                        </p>
-                        <p className="text-[12px] text-gray-500 italic">
-                          Your consultation is saved.<br />
-                          You can navigate away if needed.
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -2931,7 +2937,12 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                   )}
                   {isAdmin && (
                     <button
-                      onClick={() => setConsultation(SAMPLE_CONSULTATION_TEXT)}
+                      onClick={() => {
+                        const parsed = parseTranscriptText(SAMPLE_CONSULTATION_TEXT);
+                        setDiarizedSegments(parsed);
+                        diarizedSegmentsRef.current = parsed;
+                        setConsultation(segmentsToTranscriptText(parsed));
+                      }}
                       className="text-xs px-3 py-1 bg-aneya-teal/10 text-aneya-teal rounded-md hover:bg-aneya-teal/20 transition-colors"
                     >
                       Load Sample Text
@@ -2939,13 +2950,34 @@ export function InputScreen({ onAnalyze, onSaveConsultation, onUpdateConsultatio
                   )}
                 </div>
               </div>
-              <textarea
-                id="consultation"
-                value={consultation}
-                onChange={(e) => setConsultation(e.target.value)}
-                disabled={isDiarizing}
-                className="w-full h-[150px] p-4 border-2 border-aneya-teal rounded-[10px] resize-none focus:outline-none focus:border-aneya-navy transition-colors text-[16px] leading-[1.5] text-aneya-navy"
-              />
+              {showProcessingOverlay ? (
+                <div className="w-full h-[150px] p-4 border-2 border-gray-300 rounded-[10px] bg-gray-50 flex items-center justify-center">
+                  <div className="text-center">
+                    <svg className="h-6 w-6 animate-spin text-aneya-teal mx-auto mb-2" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <p className="text-sm text-gray-600 font-medium">Diarising speakers...</p>
+                    <p className="text-xs text-gray-400 mt-1">Your transcript will appear here shortly</p>
+                  </div>
+                </div>
+              ) : (
+                <DiarizedTranscriptEditor
+                  segments={diarizedSegments.length > 0
+                    ? diarizedSegments
+                    : consultation.trim()
+                      ? parseTranscriptText(consultation)
+                      : []
+                  }
+                  onSegmentsChange={(newSegments) => {
+                    setDiarizedSegments(newSegments);
+                    diarizedSegmentsRef.current = newSegments;
+                    setConsultation(segmentsToTranscriptText(newSegments));
+                  }}
+                  disabled={isDiarizing}
+                  showFileLoad={isAdmin}
+                />
+              )}
             </div>
           )}
         </div>

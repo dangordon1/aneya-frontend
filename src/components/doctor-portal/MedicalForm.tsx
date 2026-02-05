@@ -887,12 +887,32 @@ export function MedicalForm({
 function unflattenFormData(flat: Record<string, any>, schema: Record<string, FormSection> | null): Record<string, Record<string, any>> {
   const nested: Record<string, Record<string, any>> = {};
 
+  // Check if data is already nested (values are objects with field data, not primitives)
+  const isAlreadyNested = Object.values(flat).some(
+    v => v !== null && typeof v === 'object' && !Array.isArray(v)
+  );
+  if (isAlreadyNested) {
+    // Data is already in nested format — return as-is
+    for (const [key, value] of Object.entries(flat)) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        nested[key] = value;
+      }
+    }
+    return nested;
+  }
+
   for (const [key, value] of Object.entries(flat)) {
     const parts = key.split('.');
     if (parts.length === 2) {
+      // Flat dot-notation: "section.field" -> nest properly
       const [section, field] = parts;
       if (!nested[section]) nested[section] = {};
       nested[section][field] = value;
+    } else if (parts.length === 1 && typeof value === 'object' && value !== null && !Array.isArray(value) && schema && key in schema) {
+      // Already nested: key is a section name with an object value
+      // This handles data stored in nested format by the backend auto-fill
+      if (!nested[key]) nested[key] = {};
+      Object.assign(nested[key], value);
     } else if (parts.length === 1 && schema) {
       // Try to find which section this field belongs to
       for (const [sectionName, sectionDef] of Object.entries(schema)) {
