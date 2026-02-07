@@ -442,11 +442,17 @@ export const FormPdfDocument: React.FC<FormPdfDocumentProps> = ({
 
   const styles = createStyles(colors);
 
-  const data = formData && Object.keys(formData).length > 0 ? formData : generateSampleFormData(schema);
+  // Deep check: verify at least one section has at least one non-empty field value
+  const hasRealData = formData && Object.values(formData).some(section =>
+    section && typeof section === 'object' && Object.values(section).some(v =>
+      v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+    )
+  );
+  const data = hasRealData ? formData! : generateSampleFormData(schema);
 
   const sortedSections = Object.entries(schema)
     .filter(([name]) => !['title', 'description', 'version', 'type'].includes(name))
-    .sort(([, a], [, b]) => (a.order || 0) - (b.order || 0));
+    .sort(([, a], [, b]) => (a.order || 999) - (b.order || 999));
 
   const displayName = formatFieldLabel(formName);
   const clinicDisplayName = clinicBranding?.clinic_name || 'Healthcare Medical Center';
