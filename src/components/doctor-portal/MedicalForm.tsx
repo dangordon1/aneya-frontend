@@ -451,6 +451,9 @@ export function MedicalForm({
 
     setGeneratingPdf(true);
     try {
+      // Debug: log formData before PDF generation to verify data is present
+      console.log('[PDF Download] formData:', JSON.stringify(formData, null, 2));
+
       const branding: ClinicBranding = clinicBranding || {
         clinic_name: clinicName,
       };
@@ -699,29 +702,31 @@ export function MedicalForm({
         </label>
 
         {fieldType === 'boolean' ? (
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name={`${sectionName}-${field.name}`}
-                checked={fieldValue === true || fieldValue === 'Yes' || fieldValue === 'true'}
-                onChange={() => !readOnly && handleFieldChange(sectionName, field.name, true)}
-                readOnly={readOnly}
-                className="w-4 h-4 text-[var(--medical-teal)]"
-              />
-              <span className="text-[var(--medical-navy)]">Yes</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name={`${sectionName}-${field.name}`}
-                checked={fieldValue === false || fieldValue === 'No' || fieldValue === 'false'}
-                onChange={() => !readOnly && handleFieldChange(sectionName, field.name, false)}
-                readOnly={readOnly}
-                className="w-4 h-4 text-[var(--medical-teal)]"
-              />
-              <span className="text-[var(--medical-navy)]">No</span>
-            </label>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={() => handleFieldChange(sectionName, field.name, true)}
+              className={`px-4 py-1.5 rounded text-sm font-medium border transition-colors ${
+                fieldValue === true || fieldValue === 'Yes' || fieldValue === 'true'
+                  ? 'bg-[var(--medical-teal)] text-white border-[var(--medical-teal)]'
+                  : 'bg-white text-[var(--medical-navy)] border-gray-300 hover:border-[var(--medical-teal)]'
+              } ${readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={() => handleFieldChange(sectionName, field.name, false)}
+              className={`px-4 py-1.5 rounded text-sm font-medium border transition-colors ${
+                fieldValue === false || fieldValue === 'No' || fieldValue === 'false'
+                  ? 'bg-[var(--medical-teal)] text-white border-[var(--medical-teal)]'
+                  : 'bg-white text-[var(--medical-navy)] border-gray-300 hover:border-[var(--medical-teal)]'
+              } ${readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              No
+            </button>
           </div>
         ) : fieldType === 'textarea' ? (
           <textarea
@@ -887,41 +892,30 @@ export function MedicalForm({
 function unflattenFormData(flat: Record<string, any>, schema: Record<string, FormSection> | null): Record<string, Record<string, any>> {
   const nested: Record<string, Record<string, any>> = {};
 
-  // Check if data is already nested (values are objects with field data, not primitives)
-  const isAlreadyNested = Object.values(flat).some(
-    v => v !== null && typeof v === 'object' && !Array.isArray(v)
-  );
-  if (isAlreadyNested) {
-    // Data is already in nested format — return as-is
-    for (const [key, value] of Object.entries(flat)) {
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        nested[key] = value;
-      }
-    }
-    return nested;
-  }
-
+  // Process every entry individually to handle mixed formats
+  // (some nested objects + some flat dot-notation keys)
   for (const [key, value] of Object.entries(flat)) {
-    const parts = key.split('.');
-    if (parts.length === 2) {
-      // Flat dot-notation: "section.field" -> nest properly
-      const [section, field] = parts;
-      if (!nested[section]) nested[section] = {};
-      nested[section][field] = value;
-    } else if (parts.length === 1 && typeof value === 'object' && value !== null && !Array.isArray(value) && schema && key in schema) {
-      // Already nested: key is a section name with an object value
-      // This handles data stored in nested format by the backend auto-fill
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && schema && key in schema) {
+      // Nested section object: key is a section name, value is {field: val, ...}
       if (!nested[key]) nested[key] = {};
       Object.assign(nested[key], value);
-    } else if (parts.length === 1 && schema) {
-      // Try to find which section this field belongs to
-      for (const [sectionName, sectionDef] of Object.entries(schema)) {
-        if (Array.isArray(sectionDef.fields)) {
-          const found = sectionDef.fields.find(f => f.name === key);
-          if (found) {
-            if (!nested[sectionName]) nested[sectionName] = {};
-            nested[sectionName][key] = value;
-            break;
+    } else {
+      const parts = key.split('.');
+      if (parts.length === 2) {
+        // Flat dot-notation: "section.field" -> nest properly
+        const [section, field] = parts;
+        if (!nested[section]) nested[section] = {};
+        nested[section][field] = value;
+      } else if (parts.length === 1 && schema) {
+        // Bare key: look up which section it belongs to in schema
+        for (const [sectionName, sectionDef] of Object.entries(schema)) {
+          if (Array.isArray(sectionDef.fields)) {
+            const found = sectionDef.fields.find(f => f.name === key);
+            if (found) {
+              if (!nested[sectionName]) nested[sectionName] = {};
+              nested[sectionName][key] = value;
+              break;
+            }
           }
         }
       }
