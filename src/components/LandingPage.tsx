@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowRight, ChevronDown, Globe, ClipboardCheck, Smartphone, Activity, BookOpen, Pill, FileText } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { ArrowRight, ChevronDown, Globe, ClipboardCheck, Smartphone, Activity, BookOpen, Pill, FileText, Play } from 'lucide-react';
 
 interface LandingPageProps {
   onSignIn: () => void;
@@ -7,6 +7,13 @@ interface LandingPageProps {
 
 export function LandingPage({ onSignIn }: LandingPageProps) {
   const [email, setEmail] = useState('');
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handlePlayVideo = () => {
+    setIsVideoPlaying(true);
+    videoRef.current?.play();
+  };
 
   const handleGetStarted = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +97,46 @@ export function LandingPage({ onSignIn }: LandingPageProps) {
         </div>
       </section>
 
+
+      {/* Demo Video Section */}
+      <section className="pb-24 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-['Georgia',serif] text-[#0c3555] mb-4">
+              See Aneya in action
+            </h2>
+            <p className="text-lg text-[#517a9a]">
+              Watch how Aneya transforms clinical documentation in under 2 minutes
+            </p>
+          </div>
+
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-[#0c3555]/10 bg-[#0c3555] aspect-video">
+            <video
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              controls={isVideoPlaying}
+              playsInline
+              preload="metadata"
+              onEnded={() => setIsVideoPlaying(false)}
+              src="https://storage.googleapis.com/aneya-static-assets/landing-page/aneya-demo.mp4"
+            />
+
+            {!isVideoPlaying && (
+              <button
+                onClick={handlePlayVideo}
+                className="absolute inset-0 flex flex-col items-center justify-center bg-[#0c3555]/60 hover:bg-[#0c3555]/50 transition-colors cursor-pointer group"
+              >
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <Play className="w-8 h-8 md:w-10 md:h-10 text-[#0c3555] ml-1" />
+                </div>
+                <span className="mt-4 text-white/90 text-sm font-medium tracking-wide">
+                  Watch the demo
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
       <section id="features" className="py-24 px-6 scroll-mt-36">
