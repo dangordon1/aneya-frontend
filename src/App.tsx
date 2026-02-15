@@ -106,6 +106,7 @@ function MainApp() {
   const [consultationForFormView, setConsultationForFormView] = useState<Consultation | null>(null); // Consultation data for form view
   const [generatingPdf, setGeneratingPdf] = useState(false); // PDF generation state for view consultation form screen
   const [autoFillingForm, setAutoFillingForm] = useState(false); // Auto-fill loading state for view consultation form
+  const [showAutoFillPrompt, setShowAutoFillPrompt] = useState(false); // Prompt to ask doctor about auto-fill
   const { saveConsultation } = useConsultations();
   const { createAppointment } = useAppointments();
 
@@ -1251,50 +1252,78 @@ function MainApp() {
     }
     setConsultationForFormView(freshConsultation);
 
-    // Auto-fill the consultation form if no form data exists yet
+    // Check if form data exists; if not, prompt the doctor about auto-fill
+    let shouldPrompt = false;
     if (freshConsultation && appointment.status === 'completed') {
       try {
-        setAutoFillingForm(true);
         const checkResponse = await fetch(
           `${API_URL}/api/consultation-form?appointment_id=${appointment.id}&form_type=${freshConsultation.detected_consultation_type || appointment.specialty_subtype || 'general'}`
         );
         if (checkResponse.ok) {
           const checkData = await checkResponse.json();
           if (!checkData.form) {
-            // No form data exists - trigger auto-fill
-            console.log('No existing form data, triggering auto-fill...');
-            const autoFillResponse = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                consultation_id: freshConsultation.id,
-                appointment_id: appointment.id,
-                patient_id: freshConsultation.patient_id || appointment.patient_id,
-                original_transcript: freshConsultation.original_transcript || freshConsultation.consultation_text || '',
-                consultation_text: freshConsultation.consultation_text || '',
-                patient_snapshot: freshConsultation.patient_snapshot || {},
-              }),
-            });
-            if (!autoFillResponse.ok) {
-              console.error('Auto-fill failed:', await autoFillResponse.text());
-            }
+            shouldPrompt = true;
           }
         }
       } catch (error) {
-        console.error('Auto-fill check/trigger failed:', error);
-        // Non-blocking - continue to show the form
-      } finally {
-        setAutoFillingForm(false);
+        console.error('Form check failed:', error);
       }
     }
 
+    setShowAutoFillPrompt(shouldPrompt);
     setCurrentScreen('view-consultation-form');
   };
 
   const handleBackFromConsultationForm = () => {
     setAppointmentForFormView(null);
     setConsultationForFormView(null);
+    setShowAutoFillPrompt(false);
     setCurrentScreen('appointments');
+  };
+
+  const handleAutoFillConfirm = async () => {
+    setShowAutoFillPrompt(false);
+    if (!consultationForFormView || !appointmentForFormView) return;
+    setAutoFillingForm(true);
+    try {
+      const autoFillResponse = await fetch(`${API_URL}/api/auto-fill-consultation-form`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          consultation_id: consultationForFormView.id,
+          appointment_id: appointmentForFormView.id,
+          patient_id: consultationForFormView.patient_id || appointmentForFormView.patient_id,
+          original_transcript: consultationForFormView.original_transcript || consultationForFormView.consultation_text || '',
+          consultation_text: consultationForFormView.consultation_text || '',
+          patient_snapshot: consultationForFormView.patient_snapshot || {},
+        }),
+      });
+      if (!autoFillResponse.ok) {
+        console.error('Auto-fill failed:', await autoFillResponse.text());
+      }
+      // Re-fetch consultation to get updated detected_consultation_type set by auto-fill
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('consultations')
+          .select('*')
+          .eq('id', consultationForFormView.id)
+          .single();
+        if (data) {
+          setConsultationForFormView(data as Consultation);
+        }
+      } catch (e) {
+        console.warn('Failed to refresh consultation after auto-fill');
+      }
+    } catch (error) {
+      console.error('Auto-fill failed:', error);
+    } finally {
+      setAutoFillingForm(false);
+    }
+  };
+
+  const handleAutoFillDecline = () => {
+    setShowAutoFillPrompt(false);
   };
 
   const handleDownloadAnalysisPdf = async () => {
@@ -1373,17 +1402,6 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-aneya-cream flex flex-col">
-      {/* Loading overlay for form auto-fill */}
-      {autoFillingForm && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 text-center shadow-xl">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aneya-teal mx-auto mb-4"></div>
-            <p className="text-aneya-navy font-medium">Preparing consultation form...</p>
-            <p className="text-gray-500 text-sm mt-1">Auto-filling from transcript</p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <header className="bg-aneya-navy py-2 sm:py-4 px-4 sm:px-6 border-b border-aneya-teal sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1514,6 +1532,24 @@ function MainApp() {
 
           {currentScreen === 'view-consultation-form' && appointmentForFormView && (
             <div className="max-w-7xl mx-auto px-4 py-6">
+              {showAutoFillPrompt && (
+                <div className="px-4 py-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-aneya-navy font-medium mb-3">
+                    This consultation form hasn't been filled out yet. Would you like to auto-fill it using the consultation audio?
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={handleAutoFillConfirm} className="px-4 py-2 bg-aneya-teal text-white rounded-[8px] text-sm font-medium hover:bg-opacity-90">
+                      Yes, auto-fill from audio
+                    </button>
+                    <button onClick={handleAutoFillDecline} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-[8px] text-sm font-medium hover:bg-opacity-90">
+                      No, I'll fill it manually
+                    </button>
+                    <button onClick={handleBackFromConsultationForm} className="px-4 py-2 bg-white border border-gray-300 text-gray-600 rounded-[8px] text-sm font-medium hover:bg-gray-50">
+                      Go back
+                    </button>
+                  </div>
+                </div>
+              )}
               {autoFillingForm && (
                 <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                   <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent"></div>
@@ -1521,17 +1557,19 @@ function MainApp() {
                 </div>
               )}
 
-              <MedicalForm
-                formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'general'}
-                formName={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'Consultation Form'}
-                specialty={appointmentForFormView.specialty || 'general'}
-                mode="editable"
-                patientId={appointmentForFormView.patient_id}
-                appointmentId={appointmentForFormView.id}
-                enableAutoSave
-                enablePdfDownload
-                onBack={handleBackFromConsultationForm}
-              />
+              {!showAutoFillPrompt && (
+                <MedicalForm
+                  formType={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'general'}
+                  formName={consultationForFormView?.detected_consultation_type || appointmentForFormView.specialty_subtype || 'Consultation Form'}
+                  specialty={appointmentForFormView.specialty || 'general'}
+                  mode="editable"
+                  patientId={appointmentForFormView.patient_id}
+                  appointmentId={appointmentForFormView.id}
+                  enableAutoSave
+                  enablePdfDownload
+                  onBack={handleBackFromConsultationForm}
+                />
+              )}
             </div>
           )}
 
